@@ -45,3 +45,64 @@ export async function sendText(openId, text) {
   if (data.code !== 0) throw new Error(`发送飞书消息失败: ${data.msg}`);
   return { ok: true, messageId: data.data?.message_id };
 }
+
+// 把 Markdown 渲染成飞书互动卡片（卡片内 markdown 元素可正常渲染排版）
+// 超过卡片上限或发送失败时，回退为纯文本（剥离 markdown 语法）
+const CARD_MD_LIMIT = 4000;
+
+export function stripMarkdown(md = '') {
+  return md
+    .replace(/```[\s\S]*?```/g, (m) => '\n' + m.replace(/```/g, '').trim() + '\n')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/#{1,6}\s?/g, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s*[-*+]\s+/gm, '• ')
+    .replace(/^\s*\d+\.\s+/gm, '• ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export async function sendMarkdown(openId, md) {
+  const token = await getTenantToken();
+  if (!token) return { skipped: true, reason: '未配置飞书凭据' };
+
+  const content = (md || '').trim();
+  // 超长：直接回退纯文本，避免卡片超限
+  if (content.length > CARD_MD_LIMIT) {
+    return sendText(openId, stripMarkdown(content));
+  }
+
+  const card = {
+    config: { streaming_mode: false },
+    header: {
+      template: 'blue',
+      title: { tag: 'plain_text', content: 'Acaily' },
+    },
+    elements: [{ tag: 'markdown', content }],
+  };
+
+  const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/messages?receive_id_type=open_id`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      receive_id: openId,
+      msg_type: 'interactive',
+      content: JSON.stringify(card),
+    }),
+  });
+  const data = await res.json();
+  if (data.code !== 0) {
+    // 卡片失败（权限/格式）→ 回退纯文本
+    console.warn('[feishu] 卡片发送失败，回退文本:', data.msg);
+    return sendText(openId, stripMarkdown(content));
+  }
+  return { ok: true, messageId: data.data?.message_id, card: true };
+}

@@ -5,14 +5,33 @@
 //   - 否则作为最终回答返回
 // 工具以 { name, description, run(args) } 形式注册，便于后续接入 MCP。
 
-const DEFAULT_SYSTEM = `你是 Acaily，一个运行在飞书里的 AI 助手。
-当用户需要调用工具时，请在回复末尾用如下格式声明一次工具调用，然后停止：
+const DEFAULT_SYSTEM = `你是 Acaily，一个运行在飞书里的个人 AI 助手。
+
+【回答风格】
+- 直接、简洁地回答用户的问题；不要复述用户的问题，也不要重复上一条消息的内容。
+- 使用 Markdown 排版（标题、列表、加粗、代码块等）让回答更易读。
+
+【实时信息】
+当用户的问题涉及实时或可能变化的信息（天气、新闻、股价、赛事、最新事件、当前事实等）时，必须先调用相应工具获取最新数据，再基于工具返回组织回答；不要凭训练记忆编造实时数据。
+可用工具（如需要，请在回答末尾用一行声明工具调用，然后停止）：
 TOOL: <工具名>(<JSON 参数>)
-例如：TOOL: get_weather({"city":"上海"})
+例如查询天气：TOOL: get_weather({"city":"香港","days":2})
+例如联网搜索：TOOL: web_search({"query":"香港今日新闻","top":5})
 如果没有合适的工具可用，直接给出自然语言回答。`;
 
+// 从模型输出里剥离工具声明行（避免把 TOOL: ... 透传给用户）
+export function stripToolLines(text) {
+  if (!text) return text;
+  return text
+    .split('\n')
+    .filter((l) => !/^\s*TOOL:\s*[A-Za-z0-9_]+\s*\(/.test(l))
+    .join('\n')
+    .trim();
+}
+
 function parseToolCall(text) {
-  const m = text.match(/TOOL:\s*([A-Za-z0-9_]+)\s*\(([\s\S]*?)\)\s*$/);
+  // 匹配任意位置的 TOOL: 声明（不要求必须在结尾）
+  const m = text.match(/TOOL:\s*([A-Za-z0-9_]+)\s*\(([\s\S]*?)\)/);
   if (!m) return null;
   const raw = m[2].trim();
   let args = {};
@@ -58,7 +77,7 @@ export class AgentRuntime {
 
       const call = parseToolCall(text);
       if (!call) {
-        return { answer: text, transcript, steps: step + 1 };
+        return { answer: stripToolLines(text), transcript, steps: step + 1 };
       }
 
       const tool = this.tools.get(call.name);

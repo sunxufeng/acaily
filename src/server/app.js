@@ -13,16 +13,18 @@ import { selfAssess } from '../compliance/checklist.js';
 import { routeChat, testConnection, rateLimitRemaining } from '../gateway/router.js';
 import { AgentRuntime } from '../agent/runtime.js';
 import { parseEvent, verifySignature, extractMessage } from '../feishu/event.js';
-import { sendText } from '../feishu/client.js';
+import { sendText, sendMarkdown } from '../feishu/client.js';
 import { startFeishuConnection, getFeishuWsStatus } from '../feishu/connection.js';
+import { webTools } from '../tools/web.js';
 
-// 内置示例工具：演示 Agent 工具调用（后续可替换为真实 MCP 工具）
+// 内置工具：时间 + 实时信息（天气 / 联网搜索）
 const tools = [
   {
     name: 'get_time',
     description: '获取当前服务器时间，参数为空对象 {}',
     run: async () => new Date().toISOString(),
   },
+  ...webTools,
 ];
 
 const agent = new AgentRuntime({ tools });
@@ -58,16 +60,25 @@ async function handleChat(openId, messages) {
 }
 
 async function handleAgent(openId, text, history, sessionId) {
-  // 会话持久化（best-effort，失败不影响主流程）
+  // 会话持久化 + 多轮记忆（best-effort，失败不影响主流程）
   let sid = sessionId;
+  let hist = history || [];
   try {
-    if (!sid) sid = await createSession(openId, text.slice(0, 20));
+    if (!sid) {
+      const sessions = await listSessions(openId);
+      if (sessions && sessions.length) {
+        sid = sessions[0].id; // 复用最近一次会话，形成连续上下文
+        hist = (await getHistory(openId, sid, 12)) || [];
+      } else {
+        sid = await createSession(openId, text.slice(0, 20));
+      }
+    }
     await appendMessage(sid, 'user', text);
   } catch (e) { console.error('[conv] 持久化失败:', e.message); }
 
   const result = await agent.run(text, {
     chat: (messages) => routeChat(openId, messages),
-    history: history || [],
+    history: hist,
   });
 
   try { await appendMessage(sid, 'assistant', result.answer); } catch {}
@@ -89,7 +100,7 @@ async function processFeishuMessage(openId, text) {
       return;
     }
     const r = await handleAgent(openId, text.trim());
-    await sendText(openId, r.answer);
+    await sendMarkdown(openId, r.answer);
   } catch (e) {
     console.error('[feishu] 处理消息失败:', e.message);
   }
