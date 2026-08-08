@@ -92,10 +92,27 @@ async function handleFeishuEvent(rawBody, headers) {
 
   const msg = extractMessage(parsed);
   if (msg && msg.text) {
-    // 异步处理（飞书要求快速返回 200）
-    handleAgent(msg.openId, msg.text.trim())
-      .then((r) => sendText(msg.openId, r.answer))
-      .catch((e) => console.error('[feishu] 处理消息失败:', e.message));
+    const openId = msg.openId;
+    // 异步处理（飞书要求快速返回 200），整体包在 try/catch 防止抛错中断请求
+    (async () => {
+      try {
+        if (!getConfig(openId)) {
+          // 未配置用户：回显其 open_id 并引导去设置页（解决 PoC 手动填 open_id 的鸡生蛋问题）
+          await sendText(
+            openId,
+            `👋 你还没有配置个人模型，暂时无法对话。\n\n` +
+              `你的 open_id 是：\n${openId}\n\n` +
+              `请打开 https://acaily.areteailab.com/settings ，把上面的 open_id 填进「Open ID」，` +
+              `再填写你的模型（Provider / Base URL / Model / API Key），保存后即可在飞书里直接对话。`
+          );
+          return;
+        }
+        const r = await handleAgent(openId, msg.text.trim());
+        await sendText(openId, r.answer);
+      } catch (e) {
+        console.error('[feishu] 处理消息失败:', e.message);
+      }
+    })();
   }
   return { status: 200, json: { code: 0, msg: 'ok' } };
 }
