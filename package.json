@@ -1,0 +1,12 @@
+{
+  "name": "acaily",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Acaily — 飞书 AI 助手：每位飞书用户自配模型 Provider 的模型网关",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server/app.js",
+    "test": "node --test"
+  }
+}
