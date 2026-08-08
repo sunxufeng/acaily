@@ -71,9 +71,11 @@ export class BaseProvider {
 
   _url(path) {
     const base = String(this.cfg.baseUrl).replace(/\/$/, '');
-    // 路径为空表示 baseUrl 已是完整接口地址，直接使用（避免重复拼接）
-    if (!path) return base;
-    return base + path;
+    // 默认补 /chat/completions；允许显式覆盖（如 /openai/v1/chat/completions）
+    const p = (path && String(path).trim()) ? String(path).trim() : '/chat/completions';
+    // 避免 baseUrl 已含该路径时重复拼接（如用户把整条地址填进 Base URL）
+    if (base.endsWith(p)) return base;
+    return base + p;
   }
 
   _modelParams() {
