@@ -217,9 +217,12 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === 'POST' && pathname === '/config/test') {
-      const { openId } = await readBody(req);
+      const b = await readBody(req);
+      const { openId } = b;
       if (!openId) return sendJson(res, 400, { error: 'openId 必填' });
-      const r = await testConnection(openId);
+      const { provider, baseUrl, apiKey, model, chatCompletionsPath } = b;
+      const inlineCfg = provider ? { provider, baseUrl, apiKey, model, chatCompletionsPath } : null;
+      const r = await testConnection(openId, inlineCfg);
       return sendJson(res, 200, r);
     }
 
