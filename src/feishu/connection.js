@@ -37,19 +37,49 @@ export function startFeishuConnection(onMessage) {
     'im.message.receive_v1': async (data) => {
       try {
         const ev = data && data.event ? data.event : data;
+        const sender = ev && ev.sender;
         const msg = ev && ev.message;
-        if (!msg) {
-          console.log('[feishu-ws] 收到事件但无 message 字段:', (data && data.header && data.header.event_type) || '?');
+        if (!sender || !msg) {
+          console.log(
+            '[feishu-ws] 收到事件但缺 sender/message 字段: header=' +
+              (data && data.header && data.header.event_type) || '?'
+          );
           return;
         }
-        const openId = msg.sender && msg.sender.sender_id && msg.sender.sender_id.open_id;
-        const text = msg.message_type === 'text'
-          ? (() => { try { return JSON.parse(msg.content || '{}').text || ''; } catch { return ''; } })()
-          : '';
-        console.log(`[feishu-ws] 收到消息 event_type=${msg.message_type} openId=${openId} textLen=${text.length}`);
-        if (openId && text) await onMessage(openId, text.trim());
+        const senderOpenId = sender.sender_id && sender.sender_id.open_id;
+        const chatType = msg.chat_type; // 'p2p' | 'group'
+        const messageType = msg.message_type;
+
+        // 群聊里只响应 @本机器人 的消息（mentions 非空）
+        if (chatType === 'group' && (!msg.mentions || msg.mentions.length === 0)) {
+          console.log(`[feishu-ws] 群消息未 @机器人，跳过 chat_id=${msg.chat_id}`);
+          return;
+        }
+
+        const text =
+          messageType === 'text'
+            ? (() => {
+                try {
+                  return JSON.parse(msg.content || '{}').text || '';
+                } catch {
+                  return '';
+                }
+              })()
+            : '';
+
+        console.log(
+          `[feishu-ws] 收到消息 chat=${chatType} type=${messageType} openId=${senderOpenId} textLen=${text.length}`
+        );
+
+        if (senderOpenId && text && text.trim()) {
+          await onMessage(senderOpenId, text.trim());
+        } else if (senderOpenId && !text) {
+          console.log(
+            `[feishu-ws] 收到非文本或空文本 type=${messageType}，等待下一次文本消息`
+          );
+        }
       } catch (e) {
-        console.error('[feishu-ws] 处理事件失败:', e.message);
+        console.error('[feishu-ws] 处理事件失败:', e.message, e.stack);
       }
     },
   });
