@@ -18,7 +18,10 @@ const DEFAULT_SYSTEM = `你是 Acaily，一个运行在飞书里的个人 AI 助
 TOOL: <工具名>(<JSON 参数>)
 例如查询天气：TOOL: get_weather({"city":"香港","days":2})
 例如联网搜索：TOOL: web_search({"query":"香港今日新闻","top":5})
-如果没有合适的工具可用，直接给出自然语言回答。`;
+如果没有合适的工具可用，直接给出自然语言回答。
+
+【图片输入】
+用户可能会发送图片（以图像内容的形式提供，与文字一起或单独出现）。当消息包含图片时，请结合图片内容作答：提取图片中的文字（OCR）、识别表格/时间/金额/联系方式等关键信息，并简要概括主要内容；如果用户就图片提问，针对问题回答。`;
 
 // 从模型输出里剥离工具声明行（避免把 TOOL: ... 透传给用户）
 export function stripToolLines(text) {
@@ -63,11 +66,12 @@ export class AgentRuntime {
   }
 
   // chat: async (messages) => { content } ；history: 历史对话 [{role, content}]
-  async run(userText, { chat, history = [] } = {}) {
+  // userInput: 用户本轮输入，可为字符串（纯文本）或内容数组（多模态：文字 + image_url）
+  async run(userInput, { chat, history = [] } = {}) {
     const messages = [
       { role: 'system', content: `${this.systemPrompt}\n\n可用工具:\n${this.toolListText()}` },
       ...history,
-      { role: 'user', content: userText },
+      { role: 'user', content: userInput },
     ];
 
     const transcript = [];

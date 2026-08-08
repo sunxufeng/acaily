@@ -46,6 +46,28 @@ export async function sendText(openId, text) {
   return { ok: true, messageId: data.data?.message_id };
 }
 
+// 下载飞书消息里的图片（image_key），转成 data URL 交给多模态模型。
+// 飞书图片下载接口直接返回图片二进制（Content-Type=image/*），用 tenant token 鉴权。
+const IMG_MAX_BYTES = 8 * 1024 * 1024; // 8MB 上限，超过拒绝（避免巨型 base64 撑爆请求/上下文）
+export async function downloadImage(imageKey) {
+  const token = await getTenantToken();
+  if (!token) return null;
+  const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/images/${imageKey}?type=message`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`下载飞书图片失败 HTTP ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > IMG_MAX_BYTES) {
+    throw new Error(`图片过大（约 ${Math.round(buf.length / 1024)}KB），上限 8MB，请发送更小的截图`);
+  }
+  const ct = res.headers.get('content-type') || 'image/png';
+  const mime = ct.startsWith('image/') ? ct : 'image/png';
+  return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
 // 把 Markdown 渲染成飞书互动卡片（卡片内 markdown 元素可正常渲染排版）
 // 超过卡片上限或发送失败时，回退为纯文本（剥离 markdown 语法）
 const CARD_MD_LIMIT = 4000;

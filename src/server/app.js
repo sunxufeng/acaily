@@ -59,10 +59,26 @@ async function handleChat(openId, messages) {
   return routeChat(openId, messages);
 }
 
-async function handleAgent(openId, text, history, sessionId) {
+async function handleAgent(openId, text, history, sessionId, image) {
   // 会话持久化 + 多轮记忆（best-effort，失败不影响主流程）
   let sid = sessionId;
   let hist = history || [];
+
+  // 构造用户消息内容：有图片则走多模态（文本 + image_url），否则纯文本
+  let userContent;
+  if (image) {
+    const prompt =
+      text && text.trim()
+        ? text.trim()
+        : '请分析这张图片：提取其中的文字，识别表格、时间、金额等关键信息，并简要概括主要内容。';
+    userContent = [
+      { type: 'text', text: prompt },
+      { type: 'image_url', image_url: { url: image } },
+    ];
+  } else {
+    userContent = text;
+  }
+
   try {
     if (!sid) {
       const sessions = await listSessions(openId);
@@ -70,13 +86,14 @@ async function handleAgent(openId, text, history, sessionId) {
         sid = sessions[0].id; // 复用最近一次会话，形成连续上下文
         hist = (await getHistory(openId, sid, 12)) || [];
       } else {
-        sid = await createSession(openId, text.slice(0, 20));
+        sid = await createSession(openId, (text || '图片消息').slice(0, 20));
       }
     }
-    await appendMessage(sid, 'user', text);
+    // 图片消息把多模态内容（含 data URL）一并落库，保证后续多轮仍带视觉上下文
+    await appendMessage(sid, 'user', userContent);
   } catch (e) { console.error('[conv] 持久化失败:', e.message); }
 
-  const result = await agent.run(text, {
+  const result = await agent.run(userContent, {
     chat: (messages) => routeChat(openId, messages),
     history: hist,
   });
@@ -87,7 +104,8 @@ async function handleAgent(openId, text, history, sessionId) {
 
 // 统一消息处理入口：未配置用户回显 open_id，已配置则走 Agent 回复。
 // Webhook 与长连接两种事件接收方式共用此函数。
-async function processFeishuMessage(openId, text) {
+// image: 飞书图片下载后的 data URL（可为 null）
+async function processFeishuMessage(openId, text, image) {
   try {
     if (!getConfig(openId)) {
       await sendText(
@@ -99,7 +117,7 @@ async function processFeishuMessage(openId, text) {
       );
       return;
     }
-    const r = await handleAgent(openId, text.trim());
+    const r = await handleAgent(openId, text ? text.trim() : '', null, null, image);
     await sendMarkdown(openId, r.answer);
   } catch (e) {
     console.error('[feishu] 处理消息失败:', e.message);

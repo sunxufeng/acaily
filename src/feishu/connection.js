@@ -8,6 +8,7 @@
 // 2. 内存去重 (openId, messageId) 60s 窗口，兜底网络抖动/飞书重试
 // 3. 真正业务处理 setImmediate 推到下一 tick，不阻塞 ack
 import { WSClient, EventDispatcher } from '@larksuiteoapi/node-sdk';
+import { downloadImage } from './client.js';
 
 let started = false;
 let wsInstance = null;
@@ -104,8 +105,18 @@ export function startFeishuConnection(onMessage) {
               })()
             : '';
 
+        // 图片消息：从 content 提取 image_key（飞书 image 类型 content = {"image_key":"..."}）
+        let imageKey = null;
+        if (messageType === 'image') {
+          try {
+            imageKey = JSON.parse(msg.content || '{}').image_key || null;
+          } catch {
+            imageKey = null;
+          }
+        }
+
         console.log(
-          `[feishu-ws] 收到消息 chat=${chatType} type=${messageType} openId=${senderOpenId} textLen=${text.length} mid=${messageId}`
+          `[feishu-ws] 收到消息 chat=${chatType} type=${messageType} openId=${senderOpenId} textLen=${text.length} img=${imageKey ? 'yes' : 'no'} mid=${messageId}`
         );
 
         if (text && text.trim()) {
@@ -115,9 +126,24 @@ export function startFeishuConnection(onMessage) {
               .then(() => onMessage(senderOpenId, text.trim()))
               .catch((e) => console.error('[feishu-ws] onMessage 失败:', e.message, e.stack));
           });
+        } else if (imageKey) {
+          // 图片消息：先下载图片（异步），再交给统一入口；下载失败则仍以纯文本兜底
+          setImmediate(() => {
+            Promise.resolve()
+              .then(async () => {
+                let image = null;
+                try {
+                  image = await downloadImage(imageKey);
+                } catch (e) {
+                  console.error('[feishu-ws] 下载图片失败:', e.message);
+                }
+                return onMessage(senderOpenId, '', image);
+              })
+              .catch((e) => console.error('[feishu-ws] onMessage(图片) 失败:', e.message, e.stack));
+          });
         } else {
           console.log(
-            `[feishu-ws] 收到非文本或空文本 type=${messageType}，等待下一次文本消息`
+            `[feishu-ws] 收到未支持的消息类型 type=${messageType}，跳过`
           );
         }
       } catch (e) {
