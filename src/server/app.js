@@ -14,6 +14,7 @@ import { routeChat, testConnection, rateLimitRemaining } from '../gateway/router
 import { AgentRuntime } from '../agent/runtime.js';
 import { parseEvent, verifySignature, extractMessage } from '../feishu/event.js';
 import { sendText } from '../feishu/client.js';
+import { startFeishuConnection, getFeishuWsStatus } from '../feishu/connection.js';
 
 // 内置示例工具：演示 Agent 工具调用（后续可替换为真实 MCP 工具）
 const tools = [
@@ -73,6 +74,27 @@ async function handleAgent(openId, text, history, sessionId) {
   return { ...result, sessionId: sid };
 }
 
+// 统一消息处理入口：未配置用户回显 open_id，已配置则走 Agent 回复。
+// Webhook 与长连接两种事件接收方式共用此函数。
+async function processFeishuMessage(openId, text) {
+  try {
+    if (!getConfig(openId)) {
+      await sendText(
+        openId,
+        `👋 你还没有配置个人模型，暂时无法对话。\n\n` +
+          `你的 open_id 是：\n${openId}\n\n` +
+          `请打开 https://acaily.areteailab.com/settings ，把上面的 open_id 填进「Open ID」，` +
+          `再填写你的模型（Provider / Base URL / Model / API Key），保存后即可在飞书里直接对话。`
+      );
+      return;
+    }
+    const r = await handleAgent(openId, text.trim());
+    await sendText(openId, r.answer);
+  } catch (e) {
+    console.error('[feishu] 处理消息失败:', e.message);
+  }
+}
+
 async function handleFeishuEvent(rawBody, headers) {
   const appSecret = process.env.FEISHU_APP_SECRET;
   if (appSecret) {
@@ -92,27 +114,8 @@ async function handleFeishuEvent(rawBody, headers) {
 
   const msg = extractMessage(parsed);
   if (msg && msg.text) {
-    const openId = msg.openId;
-    // 异步处理（飞书要求快速返回 200），整体包在 try/catch 防止抛错中断请求
-    (async () => {
-      try {
-        if (!getConfig(openId)) {
-          // 未配置用户：回显其 open_id 并引导去设置页（解决 PoC 手动填 open_id 的鸡生蛋问题）
-          await sendText(
-            openId,
-            `👋 你还没有配置个人模型，暂时无法对话。\n\n` +
-              `你的 open_id 是：\n${openId}\n\n` +
-              `请打开 https://acaily.areteailab.com/settings ，把上面的 open_id 填进「Open ID」，` +
-              `再填写你的模型（Provider / Base URL / Model / API Key），保存后即可在飞书里直接对话。`
-          );
-          return;
-        }
-        const r = await handleAgent(openId, msg.text.trim());
-        await sendText(openId, r.answer);
-      } catch (e) {
-        console.error('[feishu] 处理消息失败:', e.message);
-      }
-    })();
+    // 快速返回 200，消息异步处理（Webhook 模式要求即时响应）
+    processFeishuMessage(openId, msg.text.trim());
   }
   return { status: 200, json: { code: 0, msg: 'ok' } };
 }
@@ -141,7 +144,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === 'GET' && pathname === '/health') {
-      return sendJson(res, 200, { ok: true, ts: Date.now(), service: 'acaily' });
+      return sendJson(res, 200, { ok: true, ts: Date.now(), service: 'acaily', feishuWs: getFeishuWsStatus() });
     }
 
     if (method === 'POST' && pathname === '/chat') {
@@ -281,6 +284,8 @@ const server = createServer(async (req, res) => {
 const PORT = Number(process.env.PORT || 3000);
 server.listen(PORT, () => {
   console.log(`[acaily] 服务已启动 http://localhost:${PORT}`);
+  // 飞书事件接收：长连接（WebSocket）主通道；Webhook 回调 /feishu/event 仍保留作兼容。
+  startFeishuConnection(processFeishuMessage);
 });
 
 export { server };
