@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Acaily · 个人模型设置</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --primary:#3370ff; --ok:#34c724; --err:#f54a45; --text:#1f2329; --muted:#8f959e; --border:#dee0e3;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);}
+  .wrap{max-width:560px;margin:24px auto;padding:0 16px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  h1{font-size:20px;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:16px;}
+  label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px;}
+  input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;outline:none;background:#fff;}
+  input:focus,select:focus{border-color:var(--primary);}
+  .row{display:flex;gap:10px;}
+  .row>*{flex:1;}
+  button{cursor:pointer;border:none;border-radius:8px;font-size:14px;font-weight:600;padding:11px 14px;color:#fff;background:var(--primary);transition:.15s;}
+  button.ghost{background:#eef1f6;color:var(--text);}
+  button:active{transform:translateY(1px);}
+  .actions{display:flex;gap:10px;margin-top:18px;}
+  .actions button{flex:1;}
+  .status{margin-top:14px;font-size:13px;padding:10px 12px;border-radius:8px;display:none;}
+  .status.ok{display:block;background:#e8f9ec;color:#1a7f37;}
+  .status.err{display:block;background:#fdeceb;color:#b42318;}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px;}
+  code{background:#f0f1f3;padding:1px 5px;border-radius:4px;font-size:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Acaily · 个人模型设置</h1>
+    <div class="sub">为你的飞书账号配置专属大模型。API Key 经信封加密后入库，明文不出服务端。</div>
+
+    <label>飞书 Open ID <span style="color:var(--err)">*</span></label>
+    <input id="openId" placeholder="ou_xxxxxxxx（生产环境由飞书登录自动注入）" />
+
+    <label>模型 Provider <span style="color:var(--err)">*</span></label>
+    <select id="provider">
+      <option value="openai">OpenAI 兼容</option>
+      <option value="anthropic">Anthropic (Claude)</option>
+      <option value="ollama">Ollama（本地）</option>
+      <option value="custom">自建网关（OpenAI 兼容）</option>
+    </select>
+
+    <label>Base URL <span style="color:var(--err)">*</span></label>
+    <input id="baseUrl" placeholder="https://api.openai.com/v1 或 http://localhost:11434" />
+    <div class="hint">OpenAI 兼容填 <code>/v1</code> 结尾；Ollama 默认 <code>http://localhost:11434</code></div>
+
+    <label>API Key <span style="color:var(--err)">*</span>（Ollama 可留空）</label>
+    <input id="apiKey" type="password" placeholder="sk-...（留空则不修改已存密钥）" />
+
+    <label>Model <span style="color:var(--err)">*</span></label>
+    <input id="model" placeholder="gpt-4o / claude-3-5-sonnet / qwen2.5:7b" />
+
+    <div class="row" style="margin-top:14px;">
+      <div>
+        <label style="margin-top:0;">Temperature</label>
+        <input id="temperature" type="number" step="0.1" min="0" max="2" value="0.7" />
+      </div>
+      <div>
+        <label style="margin-top:0;">Max Tokens</label>
+        <input id="maxTokens" type="number" step="1" min="1" value="2048" />
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="saveBtn">保存配置</button>
+      <button id="testBtn" class="ghost">连通性测试</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+  <div class="card">
+    <div class="sub">说明：本页为 PoC 版 H5，演示「用户自配模型」核心流程；生产环境将嵌入飞书工作台并通过 OAuth 自动获取 open_id。</div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+function show(msg, ok){ const s=$('status'); s.textContent=msg; s.className='status '+(ok?'ok':'err'); }
+function collect(){
+  return {
+    openId:$('openId').value.trim(),
+    provider:$('provider').value,
+    baseUrl:$('baseUrl').value.trim(),
+    apiKey:$('apiKey').value,
+    model:$('model').value.trim(),
+    temperature:Number($('temperature').value),
+    maxTokens:Number($('maxTokens').value),
+  };
+}
+async function postJSON(url, body){
+  const r = await fetch(url, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+  return {status:r.status, data:await r.json().catch(()=>({}))};
+}
+$('saveBtn').onclick = async () => {
+  const c = collect();
+  if(!c.openId||!c.provider||!c.baseUrl||!c.model){ return show('请填写 Open ID / Provider / Base URL / Model', false); }
+  const payload = {...c}; if(!payload.apiKey) delete payload.apiKey; // 留空=不改动已存密钥
+  const {status,data} = await postJSON('/config', payload);
+  if(status===200) show('✅ 配置已保存（API Key 已加密入库）', true);
+  else show('❌ 保存失败：'+(data.error||status), false);
+};
+$('testBtn').onclick = async () => {
+  const c = collect();
+  if(!c.openId){ return show('请先填写 Open ID', false); }
+  show('⏳ 正在测试连通性…', true);
+  const {status,data} = await postJSON('/config/test', {openId:c.openId, provider:c.provider, baseUrl:c.baseUrl, apiKey:c.apiKey, model:c.model});
+  if(data && data.ok) show('✅ 连通性正常：'+ (data.provider||'') +' / '+(data.model||''), true);
+  else show('❌ 连通失败：'+(data&&data.error||status), false);
+};
+</script>
+</body>
+</html>
