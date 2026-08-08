@@ -29,5 +29,10 @@ export function validateUserModelConfig(cfg) {
       errors.push('maxTokens 必须是正整数');
     }
   }
+  if (cfg.chatCompletionsPath !== undefined && cfg.chatCompletionsPath !== '') {
+    if (typeof cfg.chatCompletionsPath !== 'string' || !/^\//.test(cfg.chatCompletionsPath)) {
+      errors.push('chatCompletionsPath 必须以 / 开头');
+    }
+  }
   return errors;
 }
