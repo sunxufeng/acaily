@@ -54,7 +54,7 @@ export class BaseProvider {
         const detail = data && (data.error?.message || data.error || text);
         throw new ProviderError(
           `${this.type} 请求失败 (${res.status}): ${detail || res.statusText}`,
-          { status: res.status, provider: this.type }
+          { status: res.status, provider: this.type, attemptedUrl: url }
         );
       }
       return data;
@@ -70,7 +70,10 @@ export class BaseProvider {
   }
 
   _url(path) {
-    return String(this.cfg.baseUrl).replace(/\/$/, '') + path;
+    const base = String(this.cfg.baseUrl).replace(/\/$/, '');
+    // 路径为空表示 baseUrl 已是完整接口地址，直接使用（避免重复拼接）
+    if (!path) return base;
+    return base + path;
   }
 
   _modelParams() {
