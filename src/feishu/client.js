@@ -126,34 +126,45 @@ export async function listBotChats({ pageSize = 100 } = {}) {
 // 必须把 post 也解析出来，否则会误判「群内没有可读文本」。
 function extractMessageText(msg) {
   const type = msg.msg_type;
+  // 飞书 im/v1/messages 返回的正文嵌套在 body.content（JSON 字符串）；
+  // 个别旧版本/接口直接给 content，这里两者兼容。
+  const raw = (msg.body && msg.body.content) || msg.content || '';
   let parsed;
   try {
-    parsed = JSON.parse(msg.content || '{}');
+    parsed = JSON.parse(raw);
   } catch {
     return '';
   }
+  let text = '';
   if (type === 'text') {
-    return (parsed.text || '').trim();
-  }
-  if (type === 'post') {
+    text = (parsed.text || '').trim();
+  } else if (type === 'post') {
     // content: [ [ {tag:'text',text}, {tag:'at',text}, ... ], ... ]
     const lines = [];
-    const blocks = parsed.content || [];
+    const blocks = parsed.content || parsed.content_v2 || [];
     for (const line of blocks) {
       if (!Array.isArray(line)) continue;
       const seg = line
         .map((el) => {
           if (el.tag === 'text') return el.text || '';
           if (el.tag === 'a') return el.text || el.href || '';
-          if (el.tag === 'at') return `@${el.text || el.user_name || '某人'}`;
+          if (el.tag === 'at') return `@${el.text || el.user_name || el.user_id || '某人'}`;
           return '';
         })
         .join('');
       if (seg) lines.push(seg);
     }
-    return lines.join('\n').trim();
+    text = lines.join('\n').trim();
+  } else {
+    return '';
   }
-  return '';
+  // 把文本里的 @_user_N 占位替换为真实姓名（来自 messages 接口的 mentions 字段），
+  // 否则总结里的人名会是 @_user_1 这样的占位，无法识别负责人。
+  const mentions = Array.isArray(msg.mentions) ? msg.mentions : [];
+  for (const mn of mentions) {
+    if (mn.key && mn.name) text = text.split(mn.key).join(mn.name);
+  }
+  return text;
 }
 
 // 读取某个会话的历史消息（需要 im:message:readonly）。
@@ -196,6 +207,8 @@ export async function getChatMessages({ chatId, pageSize = 50, days, containerTy
   msgs.sort((a, b) => a.create_time - b.create_time);
   return {
     messages: msgs,
+    // 原始条目（含 content 原文），供诊断/调试展示真实消息结构
+    rawItems: items.map((m) => ({ msg_type: m.msg_type, sender: m.sender, content: (m.body && m.body.content) || m.content })),
     diagnostics: {
       total: items.length,
       typeCount,
