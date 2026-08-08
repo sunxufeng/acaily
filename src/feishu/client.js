@@ -122,9 +122,44 @@ export async function listBotChats({ pageSize = 100 } = {}) {
   };
 }
 
+// 从一条消息里提取纯文本。飞书群里大量消息是「富文本(post)」而非纯 text，
+// 必须把 post 也解析出来，否则会误判「群内没有可读文本」。
+function extractMessageText(msg) {
+  const type = msg.msg_type;
+  let parsed;
+  try {
+    parsed = JSON.parse(msg.content || '{}');
+  } catch {
+    return '';
+  }
+  if (type === 'text') {
+    return (parsed.text || '').trim();
+  }
+  if (type === 'post') {
+    // content: [ [ {tag:'text',text}, {tag:'at',text}, ... ], ... ]
+    const lines = [];
+    const blocks = parsed.content || [];
+    for (const line of blocks) {
+      if (!Array.isArray(line)) continue;
+      const seg = line
+        .map((el) => {
+          if (el.tag === 'text') return el.text || '';
+          if (el.tag === 'a') return el.text || el.href || '';
+          if (el.tag === 'at') return `@${el.text || el.user_name || '某人'}`;
+          return '';
+        })
+        .join('');
+      if (seg) lines.push(seg);
+    }
+    return lines.join('\n').trim();
+  }
+  return '';
+}
+
 // 读取某个会话的历史消息（需要 im:message:readonly）。
 // container_id_type 合法值为 chat（群聊）或 p2p（私聊），注意不是 chat_id！
-// 仅提取文本消息（text 类型）。
+// 同时解析 text 与 post（富文本）类型；并带回类型分布，便于区分
+// 「API 真的没返回消息」还是「返回了但被类型过滤掉」。
 export async function getChatMessages({ chatId, pageSize = 50, days, containerType = 'chat' } = {}) {
   const token = await getTenantToken();
   if (!token) return { error: '未配置飞书凭据' };
@@ -139,19 +174,17 @@ export async function getChatMessages({ chatId, pageSize = 50, days, containerTy
   const data = await res.json();
   if (data.code !== 0) return { error: `读取消息失败: ${data.msg}` };
   const items = (data.data && data.data.items) || [];
+  // 统计各类型数量，供上层诊断
+  const typeCount = {};
+  for (const m of items) typeCount[m.msg_type] = (typeCount[m.msg_type] || 0) + 1;
   let msgs = items
-    .filter((m) => m.msg_type === 'text')
     .map((m) => {
-      let text = '';
-      try {
-        text = JSON.parse(m.content || '{}').text || '';
-      } catch {
-        text = '';
-      }
+      const text = extractMessageText(m);
       return {
         sender_open_id: m.sender && m.sender.id,
         create_time: Number(m.create_time) || 0,
         text,
+        msg_type: m.msg_type,
       };
     })
     .filter((m) => m.text);
@@ -161,7 +194,14 @@ export async function getChatMessages({ chatId, pageSize = 50, days, containerTy
   }
   // 按时间正序，便于模型理解前后因果
   msgs.sort((a, b) => a.create_time - b.create_time);
-  return { messages: msgs };
+  return {
+    messages: msgs,
+    diagnostics: {
+      total: items.length,
+      typeCount,
+      readable: msgs.length,
+    },
+  };
 }
 
 let _nameCache = new Map();

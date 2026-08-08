@@ -25,8 +25,26 @@ async function fmtHistory(args = {}, context = {}) {
   }
   const r = await getChatMessages({ chatId, pageSize: args.limit || 50, days: args.days });
   if (r.error) return `⚠️ ${r.error}（需要应用具备 im:message:readonly 权限并已发布版本）`;
-  if (!r.messages.length) return '该会话近期没有可读的文本消息。';
-
+  const d = r.diagnostics || { total: 0, readable: 0, typeCount: {} };
+  // 诊断分支：先说清「是否真的读到了消息」，再决定如何总结
+  if (d.total === 0) {
+    return (
+      '⚠️ 飞书接口对**该会话返回了 0 条消息**。这通常意味着以下之一：\n' +
+      '1) 机器人是**最近才加入该群**——飞书规定机器人只能读取它入群之后产生的消息，入群前的历史读不到；\n' +
+      '2) 该群近期确实没有任何消息；\n' +
+      '3) 权限/发版未真正生效（可在开放平台「版本管理与发布」确认 im:message:readonly 已发布）。\n' +
+      '若是情况 1，请把相关聊天记录复制/导出/转发成文本发给我，我立即按四部分整理。'
+    );
+  }
+  if (d.readable === 0) {
+    const types = Object.keys(d.typeCount).join('、') || '未知';
+    return (
+      `⚠️ 飞书接口返回了 ${d.total} 条消息，但**都是非文本类型（${types}）**——` +
+      '例如图片、语音、文件、系统通知、转发卡片等。我目前只能解析「纯文本(text)」和「富文本(post)」，' +
+      '无法读取图片/语音/文件里的文字。\n' +
+      '请把群里的任务信息以**文字形式**（复制关键对话、或导出聊天记录）发给我，我即可继续总结。'
+    );
+  }
   const names = await resolveUserNames(r.messages.map((m) => m.sender_open_id));
   const lines = r.messages.map((m) => {
     const t = m.create_time
@@ -35,8 +53,8 @@ async function fmtHistory(args = {}, context = {}) {
     return `[${t}] ${names[m.sender_open_id] || m.sender_open_id}: ${m.text}`;
   });
   return (
-    `（以下为该会话最近 ${r.messages.length} 条文本消息；仅机器人所在的会话可读取，` +
-    `用户与其它人的私聊、未加入的群无法读取）\n` +
+    `（以下为该会话最近 ${d.readable} 条可读消息，原始 ${d.total} 条；仅机器人所在的会话可读取，` +
+    `用户与其它人的私聊、未加入的群无法读取；机器人仅能读入群后的消息）\n` +
     lines.join('\n')
   );
 }
