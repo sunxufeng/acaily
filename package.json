@@ -8,5 +8,8 @@
   "scripts": {
     "start": "node src/server/app.js",
     "test": "node --test"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.72.0"
   }
 }
