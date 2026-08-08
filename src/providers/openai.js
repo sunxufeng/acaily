@@ -4,8 +4,8 @@ import { BaseProvider } from './base.js';
 export class OpenAICompatibleProvider extends BaseProvider {
   constructor(cfg, { chatCompletionsPath } = {}) {
     super(cfg);
-    // 允许调用方（custom 等）覆盖；openai 默认 /chat/completions
-    this.chatCompletionsPath = chatCompletionsPath === undefined ? '/chat/completions' : chatCompletionsPath;
+    // 透传给基类；空值/未传由 base._url 兜底为 /chat/completions
+    this.chatCompletionsPath = chatCompletionsPath === undefined ? '' : chatCompletionsPath;
   }
 
   async chat(messages) {
