@@ -30,14 +30,25 @@ export function getConfig(openId) {
   return db.users[openId] || null;
 }
 
-// 保存用户配置：校验通过后，把明文 apiKey 转成信封密文再落库
+// 保存用户配置：校验通过后，把明文 apiKey 转成信封密文再落库。
+// 兼容管理后台：clearApiKey=true 时清空已存密钥；apiKey 留空且已有密钥则保留既有密钥。
 export function setConfig(openId, cfg) {
-  const errors = validateUserModelConfig(cfg);
+  const prev = load().users[openId] || {};
+  const apiKeyProvided = !!(cfg.apiKey && String(cfg.apiKey).trim());
+  const keepExistingKey = !apiKeyProvided && prev._apiKeyEnc && !cfg.clearApiKey;
+  // 仅在：非 ollama 且未提供新密钥 且 无既有密钥可沿用 时，才强制要求 apiKey
+  const requireApiKey = !(cfg.provider === 'ollama' || apiKeyProvided || keepExistingKey);
+  const errors = validateUserModelConfig(cfg, { requireApiKey });
   if (errors.length) throw new Error('配置非法: ' + errors.join('; '));
   const db = load();
-  const { apiKey, ...rest } = cfg;
-  const stored = { ...rest, updatedAt: new Date().toISOString() };
-  if (apiKey) stored._apiKeyEnc = encryptSecret(apiKey); // 信封加密
+  const { apiKey, clearApiKey, ...rest } = cfg;
+  const stored = { ...prev, ...rest, updatedAt: new Date().toISOString() };
+  if (apiKeyProvided) {
+    stored._apiKeyEnc = encryptSecret(String(cfg.apiKey).trim()); // 信封加密
+  } else if (clearApiKey) {
+    delete stored._apiKeyEnc;
+  }
+  // 未提供 apiKey 且未要求清除 → 保留 prev._apiKeyEnc（rest 里已带入）
   db.users[openId] = stored;
   persist();
   return stored;
@@ -55,6 +66,22 @@ export function deleteConfig(openId) {
 
 export function listOpenIds() {
   return Object.keys(load().users);
+}
+
+// 管理后台用：列出全部用户配置摘要（不含 apiKey 明文/密文）
+export function listUsers() {
+  const db = load();
+  return Object.entries(db.users)
+    .map(([openId, c]) => ({
+      openId,
+      displayName: c.displayName || '',
+      provider: c.provider || '',
+      model: c.model || '',
+      botName: c.botName || '',
+      hasApiKey: !!c._apiKeyEnc,
+      updatedAt: c.updatedAt || '',
+    }))
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
 // 仅网关内部使用：解密出明文 API Key

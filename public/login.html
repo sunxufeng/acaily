@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Acaily · 登录</title>
+<style>
+  :root{ --bg:#f5f6f8; --card:#fff; --primary:#3370ff; --text:#1f2329; --muted:#8f959e; --border:#dee0e3;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:32px;width:380px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.06);}
+  .logo{font-size:28px;font-weight:700;color:var(--primary);margin-bottom:6px;}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:26px;line-height:1.6;}
+  a.btn{display:inline-block;text-decoration:none;background:var(--primary);color:#fff;font-weight:600;font-size:15px;padding:12px 22px;border-radius:9px;transition:.15s;}
+  a.btn:hover{opacity:.92;}
+  .foot{margin-top:22px;font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">⚡ Acaily</div>
+    <div class="sub">飞书 AI 助手 · 个人模型网关<br/>使用飞书账号登录（仅应用「可见范围」内的成员可访问）</div>
+    <a class="btn" href="/oauth/start">飞书账号登录</a>
+    <div class="foot">登录即表示你同意本组织的管理规范</div>
+  </div>
+</body>
+</html>

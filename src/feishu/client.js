@@ -46,15 +46,19 @@ export async function sendText(openId, text) {
   return { ok: true, messageId: data.data?.message_id };
 }
 
-// 下载飞书消息里的图片（image_key），转成 data URL 交给多模态模型。
-// 飞书图片下载接口直接返回图片二进制（Content-Type=image/*），用 tenant token 鉴权。
+// 下载飞书消息里的图片（用户发送的图片），转成 data URL 交给多模态模型。
+// 注意：im/v1/images/{image_key} 只能下载「机器人自己上传」的图片；
+// 要下载用户发来的图片/文件，必须用「消息资源」接口：
+//   im/v1/messages/{message_id}/resources/{image_key}?type=image
+// 因此需要传入 messageId（即消息里的 message_id）。
 const IMG_MAX_BYTES = 8 * 1024 * 1024; // 8MB 上限，超过拒绝（避免巨型 base64 撑爆请求/上下文）
-export async function downloadImage(imageKey) {
+export async function downloadImage(messageId, imageKey) {
   const token = await getTenantToken();
   if (!token) return null;
-  const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/images/${imageKey}?type=message`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
+  const res = await fetch(
+    `${FEISHU_HOST}/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=image`,
+    { headers: { authorization: `Bearer ${token}` } }
+  );
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     throw new Error(`下载飞书图片失败 HTTP ${res.status}: ${t.slice(0, 200)}`);
@@ -66,6 +70,30 @@ export async function downloadImage(imageKey) {
   const ct = res.headers.get('content-type') || 'image/png';
   const mime = ct.startsWith('image/') ? ct : 'image/png';
   return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+// 下载飞书消息里的文件（用户发送的文件），返回 { buffer, mime }。
+// 与图片同理，必须用「消息资源」接口 im/v1/messages/{message_id}/resources/{file_key}?type=file，
+// 而不能用 im/v1/files/{file_key}（那只支持机器人自己上传的文件）。
+// 注意：飞书云文档（doc/sheet/bitable 等在线文档）走该接口也下载不到正文，调用方应先按 file_type 区分。
+const FILE_MAX_BYTES = 25 * 1024 * 1024; // 25MB 上限
+export async function downloadFile(messageId, fileKey) {
+  const token = await getTenantToken();
+  if (!token) return null;
+  const res = await fetch(
+    `${FEISHU_HOST}/open-apis/im/v1/messages/${messageId}/resources/${fileKey}?type=file`,
+    { headers: { authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`下载飞书文件失败 HTTP ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > FILE_MAX_BYTES) {
+    throw new Error(`文件过大（约 ${Math.round(buf.length / 1024 / 1024)}MB），上限 25MB，请发送更小的文件`);
+  }
+  const ct = res.headers.get('content-type') || 'application/octet-stream';
+  return { buffer: buf, mime: ct };
 }
 
 // 把 Markdown 渲染成飞书互动卡片（卡片内 markdown 元素可正常渲染排版）

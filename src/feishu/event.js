@@ -43,6 +43,13 @@ export function extractMessage(parsed) {
   } catch {
     text = '';
   }
+  // 把 @_user_1 这类 mention 占位符替换成真实姓名（飞书 content.text 用占位符表示 @人）
+  if (text && message.mentions && message.mentions.length) {
+    for (const m of message.mentions) {
+      if (m && m.key) text = text.split(m.key).join(m.name || m.key);
+    }
+    text = text.trim();
+  }
   return {
     openId: sender.sender_id.open_id,
     text,

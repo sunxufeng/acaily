@@ -21,7 +21,10 @@ TOOL: <工具名>(<JSON 参数>)
 如果没有合适的工具可用，直接给出自然语言回答。
 
 【图片输入】
-用户可能会发送图片（以图像内容的形式提供，与文字一起或单独出现）。当消息包含图片时，请结合图片内容作答：提取图片中的文字（OCR）、识别表格/时间/金额/联系方式等关键信息，并简要概括主要内容；如果用户就图片提问，针对问题回答。`;
+用户可能会发送图片（以图像内容的形式提供，与文字一起或单独出现）。当消息包含图片时，请结合图片内容作答：提取图片中的文字（OCR）、识别表格/时间/金额/联系方式等关键信息，并简要概括主要内容；如果用户就图片提问，针对问题回答。
+
+【文档/文件输入】
+用户可能会上传文件（PDF / Word / Excel / PPT / TXT / Markdown 等），其正文会以「文件正文如下：...」的形式随消息一并提供。请基于文件正文作答：做摘要、提炼观点、整理待办与风险等；如果用户针对文件提出具体问题，优先回答该问题，并注明信息来自用户上传的文件。`;
 
 // 从模型输出里剥离工具声明行（避免把 TOOL: ... 透传给用户）
 export function stripToolLines(text) {
@@ -65,11 +68,28 @@ export class AgentRuntime {
     return [...this.tools.values()].map((t) => `- ${t.name}: ${t.description}`).join('\n');
   }
 
+  // 根据用户的「专属助手设定」拼接个性化系统提示（在默认系统提示基础上追加）。
+  // 用于实现「每个人配置自己的机器人」：助手名称 + 用户自定义指令。
+  buildUserSystemPrompt({ botName, systemPrompt } = {}) {
+    const parts = [this.systemPrompt];
+    if (botName && botName.trim()) {
+      parts.push(
+        `\n\n你的名字是「${botName.trim()}」，这是用户为你设定的专属助手名称，请在合适的场景以此自称。`
+      );
+    }
+    if (systemPrompt && systemPrompt.trim()) {
+      parts.push(`\n\n用户的额外设定（请遵循）：\n${systemPrompt.trim()}`);
+    }
+    return parts.join('');
+  }
+
   // chat: async (messages) => { content } ；history: 历史对话 [{role, content}]
   // userInput: 用户本轮输入，可为字符串（纯文本）或内容数组（多模态：文字 + image_url）
-  async run(userInput, { chat, history = [] } = {}) {
+  // systemPrompt: 可选，覆盖/追加后的系统提示（用于注入用户专属人设）
+  async run(userInput, { chat, history = [], systemPrompt } = {}) {
+    const sys = systemPrompt || this.systemPrompt;
     const messages = [
-      { role: 'system', content: `${this.systemPrompt}\n\n可用工具:\n${this.toolListText()}` },
+      { role: 'system', content: `${sys}\n\n可用工具:\n${this.toolListText()}` },
       ...history,
       { role: 'user', content: userInput },
     ];
