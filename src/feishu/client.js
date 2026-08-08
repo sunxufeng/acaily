@@ -67,15 +67,35 @@ export function stripMarkdown(md = '') {
     .trim();
 }
 
+// 飞书互动卡片的 markdown 元素**不支持 # 标题语法**（会原样显示成 ## 字面字符）。
+// 把标题行转成飞书支持的「加粗」格式，保留层级感（低级别标题前加 · 分隔）。
+export function cardMarkdown(md = '') {
+  return (md || '')
+    .split('\n')
+    .map((line) => {
+      const m = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+      if (!m) return line;
+      const level = m[1].length;
+      const text = m[2].trim();
+      // 一/二级标题用加粗，三级及以下加粗 + 前缀，避免与正文混在一起
+      if (level <= 2) return `**${text}**`;
+      return `· **${text}**`;
+    })
+    .join('\n');
+}
+
 export async function sendMarkdown(openId, md) {
   const token = await getTenantToken();
   if (!token) return { skipped: true, reason: '未配置飞书凭据' };
 
-  const content = (md || '').trim();
+  let content = (md || '').trim();
   // 超长：直接回退纯文本，避免卡片超限
   if (content.length > CARD_MD_LIMIT) {
     return sendText(openId, stripMarkdown(content));
   }
+
+  // 卡片 markdown 不支持 # 标题，先转成加粗
+  const cardContent = cardMarkdown(content);
 
   const card = {
     config: { streaming_mode: false },
@@ -83,7 +103,7 @@ export async function sendMarkdown(openId, md) {
       template: 'blue',
       title: { tag: 'plain_text', content: 'Acaily' },
     },
-    elements: [{ tag: 'markdown', content }],
+    elements: [{ tag: 'markdown', content: cardContent }],
   };
 
   const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/messages?receive_id_type=open_id`, {
