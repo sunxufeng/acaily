@@ -64,16 +64,21 @@ export async function routeChat(openId, messages) {
 }
 
 // 连通性测试：配置保存前/后一键验证
-export async function testConnection(openId) {
-  const cfg = getConfig(openId);
-  if (!cfg) return { ok: false, error: '未配置模型' };
-  const apiKey = decryptApiKey(openId);
+export async function testConnection(openId, inlineCfg) {
+  let cfg = getConfig(openId);
+  if (inlineCfg && inlineCfg.provider) {
+    const storedApiKey = decryptApiKey(openId);
+    cfg = { ...(cfg || {}), ...inlineCfg };
+    if (!cfg.apiKey && storedApiKey) cfg.apiKey = storedApiKey;
+  }
+  if (!cfg || !cfg.provider) return { ok: false, error: '未配置模型（请先保存或填写配置）' };
+  const apiKey = cfg.apiKey || decryptApiKey(openId);
   const provider = getProvider({ ...cfg, type: cfg.provider, apiKey });
   try {
     await provider.test();
     return { ok: true, provider: cfg.provider, model: cfg.model };
   } catch (err) {
-    return { ok: false, error: err.message, provider: cfg.provider };
+    return { ok: false, error: err.message, attemptedUrl: err.attemptedUrl, provider: cfg.provider };
   }
 }
 
