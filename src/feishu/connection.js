@@ -38,11 +38,15 @@ export function startFeishuConnection(onMessage) {
       try {
         const ev = data && data.event ? data.event : data;
         const msg = ev && ev.message;
-        if (!msg) return;
+        if (!msg) {
+          console.log('[feishu-ws] 收到事件但无 message 字段:', (data && data.header && data.header.event_type) || '?');
+          return;
+        }
         const openId = msg.sender && msg.sender.sender_id && msg.sender.sender_id.open_id;
         const text = msg.message_type === 'text'
           ? (() => { try { return JSON.parse(msg.content || '{}').text || ''; } catch { return ''; } })()
           : '';
+        console.log(`[feishu-ws] 收到消息 event_type=${msg.message_type} openId=${openId} textLen=${text.length}`);
         if (openId && text) await onMessage(openId, text.trim());
       } catch (e) {
         console.error('[feishu-ws] 处理事件失败:', e.message);
