@@ -67,21 +67,40 @@ export function stripMarkdown(md = '') {
     .trim();
 }
 
-// 飞书互动卡片的 markdown 元素**不支持 # 标题语法**（会原样显示成 ## 字面字符）。
-// 把标题行转成飞书支持的「加粗」格式，保留层级感（低级别标题前加 · 分隔）。
+// 飞书互动卡片的 markdown 元素**不支持 # 标题语法**（会原样显示成 ## 字面字符），
+// 也**不支持 > 块引用语法**（会原样显示成 > 字面字符）。
+// 处理：标题行转加粗；块引用行转斜体（连续多行合并为一段），保证卡片里不再出现裸 # / >。
 export function cardMarkdown(md = '') {
-  return (md || '')
-    .split('\n')
-    .map((line) => {
-      const m = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
-      if (!m) return line;
-      const level = m[1].length;
-      const text = m[2].trim();
-      // 一/二级标题用加粗，三级及以下加粗 + 前缀，避免与正文混在一起
-      if (level <= 2) return `**${text}**`;
-      return `· **${text}**`;
-    })
-    .join('\n');
+  const lines = (md || '').split('\n');
+  const out = [];
+  let quoteBuf = null;
+  const flushQuote = () => {
+    if (quoteBuf === null) return;
+    const t = quoteBuf.join(' ').trim();
+    quoteBuf = null;
+    if (t) out.push(`*${t}*`); // 飞书卡片支持 *斜体*
+  };
+  for (const line of lines) {
+    const q = line.match(/^\s*>\s?(.*)$/);
+    if (q) {
+      if (quoteBuf === null) quoteBuf = [];
+      quoteBuf.push(q[1].trim());
+      continue;
+    }
+    flushQuote();
+    const m = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+    if (!m) {
+      out.push(line);
+      continue;
+    }
+    const level = m[1].length;
+    const text = m[2].trim();
+    // 一/二级标题用加粗，三级及以下加粗 + 前缀，避免与正文混在一起
+    if (level <= 2) out.push(`**${text}**`);
+    else out.push(`· **${text}**`);
+  }
+  flushQuote();
+  return out.join('\n');
 }
 
 export async function sendMarkdown(openId, md) {
