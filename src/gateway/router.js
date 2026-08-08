@@ -1,0 +1,82 @@
+import { getConfig, decryptApiKey } from '../config/userConfigStore.js';
+import { getProvider, ProviderError } from '../providers/index.js';
+import { TokenBucket, RateLimitError } from './rateLimiter.js';
+
+const limiter = new TokenBucket({
+  capacity: Number(process.env.ACAILY_RATE_CAPACITY || 20),
+  refillPerSec: Number(process.env.ACAILY_RATE_REFILL || 2),
+});
+
+const MAX_RETRIES = Number(process.env.ACAILY_MAX_RETRIES || 2);
+
+function backoffMs(attempt) {
+  return 200 * 2 ** (attempt - 1); // 200, 400, 800...
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 按 open_id 路由到用户自配模型：解析配置 → 信封解密 Key → 选适配器 → 限流 → 重试 → 降级
+export async function routeChat(openId, messages) {
+  const cfg = getConfig(openId);
+  if (!cfg) {
+    throw new ProviderError(
+      '该飞书用户尚未配置模型（请在个人设置页配置 Provider / API Key / Model）',
+      { provider: 'gateway', status: 404 }
+    );
+  }
+
+  // 限流（令牌桶）
+  try {
+    limiter.take(openId, 1);
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err;
+    throw err;
+  }
+
+  const apiKey = decryptApiKey(openId); // ollama 为 null
+  // 用户配置字段名为 provider，适配器注册表按 type 索引，这里做一次映射
+  const provider = getProvider({ ...cfg, type: cfg.provider, apiKey });
+
+  let lastErr;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) await sleep(backoffMs(attempt));
+      const res = await provider.chat(messages);
+      return {
+        content: res.content,
+        usage: res.usage,
+        provider: cfg.provider,
+        model: cfg.model,
+        attempt: attempt + 1,
+      };
+    } catch (err) {
+      lastErr = err;
+      // 4xx 客户端错误（非 429）属于配置/鉴权问题，不重试
+      if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) break;
+    }
+  }
+
+  // 降级：返回友好提示而非硬失败（生产可降级到小模型或兜底话术）
+  const fallback = process.env.ACAILY_DEGRADE_MESSAGE;
+  if (fallback) {
+    return { content: fallback, degraded: true, error: lastErr?.message, provider: cfg.provider };
+  }
+  throw lastErr ?? new ProviderError('模型调用失败', { provider: 'gateway' });
+}
+
+// 连通性测试：配置保存前/后一键验证
+export async function testConnection(openId) {
+  const cfg = getConfig(openId);
+  if (!cfg) return { ok: false, error: '未配置模型' };
+  const apiKey = decryptApiKey(openId);
+  const provider = getProvider({ ...cfg, type: cfg.provider, apiKey });
+  try {
+    await provider.test();
+    return { ok: true, provider: cfg.provider, model: cfg.model };
+  } catch (err) {
+    return { ok: false, error: err.message, provider: cfg.provider };
+  }
+}
+
+export function rateLimitRemaining(openId) {
+  return limiter.remaining(openId);
+}
