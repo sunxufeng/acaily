@@ -55,5 +55,6 @@ export function extractMessage(parsed) {
     text,
     messageId: message.message_id,
     chatType: message.chat_type, // p2p / group
+    chatId: message.chat_id, // 用于把「当前会话」传给飞书会话读取工具
   };
 }

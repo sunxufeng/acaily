@@ -96,6 +96,113 @@ export async function downloadFile(messageId, fileKey) {
   return { buffer: buf, mime: ct };
 }
 
+// ---------- 读取会话与消息（用于「总结我的任务 / 待办 / 卡点」等能力） ----------
+// ⚠️ 权限边界（飞书平台安全模型）：机器人只能读取「它自己所在的会话」——
+//   即 (a) 用户与它的私聊，(b) 用户把它拉进去的群聊。
+//   无法读取用户与其它人的私聊、也无法读取未加入的群。下面接口均受此约束。
+
+// 列出机器人所在的群聊（需要 im:chat 权限）。p2p 私聊不在此列表，
+// 私聊历史需用消息事件里的 chat_id 直接读取。
+export async function listBotChats({ pageSize = 100 } = {}) {
+  const token = await getTenantToken();
+  if (!token) return { error: '未配置飞书凭据' };
+  const url = `${FEISHU_HOST}/open-apis/im/v1/chats?user_id_type=open_id&page_size=${Math.min(100, pageSize)}`;
+  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (data.code !== 0) return { error: `列出会话失败: ${data.msg}` };
+  const items = (data.data && data.data.items) || [];
+  return {
+    chats: items.map((c) => ({
+      chat_id: c.chat_id,
+      name: c.name || '(未命名群)',
+      chat_type: c.chat_type, // 'group'
+      member_count: c.member_count,
+      owner_open_id: c.owner_id,
+    })),
+  };
+}
+
+// 读取某个会话的历史消息（需要 im:message:readonly）。
+// container_id_type 合法值为 chat（群聊）或 p2p（私聊），注意不是 chat_id！
+// 仅提取文本消息（text 类型）。
+export async function getChatMessages({ chatId, pageSize = 50, days, containerType = 'chat' } = {}) {
+  const token = await getTenantToken();
+  if (!token) return { error: '未配置飞书凭据' };
+  if (!chatId) return { error: '缺少 chat_id' };
+  // 防御：合法值只允许 chat / p2p，避免再次踩 invalid container_id_type 的坑
+  const type = containerType === 'p2p' ? 'p2p' : 'chat';
+  const url =
+    `${FEISHU_HOST}/open-apis/im/v1/messages` +
+    `?container_id=${encodeURIComponent(chatId)}&container_id_type=${type}` +
+    `&sort_type=ByCreateTimeDesc&page_size=${Math.min(50, pageSize)}`;
+  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (data.code !== 0) return { error: `读取消息失败: ${data.msg}` };
+  const items = (data.data && data.data.items) || [];
+  let msgs = items
+    .filter((m) => m.msg_type === 'text')
+    .map((m) => {
+      let text = '';
+      try {
+        text = JSON.parse(m.content || '{}').text || '';
+      } catch {
+        text = '';
+      }
+      return {
+        sender_open_id: m.sender && m.sender.id,
+        create_time: Number(m.create_time) || 0,
+        text,
+      };
+    })
+    .filter((m) => m.text);
+  if (days && days > 0) {
+    const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+    msgs = msgs.filter((m) => m.create_time >= cutoff);
+  }
+  // 按时间正序，便于模型理解前后因果
+  msgs.sort((a, b) => a.create_time - b.create_time);
+  return { messages: msgs };
+}
+
+let _nameCache = new Map();
+// 批量把 open_id 解析成姓名（contact:user.base:readonly，best-effort；失败则回退 open_id）。
+export async function resolveUserNames(openIds) {
+  const unique = [...new Set(openIds.filter(Boolean))];
+  const out = {};
+  const todo = [];
+  for (const id of unique) {
+    if (_nameCache.has(id)) out[id] = _nameCache.get(id);
+    else todo.push(id);
+  }
+  if (!todo.length) return out;
+  const token = await getTenantToken();
+  if (!token) {
+    for (const id of todo) out[id] = id;
+    return out;
+  }
+  try {
+    const res = await fetch(`${FEISHU_HOST}/open-apis/contact/v3/users/batch_get?user_id_type=open_id`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ user_ids: todo }),
+    });
+    const data = await res.json();
+    if (data.code === 0 && data.data && data.data.items) {
+      for (const u of data.data.items) {
+        const name = u.name || u.open_id;
+        if (name) {
+          out[u.open_id] = name;
+          _nameCache.set(u.open_id, name);
+        }
+      }
+    }
+  } catch {
+    /* 权限不足或网络异常时静默回退为 open_id */
+  }
+  for (const id of todo) if (!out[id]) out[id] = id;
+  return out;
+}
+
 // 把 Markdown 渲染成飞书互动卡片（卡片内 markdown 元素可正常渲染排版）
 // 超过卡片上限或发送失败时，回退为纯文本（剥离 markdown 语法）
 const CARD_MD_LIMIT = 4000;

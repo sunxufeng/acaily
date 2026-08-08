@@ -28,6 +28,7 @@ import { startFeishuConnection, getFeishuWsStatus } from '../feishu/connection.j
 import { extractFeishuDocLinks, isReadableCloudDoc, fetchFeishuDoc } from '../feishu/docRead.js';
 import { truncateExtracted } from '../feishu/fileExtract.js';
 import { webTools } from '../tools/web.js';
+import { feishuChatTools } from '../tools/feishuChat.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
 const tools = [
@@ -37,6 +38,7 @@ const tools = [
     run: async () => new Date().toISOString(),
   },
   ...webTools,
+  ...feishuChatTools,
 ];
 
 const agent = new AgentRuntime({ tools });
@@ -78,7 +80,7 @@ function buildUserSystemPromptFor(openId) {
   return agent.buildUserSystemPrompt(cfg);
 }
 
-async function handleAgent(openId, text, history, sessionId, image) {
+async function handleAgent(openId, text, history, sessionId, image, context) {
   // 会话持久化 + 多轮记忆（best-effort，失败不影响主流程）
   let sid = sessionId;
   let hist = history || [];
@@ -117,6 +119,8 @@ async function handleAgent(openId, text, history, sessionId, image) {
     history: hist,
     // 注入用户专属助手人设（botName + 自定义指令），实现「每个人配置自己的机器人」
     systemPrompt: buildUserSystemPromptFor(openId),
+    // 透传运行时上下文（openId / chatId），供飞书会话读取类工具使用
+    context,
   });
 
   try { await appendMessage(sid, 'assistant', result.answer); } catch {}
@@ -127,7 +131,8 @@ async function handleAgent(openId, text, history, sessionId, image) {
 // Webhook 与长连接两种事件接收方式共用此函数。
 // image: 飞书图片下载后的 data URL（可为 null）
 // file:  飞书文件下载并提取后的结构化对象 { name, type, text, truncated }（可为 null）
-async function processFeishuMessage(openId, text, image, file) {
+async function processFeishuMessage(openId, text, image, file, chatId) {
+  const ctx = { openId, chatId };
   try {
     if (!getConfig(openId)) {
       await sendText(
@@ -141,7 +146,7 @@ async function processFeishuMessage(openId, text, image, file) {
     // 文件：把提取出的正文拼进 prompt，让模型基于文档作答
     if (file && file.text) {
       const prompt = buildFilePrompt(file, text);
-      const r = await handleAgent(openId, prompt, null, null, null);
+      const r = await handleAgent(openId, prompt, null, null, null, ctx);
       await sendMarkdown(openId, r.answer);
       return;
     }
@@ -151,12 +156,12 @@ async function processFeishuMessage(openId, text, image, file) {
     if (rawText) {
       const links = extractFeishuDocLinks(rawText);
       if (links.length) {
-        await handleFeishuDocLink(openId, links, rawText);
+        await handleFeishuDocLink(openId, links, rawText, ctx);
         return;
       }
     }
 
-    const r = await handleAgent(openId, text ? text.trim() : '', null, null, image);
+    const r = await handleAgent(openId, text ? text.trim() : '', null, null, image, ctx);
     await sendMarkdown(openId, r.answer);
   } catch (e) {
     console.error('[feishu] 处理消息失败:', e.message);
@@ -165,7 +170,7 @@ async function processFeishuMessage(openId, text, image, file) {
 
 // 处理用户发来的飞书云文档链接：能自动读取的（docx/doc）拉正文喂模型；
 // 暂不支持的类型（wiki/sheets/base 等）给出友好提示。
-async function handleFeishuDocLink(openId, links, userText) {
+async function handleFeishuDocLink(openId, links, userText, context) {
   // 优先取第一个「可自动读取」的链接；其余类型给提示
   const readable = links.find(isReadableCloudDoc);
   if (!readable) {
@@ -190,7 +195,7 @@ async function handleFeishuDocLink(openId, links, userText) {
     }
     const trunc = truncateExtracted(doc.text);
     const prompt = buildDocLinkPrompt(readable.url, trunc.text, userText, trunc.truncated);
-    const r = await handleAgent(openId, prompt, null, null, null);
+    const r = await handleAgent(openId, prompt, null, null, null, context || {});
     await sendMarkdown(openId, r.answer);
   } catch (e) {
     console.error('[feishu] 读取云文档失败:', e.message);
@@ -240,7 +245,7 @@ async function handleFeishuEvent(rawBody, headers) {
   const msg = extractMessage(parsed);
   if (msg && msg.text) {
     // 快速返回 200，消息异步处理（Webhook 模式要求即时响应）
-    processFeishuMessage(openId, msg.text.trim());
+    processFeishuMessage(openId, msg.text.trim(), null, null, msg.chatId);
   }
   return { status: 200, json: { code: 0, msg: 'ok' } };
 }

@@ -192,7 +192,7 @@ export function startFeishuConnection(onMessage) {
                   await sendText(senderOpenId, `⚠️ 文件读取失败：${e.message}`);
                   return;
                 }
-                return onMessage(senderOpenId, text, null, file);
+                return onMessage(senderOpenId, text, null, file, msg.chat_id);
               })
               .catch((e) => console.error('[feishu-ws] onMessage(文件) 失败:', e.message, e.stack));
           });
@@ -200,7 +200,7 @@ export function startFeishuConnection(onMessage) {
           // 业务处理推到下一 tick，handler 同步 return → SDK 立即 ack
           setImmediate(() => {
             Promise.resolve()
-              .then(() => onMessage(senderOpenId, text.trim()))
+              .then(() => onMessage(senderOpenId, text.trim(), null, null, msg.chat_id))
               .catch((e) => console.error('[feishu-ws] onMessage 失败:', e.message, e.stack));
           });
         } else if (imageKey) {
@@ -214,7 +214,7 @@ export function startFeishuConnection(onMessage) {
                 } catch (e) {
                   console.error('[feishu-ws] 下载图片失败:', e.message);
                 }
-                return onMessage(senderOpenId, '', image);
+                return onMessage(senderOpenId, '', image, null, msg.chat_id);
               })
               .catch((e) => console.error('[feishu-ws] onMessage(图片) 失败:', e.message, e.stack));
           });

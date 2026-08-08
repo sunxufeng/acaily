@@ -24,7 +24,17 @@ TOOL: <工具名>(<JSON 参数>)
 用户可能会发送图片（以图像内容的形式提供，与文字一起或单独出现）。当消息包含图片时，请结合图片内容作答：提取图片中的文字（OCR）、识别表格/时间/金额/联系方式等关键信息，并简要概括主要内容；如果用户就图片提问，针对问题回答。
 
 【文档/文件输入】
-用户可能会上传文件（PDF / Word / Excel / PPT / TXT / Markdown 等），其正文会以「文件正文如下：...」的形式随消息一并提供。请基于文件正文作答：做摘要、提炼观点、整理待办与风险等；如果用户针对文件提出具体问题，优先回答该问题，并注明信息来自用户上传的文件。`;
+用户可能会上传文件（PDF / Word / Excel / PPT / TXT / Markdown 等），其正文会以「文件正文如下：...」的形式随消息一并提供。请基于文件正文作答：做摘要、提炼观点、整理待办与风险等；如果用户针对文件提出具体问题，优先回答该问题，并注明信息来自用户上传的文件。
+
+【飞书会话与任务总结】
+你可以读取飞书里「机器人所在的会话」来帮用户总结任务、待办、卡点和重点。相关工具：
+- feishu_my_chats：列出机器人所在的群聊（取 chat_id）。
+- feishu_chat_history：读取某个会话的历史文本消息（chat_id 省略时自动使用用户当前所在会话）。
+当用户要求「查看聊天记录 / 总结我完成的任务 / 待办 / 卡点 / 重点 / 群聊总结」时，先判断范围：
+- 若用户在群里 @你 说总结，直接用 feishu_chat_history（默认当前会话）读取并总结；
+- 若要跨群或指定某个群，先 feishu_my_chats 定位，再 feishu_chat_history 读取。
+总结时严格按四部分组织：**已完成任务 / 待办任务 / 卡点阻塞 / 需重点关注**，并尽量标注负责人与截止时间（如消息中有）。
+重要边界（务必如实告知用户）：机器人只能读取它所在的会话；用户与其它人的私聊、未加入的群无法读取。如用户要求读取这类内容，请说明限制，并建议把机器人拉进对应群聊，或让用户把聊天记录发给你（复制/导出文件均可）。`;
 
 // 从模型输出里剥离工具声明行（避免把 TOOL: ... 透传给用户）
 export function stripToolLines(text) {
@@ -86,7 +96,8 @@ export class AgentRuntime {
   // chat: async (messages) => { content } ；history: 历史对话 [{role, content}]
   // userInput: 用户本轮输入，可为字符串（纯文本）或内容数组（多模态：文字 + image_url）
   // systemPrompt: 可选，覆盖/追加后的系统提示（用于注入用户专属人设）
-  async run(userInput, { chat, history = [], systemPrompt } = {}) {
+  // context: 可选，运行时上下文（如 { openId, chatId }），会透传给工具 run(args, context)
+  async run(userInput, { chat, history = [], systemPrompt, context = {} } = {}) {
     const sys = systemPrompt || this.systemPrompt;
     const messages = [
       { role: 'system', content: `${sys}\n\n可用工具:\n${this.toolListText()}` },
@@ -111,7 +122,7 @@ export class AgentRuntime {
         observation = `错误：未知工具 ${call.name}`;
       } else {
         try {
-          observation = await tool.run(call.args);
+          observation = await tool.run(call.args, context);
         } catch (e) {
           observation = `工具执行失败: ${e.message}`;
         }
