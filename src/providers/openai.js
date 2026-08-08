@@ -2,9 +2,10 @@ import { BaseProvider } from './base.js';
 
 // OpenAI 兼容协议（含 DeepSeek / 通义 / 自建 OpenAI 风格网关）
 export class OpenAICompatibleProvider extends BaseProvider {
-  constructor(cfg, { chatCompletionsPath = '/chat/completions' } = {}) {
+  constructor(cfg, { chatCompletionsPath } = {}) {
     super(cfg);
-    this.chatCompletionsPath = chatCompletionsPath;
+    // 允许调用方（custom 等）覆盖；openai 默认 /chat/completions
+    this.chatCompletionsPath = chatCompletionsPath === undefined ? '/chat/completions' : chatCompletionsPath;
   }
 
   async chat(messages) {
