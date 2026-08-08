@@ -56,6 +56,10 @@
     <label>Model <span style="color:var(--err)">*</span></label>
     <input id="model" placeholder="gpt-4o / claude-3-5-sonnet / qwen2.5:7b" />
 
+    <label>Chat 接口路径 <span class="hint" style="font-weight:400">（自建网关可选）</span></label>
+    <input id="chatCompletionsPath" placeholder="/v1/chat/completions（留空=直接用 Base URL 作为接口地址）" />
+    <div class="hint">若把整条接口地址填进了 Base URL，此处留空即可；否则填 /v1/chat/completions 之类。</div>
+
     <div class="row" style="margin-top:14px;">
       <div>
         <label style="margin-top:0;">Temperature</label>
@@ -88,6 +92,7 @@ function collect(){
     baseUrl:$('baseUrl').value.trim(),
     apiKey:$('apiKey').value,
     model:$('model').value.trim(),
+    chatCompletionsPath:$('chatCompletionsPath').value.trim(),
     temperature:Number($('temperature').value),
     maxTokens:Number($('maxTokens').value),
   };
@@ -110,7 +115,7 @@ $('testBtn').onclick = async () => {
   show('⏳ 正在测试连通性…', true);
   const {status,data} = await postJSON('/config/test', {openId:c.openId, provider:c.provider, baseUrl:c.baseUrl, apiKey:c.apiKey, model:c.model});
   if(data && data.ok) show('✅ 连通性正常：'+ (data.provider||'') +' / '+(data.model||''), true);
-  else show('❌ 连通失败：'+(data&&data.error||status), false);
+  else show('❌ 连通失败：'+(data&&data.error||status) + (data&&data.attemptedUrl ? ' ｜ 请求地址：'+data.attemptedUrl : ''), false);
 };
 </script>
 </body>
