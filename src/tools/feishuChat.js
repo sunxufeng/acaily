@@ -45,7 +45,18 @@ async function fmtHistory(args = {}, context = {}) {
       '请把群里的任务信息以**文字形式**（复制关键对话、或导出聊天记录）发给我，我即可继续总结。'
     );
   }
-  const names = await resolveUserNames(r.messages.map((m) => m.sender_open_id));
+  // 解析「当前飞书用户」的真实身份，作为任务归属锚点。
+  // 否则 LLM 只能从群消息里猜「我是谁」，极易把别人的任务算到本人头上
+  // （实测曾把王俏谊的任务当成孙旭峰的）。
+  const curOpenId = (context && context.openId) || '';
+  const openIds = r.messages.map((m) => m.sender_open_id);
+  if (curOpenId) openIds.push(curOpenId);
+  const names = await resolveUserNames(openIds);
+  const curName = curOpenId ? names[curOpenId] || curOpenId : '';
+  const identityLine = curName
+    ? `（当前飞书用户身份：${curName}（open_id: ${curOpenId}）。本总结**只整理明确归属于 ${curName} 本人**的任务 / 待办 / 卡点；` +
+      `群内 @ 或指派给其他成员（如王俏谊等）的内容不纳入「我」的部分，除非消息明确写由 ${curName} 负责。\n\n`
+    : '';
   const lines = r.messages.map((m) => {
     const t = m.create_time
       ? new Date(m.create_time * 1000).toISOString().slice(0, 16).replace('T', ' ')
@@ -53,6 +64,7 @@ async function fmtHistory(args = {}, context = {}) {
     return `[${t}] ${names[m.sender_open_id] || m.sender_open_id}: ${m.text}`;
   });
   return (
+    identityLine +
     `（以下为该会话最近 ${d.readable} 条可读消息，原始 ${d.total} 条；仅机器人所在的会话可读取，` +
     `用户与其它人的私聊、未加入的群无法读取；机器人仅能读入群后的消息）\n` +
     lines.join('\n')
