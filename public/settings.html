@@ -37,7 +37,11 @@
         <div class="sub" id="pageSub">与你的专属 AI 助手对话</div>
       </div>
       <div class="right">
-        <a class="link" id="adminLink" href="/admin" style="display:none;">管理后台</a>
+        <div class="switcher">
+          <a class="sw-btn active" href="/settings">工作台</a>
+          <a class="sw-btn" id="swAdmin" href="/admin" style="display:none;">管理</a>
+        </div>
+        <button class="icon-btn" id="themeBtn" title="切换深色 / 浅色">🌙</button>
       </div>
     </header>
 
@@ -143,6 +147,7 @@
   </div>
 </div>
 
+<script src="/static/js/theme.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const toast = (m) => { const t=$('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); };
@@ -177,7 +182,7 @@ document.querySelectorAll('.nav-item').forEach(it=>{
   $('sbName').textContent=d.name||'未命名用户';
   $('sbRole').textContent=d.role==='admin'?'管理员':'成员';
   if(d.avatar)$('sbAvatar').src=d.avatar;
-  if(d.role==='admin')$('adminLink').style.display='inline';
+  if(d.role==='admin')$('swAdmin').style.display='inline-flex';
   $('sbLogout').onclick=()=>location.href='/logout';
   await loadConfig();
 })();

@@ -35,8 +35,12 @@
         <div class="sub" id="pageSub">组织级概览与成员配置管理</div>
       </div>
       <div class="right">
-        <a class="link" href="/settings">个人设置</a>
-        <a class="link" href="/logout">退出登录</a>
+        <div class="switcher">
+          <a class="sw-btn" href="/settings">工作台</a>
+          <a class="sw-btn active" href="/admin">管理</a>
+        </div>
+        <button class="icon-btn" id="themeBtn" title="切换深色 / 浅色">🌙</button>
+        <a class="link" href="/logout">退出</a>
       </div>
     </header>
 
@@ -90,6 +94,7 @@
 <!-- 编辑弹窗 -->
 <div class="mask" id="mask">
   <div class="modal">
+    <button class="close" id="modalClose" title="关闭">×</button>
     <h2 id="modalTitle">编辑用户配置</h2>
     <div id="modalBody"></div>
     <div class="actions">
@@ -100,6 +105,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="/static/js/theme.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -206,6 +212,9 @@ window.deleteUser=async function(openId){
   else toast('删除失败：'+(res.data.error||res.status));
 };
 $('modalCancel').onclick=()=>$('mask').classList.remove('show');
+$('modalClose').onclick=()=>$('mask').classList.remove('show');
+$('mask').onclick=(e)=>{if(e.target===$('mask'))$('mask').classList.remove('show');};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('mask').classList.contains('show'))$('mask').classList.remove('show');});
 $('modalSave').onclick=async()=>{
   const body={
     displayName:$('f_displayName').value.trim(),provider:$('f_provider').value,baseUrl:$('f_baseUrl').value.trim(),
