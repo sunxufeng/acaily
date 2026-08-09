@@ -80,6 +80,23 @@ function buildUserSystemPromptFor(openId) {
   return agent.buildUserSystemPrompt(cfg);
 }
 
+// 注入「当前用户身份锁定」：确保模型不会把群里其他成员的任务误算成本人的。
+// 用配置里已存的飞书姓名（OAuth 登录时写入 displayName），无需额外 API 调用、低延迟。
+// 这是身份锚定的第 2 道保险：即便模型没调用 feishu_chat_history 工具，也知道「我」是谁。
+function injectIdentityPrompt(openId, baseSys) {
+  const cfg = getConfig(openId);
+  const name = (cfg && cfg.displayName) || '';
+  const sys = baseSys || agent.systemPrompt;
+  if (!name) return sys; // 配置里没有姓名（极少见），不强制锚定
+  return (
+    sys +
+    `\n\n【当前用户身份锁定】你正以飞书用户「${name}」（open_id: ${openId}）的身份服务。` +
+    `用户说的「我 / 我的 / 本人 / 我负责的」严格、唯一地指「${name}」，` +
+    `绝对不要改写成群内其他成员（如王俏谊等）的名字，也绝不要自创「按你在群内的身份 XXX 整理」这类表述——` +
+    `身份已由系统固定为 ${name}，请以它为准整理「我的」任务，且不得把其他成员（如王俏谊）的任务算到 ${name} 头上。`
+  );
+}
+
 async function handleAgent(openId, text, history, sessionId, image, context) {
   // 会话持久化 + 多轮记忆（best-effort，失败不影响主流程）
   let sid = sessionId;
@@ -118,7 +135,8 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
     chat: (messages) => routeChat(openId, messages),
     history: hist,
     // 注入用户专属助手人设（botName + 自定义指令），实现「每个人配置自己的机器人」
-    systemPrompt: buildUserSystemPromptFor(openId),
+    // 并锁定「当前用户身份」，防止群任务总结把别人的任务错算成本人。
+    systemPrompt: injectIdentityPrompt(openId, buildUserSystemPromptFor(openId)),
     // 透传运行时上下文（openId / chatId），供飞书会话读取类工具使用
     context,
   });

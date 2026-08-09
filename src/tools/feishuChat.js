@@ -54,14 +54,19 @@ async function fmtHistory(args = {}, context = {}) {
   const names = await resolveUserNames(openIds);
   const curName = curOpenId ? names[curOpenId] || curOpenId : '';
   const identityLine = curName
-    ? `（当前飞书用户身份：${curName}（open_id: ${curOpenId}）。本总结**只整理明确归属于 ${curName} 本人**的任务 / 待办 / 卡点；` +
-      `群内 @ 或指派给其他成员（如王俏谊等）的内容不纳入「我」的部分，除非消息明确写由 ${curName} 负责。\n\n`
+    ? `【身份锚定】当前飞书用户 = ${curName}（open_id: ${curOpenId}）。\n` +
+      `- 下方消息中，以「【你｜${curName}】」开头的行就是 ${curName} 本人发的消息；以其他姓名开头的行是群内其他成员发的。\n` +
+      `- 总结「我的任务 / 待办 / 卡点」时，**只提取【你】名下的任务**，以及 @ 给【你】的任务（如「@${curName} 你负责X」）。\n` +
+      `- 其他成员（如王俏谊等）的任务请单独列出、绝不算作 ${curName} 的；也不要编造「按你在群内的身份 XXX 整理」这类话——身份已由系统固定为 ${curName}。\n\n`
     : '';
   const lines = r.messages.map((m) => {
     const t = m.create_time
       ? new Date(m.create_time * 1000).toISOString().slice(0, 16).replace('T', ' ')
       : '?';
-    return `[${t}] ${names[m.sender_open_id] || m.sender_open_id}: ${m.text}`;
+    const sender = names[m.sender_open_id] || m.sender_open_id;
+    const isMe = curOpenId && m.sender_open_id === curOpenId;
+    const prefix = isMe ? `【你｜${curName}】` : sender;
+    return `[${t}] ${prefix}: ${m.text}`;
   });
   return (
     identityLine +
