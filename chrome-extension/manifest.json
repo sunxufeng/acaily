@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "acaily 一键总结",
+  "version": "1.0.0",
+  "description": "把当前网页或选中的文字一键发给 acaily 总结 / 续写。",
+  "permissions": ["activeTab", "contextMenus", "scripting", "tabs"],
+  "host_permissions": ["https://acplugin.areteailab.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "acaily 一键总结",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

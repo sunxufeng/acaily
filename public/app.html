@@ -1414,6 +1414,14 @@ $('autoModalSave').onclick=async()=>{
 
 // ====================== 启动 ======================
 (async()=>{
+  // Chrome 插件 / 分享链接带 ?compose= 时，先存进 sessionStorage（可跨登录跳转保留）
+  try{
+    const _q=new URLSearchParams(location.search);
+    if(_q.get('compose')){
+      sessionStorage.setItem('acaily_compose', JSON.stringify({text:_q.get('compose'), auto:_q.get('auto')==='1'}));
+      history.replaceState(null,'',location.pathname+location.hash);
+    }
+  }catch(e){}
   const me=await api('GET','/api/me');
   if(me.status!==200){location.href='/login';return;}
   const d=me.data;
@@ -1424,6 +1432,20 @@ $('autoModalSave').onclick=async()=>{
   $('sbLogout').onclick=()=>location.href='/logout';
   // 默认显示：URL 决定默认 view
   switchView(DEFAULT_VIEW);
+  // 应用 Chrome 插件 / 分享链接带入的 compose 内容
+  try{
+    const _pending=sessionStorage.getItem('acaily_compose');
+    if(_pending){
+      sessionStorage.removeItem('acaily_compose');
+      const _c=JSON.parse(_pending);
+      const _ta=$('chatText');
+      if(_ta){
+        _ta.value=_c.text||'';
+        _ta.focus();
+        if(_c.auto)send();
+      }
+    }
+  }catch(e){}
   // 配置 + admin 数据加载
   await loadConfig();
   me_name=d.name||'我';
