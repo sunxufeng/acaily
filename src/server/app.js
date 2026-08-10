@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname } from 'node:path';
-import { setConfig, getConfig, deleteConfig, listUsers } from '../config/userConfigStore.js';
+import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds } from '../config/userConfigStore.js';
 import { createSession, appendMessage, getHistory, listSessions } from '../config/conversationStore.js';
 import { Retriever } from '../rag/retriever.js';
 import { EmbeddingService } from '../rag/embeddings.js';
@@ -530,6 +530,36 @@ const server = createServer(async (req, res) => {
       const ok = deleteConfig(openId);
       await record({ actor: s.openId, action: 'admin.config.delete', target: 'model-config', meta: { target: openId } });
       return sendJson(res, 200, { ok });
+    }
+    // 全员统一配置下发（移植自 acplugin 的 POST /api/admin/org/push）：把一份基础配置应用到全部用户。
+    // 不强制要求 apiKey：未提供 apiKey 时，各用户既有密钥会被保留（setConfig 的 keepExistingKey 逻辑）。
+    if (method === 'POST' && pathname === '/api/admin/push') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      try {
+        const body = await readBody(req);
+        const { openId: _ign, ...pushCfg } = body;
+        const ids = listOpenIds();
+        let affected = 0;
+        const skipped = [];
+        for (const id of ids) {
+          try {
+            setConfig(id, pushCfg, { forceApiKey: false });
+            affected++;
+          } catch {
+            skipped.push(id);
+          }
+        }
+        await record({
+          actor: s.openId,
+          action: 'admin.config.push',
+          target: 'model-config',
+          meta: { affected, skipped: skipped.length, provider: pushCfg.provider },
+        });
+        return sendJson(res, 200, { ok: true, affected, skipped: skipped.length });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
     }
     if (method === 'POST' && pathname.startsWith('/api/admin/config/') && pathname.endsWith('/test')) {
       const s = requireAdminApi(req, res);

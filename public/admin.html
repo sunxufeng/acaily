@@ -64,6 +64,25 @@
 
       <!-- 用户管理 -->
       <section class="view" id="view-users">
+        <div class="card">
+          <div class="card-h"><h2>统一下发配置</h2><span class="desc">把一份基础模型配置应用到全员（移植自 acplugin 的组织下发）；API Key 留空则保留各人现有密钥</span></div>
+          <div class="row" style="align-items:flex-end;">
+            <div><label>Provider</label>
+              <select id="pushProvider">
+                <option value="openai">OpenAI 兼容</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="ollama">Ollama</option>
+                <option value="custom">自建网关</option>
+                <option value="yuanbao">腾讯元宝</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:240px;"><label>Base URL <span class="req">*</span></label><input id="pushBaseUrl" placeholder="https://api.openai.com/v1"/></div>
+            <div><label>Model <span class="req">*</span></label><input id="pushModel" placeholder="gpt-4o-mini"/></div>
+            <div style="flex:1;min-width:200px;"><label>API Key（可选）</label><input id="pushApiKey" type="password" placeholder="留空=保留各人现有 Key"/></div>
+            <button class="btn" id="pushBtn">确认下发到全员</button>
+          </div>
+          <div id="pushResult" class="hint" style="margin-top:10px;"></div>
+        </div>
         <div class="card" style="padding:0;overflow:hidden;">
           <div class="card-h" style="padding:18px 18px 0;margin:0;">
             <h2>成员配置</h2><span class="desc">可代为编辑或清除任意成员的模型配置</span>
@@ -227,6 +246,20 @@ $('modalSave').onclick=async()=>{
   const st=$('modalStatus');
   if(res.status===200){st.className='status ok';st.textContent='✅ 已保存';setTimeout(()=>{$('mask').classList.remove('show');loadUsers();loadDashboard();},600);}
   else{st.className='status err';st.textContent='❌ '+(res.data.error||res.status);}
+};
+// 全员统一下发配置（POST /api/admin/push）
+$('pushBtn').onclick=async()=>{
+  const body={provider:$('pushProvider').value,baseUrl:$('pushBaseUrl').value.trim(),model:$('pushModel').value.trim()};
+  if(!body.baseUrl||!body.model){$('pushResult').textContent='请填写 Base URL 与 Model';return;}
+  const k=$('pushApiKey').value.trim();if(k)body.apiKey=k;
+  const res=await api('POST','/api/admin/push',body);
+  if(res.status===200){
+    $('pushResult').textContent='✅ 已下发到 '+res.data.affected+' 位用户'+(res.data.skipped?('，跳过 '+res.data.skipped+' 位（配置非法）'):'');
+    $('pushApiKey').value='';
+    loadUsers();loadDashboard();
+  }else{
+    $('pushResult').textContent='❌ 下发失败：'+(res.data.error||res.status);
+  }
 };
 </script>
 </body>

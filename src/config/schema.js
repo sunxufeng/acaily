@@ -1,4 +1,4 @@
-export const PROVIDER_TYPES = ['openai', 'anthropic', 'ollama', 'custom'];
+export const PROVIDER_TYPES = ['openai', 'anthropic', 'ollama', 'custom', 'yuanbao'];
 
 // 校验用户自配的模型配置。返回错误数组（空=通过）。
 // requireApiKey=false 时不强制要求 apiKey（用于「更新配置但留空密钥=沿用已存密钥」的场景）。

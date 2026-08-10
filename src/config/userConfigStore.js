@@ -32,12 +32,13 @@ export function getConfig(openId) {
 
 // 保存用户配置：校验通过后，把明文 apiKey 转成信封密文再落库。
 // 兼容管理后台：clearApiKey=true 时清空已存密钥；apiKey 留空且已有密钥则保留既有密钥。
-export function setConfig(openId, cfg) {
+// forceApiKey=false 时（如管理端「全员下发」）不强制要求 apiKey，缺失密钥由用户后续自填。
+export function setConfig(openId, cfg, { forceApiKey = true } = {}) {
   const prev = load().users[openId] || {};
   const apiKeyProvided = !!(cfg.apiKey && String(cfg.apiKey).trim());
   const keepExistingKey = !apiKeyProvided && prev._apiKeyEnc && !cfg.clearApiKey;
-  // 仅在：非 ollama 且未提供新密钥 且 无既有密钥可沿用 时，才强制要求 apiKey
-  const requireApiKey = !(cfg.provider === 'ollama' || apiKeyProvided || keepExistingKey);
+  // 仅在：非 ollama 且未提供新密钥 且 无既有密钥可沿用 且 调用方要求强校验 时，才强制要求 apiKey
+  const requireApiKey = forceApiKey && !(cfg.provider === 'ollama' || apiKeyProvided || keepExistingKey);
   const errors = validateUserModelConfig(cfg, { requireApiKey });
   if (errors.length) throw new Error('配置非法: ' + errors.join('; '));
   const db = load();

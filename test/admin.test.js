@@ -47,3 +47,23 @@ test('compliance: 自检覆盖核心控制项', () => {
   assert.ok(sa.done.length >= 6);
   assert.ok(sa.pending.includes('C7') || sa.pending.length >= 1);
 });
+
+test('config push：全员下发基础配置（forceApiKey=false）保留各人现有 Key', async () => {
+  process.env.ACAILY_MASTER_KEY = 'a'.repeat(64);
+  const STORE = '/tmp/acaily-test-push.json';
+  process.env.ACAILY_CONFIG_STORE = STORE;
+  const fs = await import('node:fs');
+  try { fs.unlinkSync(STORE); } catch {}
+  const { setConfig, getConfig, listOpenIds } = await import('../src/config/userConfigStore.js');
+  setConfig('ou_a', { provider: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: 'key-a' });
+  setConfig('ou_b', { provider: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-3' }, { forceApiKey: false });
+  // 模拟管理端「全员下发」：下发一份不强制 apiKey 的基础配置
+  const pushCfg = { provider: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' };
+  for (const id of listOpenIds()) setConfig(id, pushCfg, { forceApiKey: false });
+  const ca = getConfig('ou_a'), cb = getConfig('ou_b');
+  assert.equal(ca.provider, 'openai'); assert.equal(ca.model, 'gpt-4o-mini');
+  assert.ok(ca._apiKeyEnc, 'ou_a 的既有 Key 应被保留');
+  assert.equal(cb.provider, 'openai'); assert.equal(cb.model, 'gpt-4o-mini');
+  assert.ok(!cb._apiKeyEnc, 'ou_b 原本无 Key，下发后仍未配置');
+  try { fs.unlinkSync(STORE); } catch {}
+});

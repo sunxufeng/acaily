@@ -49,3 +49,33 @@ test('http 非 200 抛 ProviderError 并带 status', async () => {
 test('未知 provider 类型抛错', () => {
   assert.throws(() => getProvider({ type: 'unknown', baseUrl: 'x', model: 'm' }), ProviderError);
 });
+
+test('yuanbao：默认 base URL 命中腾讯元宝网关 /api/chat/completions', async () => {
+  let calledUrl = '';
+  global.fetch = async (url, opts) => {
+    calledUrl = url;
+    return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: '元宝回复' } }], usage: {} }) };
+  };
+  const p = getProvider({ type: 'yuanbao', apiKey: 'x', model: 'hunyuan' });
+  const r = await p.chat([{ role: 'user', content: 'hi' }]);
+  assert.equal(r.content, '元宝回复');
+  assert.ok(calledUrl.includes('yuanbao.tencent.com/api/chat/completions'), 'endpoint=' + calledUrl);
+});
+
+test('错误提示：401 给出 API Key 排查提示', async () => {
+  mockFetch({ error: { message: 'Unauthorized' } }, { ok: false, status: 401 });
+  const p = getProvider({ type: 'openai', baseUrl: 'https://x', apiKey: 'bad', model: 'm' });
+  await assert.rejects(
+    () => p.chat([{ role: 'user', content: 'hi' }]),
+    (e) => /API Key/.test(e.message) && e.status === 401
+  );
+});
+
+test('错误提示：429 给出限流/额度提示', async () => {
+  mockFetch({ error: { message: 'Too Many Requests' } }, { ok: false, status: 429 });
+  const p = getProvider({ type: 'openai', baseUrl: 'https://x', apiKey: 'x', model: 'm' });
+  await assert.rejects(
+    () => p.chat([{ role: 'user', content: 'hi' }]),
+    (e) => /额度|频繁/.test(e.message) && e.status === 429
+  );
+});

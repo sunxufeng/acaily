@@ -3,6 +3,30 @@
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+// 把底层 HTTP / 网络错误包装成用户能看懂的提示（移植自 acplugin ProviderManager.formatProviderError）
+function errorHint(status, raw) {
+  const s = (raw || '').toString();
+  if (status === 401 || /Unauthorized|invalid_api_key|Incorrect API key|authentication/i.test(s)) {
+    return '请检查 API Key 是否正确，或该 Key 是否拥有调用此模型的权限。';
+  }
+  if (status === 404 || /Not Found/i.test(s)) {
+    return '请检查 Base URL 与模型 ID 是否匹配。';
+  }
+  if (status === 429 || /Too Many Requests|rate limit/i.test(s)) {
+    return '请求过于频繁或额度不足，请稍后重试。';
+  }
+  if (status >= 500) {
+    return '服务端暂时不可用，请稍后重试。';
+  }
+  if (/CORS|cross-origin|blocked by/i.test(s)) {
+    return '请求被拦截。请确认 Base URL 支持跨域，或改用 HTTPS 端点。';
+  }
+  if (/ECONNREFUSED|ETIMEDOUT|fetch failed|ENOTFOUND|network/i.test(s)) {
+    return '网络不可达，请检查网络与代理设置。';
+  }
+  return '';
+}
+
 export class ProviderError extends Error {
   constructor(message, { status, provider, cause } = {}) {
     super(message);
@@ -52,8 +76,9 @@ export class BaseProvider {
       try { data = text ? JSON.parse(text) : null; } catch { /* 非 JSON 响应 */ }
       if (!res.ok) {
         const detail = data && (data.error?.message || data.error || text);
+        const hint = errorHint(res.status, detail || text);
         throw new ProviderError(
-          `${this.type} 请求失败 (${res.status}): ${detail || res.statusText}`,
+          `${this.type} 请求失败 (${res.status}): ${detail || res.statusText}${hint ? '\n' + hint : ''}`,
           { status: res.status, provider: this.type, attemptedUrl: url }
         );
       }

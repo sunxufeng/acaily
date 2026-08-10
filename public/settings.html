@@ -77,6 +77,7 @@
             <option value="anthropic">Anthropic (Claude)</option>
             <option value="ollama">Ollama（本地）</option>
             <option value="custom">自建网关（OpenAI 兼容）</option>
+            <option value="yuanbao">腾讯元宝（Yuanbao）</option>
           </select>
 
           <label>Base URL <span class="req">*</span></label>
@@ -235,6 +236,19 @@ $('saveBtn').onclick=async()=>{
   if(status===200){showCfg('✅ 配置已保存（API Key 已加密入库）',true);syncBotName();}
   else showCfg('❌ 保存失败：'+(data.error||status),false);
 };
+// 切换 Provider 时自动给出该 Provider 的默认 Base URL（baseUrl 为空才填）
+const PROVIDER_DEFAULTS={
+  openai:'https://api.openai.com/v1',
+  anthropic:'https://api.anthropic.com/v1',
+  ollama:'http://localhost:11434',
+  custom:'https://your-gateway/v1',
+  yuanbao:'https://yuanbao.tencent.com/api',
+};
+$('provider').addEventListener('change',()=>{
+  const p=$('provider').value;
+  $('baseUrl').placeholder=PROVIDER_DEFAULTS[p]||'https://api.openai.com/v1';
+  if(!$('baseUrl').value)$('baseUrl').value=PROVIDER_DEFAULTS[p]||'';
+});
 $('testBtn').onclick=async()=>{
   const c=collect(true);
   if(!c.provider||!c.baseUrl||!c.model)return showCfg('请先填写 Provider / Base URL / Model',false);

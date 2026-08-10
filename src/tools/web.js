@@ -103,6 +103,76 @@ export async function webSearch({ query, top = 5 } = {}) {
   return `关于「${query}」的搜索结果：\n` + results.join('\n');
 }
 
+// 读取并提取网页正文（移植自 acplugin 的 Readability「总结/问当前页」能力：
+// 抓链接 → 去脚本/导航/广告 → 抽取干净正文 → 交给模型总结/翻译/问答）
+export async function readWebPage({ url, maxChars = 12000 } = {}) {
+  if (!url || !/^https?:\/\//i.test(url)) {
+    return '请提供合法的网页链接（以 http(s):// 开头），例如：TOOL: web_read({"url":"https://example.com/article"})';
+  }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+  let html;
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+    });
+    if (!res.ok) return `抓取网页失败：HTTP ${res.status} (${url})`;
+    html = await res.text();
+  } catch (e) {
+    return `抓取网页失败（网络不可用或链接无效）：${e.message}`;
+  } finally {
+    clearTimeout(t);
+  }
+
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = titleMatch
+    ? titleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    : '';
+  let text = extractMainText(html);
+  if (!text) text = '（未能从页面提取到正文，可能是需要登录的页面或纯脚本渲染的站点）';
+  const n = Math.max(500, Number(maxChars) || 12000);
+  const clipped = text.length > n ? text.slice(0, n) + '…（正文已截断）' : text;
+  return (
+    `📄 网页：${title || url}\n链接：${url}\n\n` +
+    `正文内容如下，请基于它来总结 / 翻译 / 回答，不要编造：\n\n${clipped}`
+  );
+}
+
+// 依赖免费的「轻量 Readability」：去脚本/样式/噪音区块，抽取 body 文本并压缩空白。
+function extractMainText(html) {
+  let cleaned = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+  // 移除导航/页脚/侧栏/表单等整块
+  cleaned = cleaned.replace(/<(nav|header|footer|aside|form)[\s\S]*?<\/\1>/gi, ' ');
+  // 移除带噪音语义 class/id 的标签块（正确捕获完整标签名用于闭合回溯）
+  cleaned = cleaned.replace(
+    /<([a-z][a-z0-9]*)[^>]*(?:class|id)="[^"]*(?:sidebar|menu|nav|footer|header|advert|banner|comment|popup|cookie|share|recommend|related)[\s\S]*?<\/\1>/gi,
+    ' '
+  );
+  const bodyMatch = cleaned.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const body = bodyMatch ? bodyMatch[1] : cleaned;
+  let text = body
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&[a-z]+;/gi, ' ');
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 // 导出为 Acaily AgentRuntime 工具定义
 export const webTools = [
   {
@@ -116,5 +186,11 @@ export const webTools = [
     description:
       '联网搜索实时信息（新闻、股价、赛事、最新事件、可能过期的事实等）。参数：{"query":"搜索关键词","top":返回条数(默认5)}。当问题涉及实时或可能变化的信息时优先使用，不要凭记忆编造。',
     run: webSearch,
+  },
+  {
+    name: 'web_read',
+    description:
+      '读取并提取指定网页链接的正文内容（自动去除脚本/导航/广告，保留文章主体），用于总结、翻译或问答该网页。参数：{"url":"网页链接(以 http(s):// 开头)","maxChars":最大抽取字数(默认12000)}。当用户发来一个链接并希望总结/翻译/解读该页面时使用，不要自己编造内容。',
+    run: readWebPage,
   },
 ];
