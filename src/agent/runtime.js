@@ -100,9 +100,11 @@ export class AgentRuntime {
   // chat: async (messages) => { content } ；history: 历史对话 [{role, content}]
   // userInput: 用户本轮输入，可为字符串（纯文本）或内容数组（多模态：文字 + image_url）
   // systemPrompt: 可选，覆盖/追加后的系统提示（用于注入用户专属人设）
+  // maxSteps: 可选，覆盖 this.maxSteps，用于「需要更多工具调用轮次」的场景（自动化任务等）
   // context: 可选，运行时上下文（如 { openId, chatId }），会透传给工具 run(args, context)
-  async run(userInput, { chat, history = [], systemPrompt, context = {} } = {}) {
+  async run(userInput, { chat, history = [], systemPrompt, maxSteps, context = {} } = {}) {
     const sys = systemPrompt || this.systemPrompt;
+    const stepLimit = Number.isFinite(maxSteps) && maxSteps > 0 ? Math.floor(maxSteps) : this.maxSteps;
     const messages = [
       { role: 'system', content: `${sys}\n\n可用工具:\n${this.toolListText()}` },
       ...history,
@@ -110,7 +112,7 @@ export class AgentRuntime {
     ];
 
     const transcript = [];
-    for (let step = 0; step < this.maxSteps; step++) {
+    for (let step = 0; step < stepLimit; step++) {
       const res = await chat(messages);
       const text = res?.content || '';
       transcript.push({ role: 'assistant', content: text });
@@ -134,6 +136,6 @@ export class AgentRuntime {
       transcript.push({ role: 'tool', name: call.name, content: observation });
       messages.push({ role: 'user', content: `工具 ${call.name} 返回：\n${observation}` });
     }
-    return { answer: '(已达到最大步数，请简化任务或稍后重试)', transcript, steps: this.maxSteps, truncated: true };
+    return { answer: '(已达到最大步数，请简化任务或稍后重试)', transcript, steps: stepLimit, truncated: true };
   }
 }

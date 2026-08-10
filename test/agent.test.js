@@ -38,3 +38,26 @@ test('未知工具被安全处理，不中断流程', async () => {
   assert.match(toolStep.content, /未知工具 nope/);
   assert.equal(r.answer, '我无法调用该工具');
 });
+
+test('maxSteps 覆盖：传入 maxSteps=3 时，到第 4 步仍返回最大步数提示', async () => {
+  // 模型永远只回 TOOL，从而把每一步都耗在工具调用上
+  const rt = new AgentRuntime({
+    tools: [{ name: 'noop', description: 'noop', run: async () => 'obs' }],
+    maxSteps: 2,
+  });
+  const chat = async () => ({ content: 'TOOL: noop({})' });
+  const r = await rt.run('x', { chat, maxSteps: 3 });
+  assert.equal(r.steps, 3);
+  assert.match(r.answer, /已达到最大步数/);
+});
+
+test('maxSteps 覆盖：未传时沿用构造时的 maxSteps', async () => {
+  const rt = new AgentRuntime({
+    tools: [{ name: 'noop', description: 'noop', run: async () => 'obs' }],
+    maxSteps: 2,
+  });
+  const chat = async () => ({ content: 'TOOL: noop({})' });
+  const r = await rt.run('x', { chat });
+  assert.equal(r.steps, 2);
+  assert.match(r.answer, /已达到最大步数/);
+});
