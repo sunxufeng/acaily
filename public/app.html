@@ -57,6 +57,10 @@
         <span class="ic"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/><line x1="3" y1="20" x2="21" y2="20"/></svg></span>
         <span class="lbl">使用统计</span>
       </a>
+      <a class="nav-item admin-only" href="/admin" data-view="agents" data-tip="智能体配置">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 013 3v1a3 3 0 010 6v1a3 3 0 11-6 0v-1a3 3 0 010-6V5a3 3 0 013-3z"/><circle cx="12" cy="12" r="9"/></svg></span>
+        <span class="lbl">智能体配置</span>
+      </a>
 
       <!-- 关于固定在所有菜单最下方 -->
       <a class="nav-item nav-about" href="/settings" data-view="about" data-tip="关于">
@@ -114,6 +118,14 @@
           <input type="file" id="filePicker" accept=".txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.log,.yaml,.yml,.xml,.html,.htm,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.kt,.sh,.bash,.zsh,.sql,.ini,.cfg,.conf,.toml,.docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf,image/png,image/jpeg,image/gif,image/webp" style="display:none;"/>
           <div class="emoji-pop" id="emojiPop" style="display:none;">
             ${['😀','😁','😂','🤣','😊','😉','😍','😘','😜','😎','🤩','🥳','🤔','😴','😢','😭','😡','🤯','🥺','👍','👎','👏','🙏','💪','🔥','✨','🎉','🎊','❤️','💔','💯','✅','❌','⭐','📌','💡','📎','📷','🎵','🚀'].map(e=>`<button type="button" class="emoji-pick">${e}</button>`).join('')}
+          </div>
+          <div class="chat-selectors">
+            <label class="sel">智能体
+              <select id="agentSelect"><option value="">默认助手</option></select>
+            </label>
+            <label class="sel">模型
+              <select id="modelSelect"><option value="">默认模型</option></select>
+            </label>
           </div>
           <div class="chat-input">
             <textarea id="chatText" placeholder="输入消息，Enter 发送，Shift+Enter 换行；可粘贴图片截图"></textarea>
@@ -310,6 +322,7 @@
             <li>· <a href="#" data-jump="users">成员管理（管理员）</a>：查看 / 编辑 / 删除成员配置</li>
             <li>· <a href="#" data-jump="automation">自动化（管理员）</a>：定时任务调度与飞书推送</li>
             <li>· <a href="#" data-jump="stats">使用统计（管理员）</a>：基于全量事件日志的 Token / 模型 / 用户聚合</li>
+            <li>· <a href="#" data-jump="agents">智能体配置（管理员）</a>：创建智能体并绑定飞书应用</li>
           </ul>
         </div>
       </section>
@@ -417,6 +430,25 @@
           </div>
         </div>
       </section>
+
+      <!-- 视图：智能体配置（admin） -->
+      <section class="view" id="view-agents">
+        <div class="card">
+          <div class="card-h">
+            <div>
+              <h2>智能体配置</h2>
+              <div class="desc">创建并管理智能体（含人设三段 IDENTITY / USER / SOUL），可绑定飞书自建应用，实现「每个智能体对应一个飞书机器人」。</div>
+            </div>
+            <button class="btn" id="agentNewBtn">+ 新建智能体</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:200px;">操作</th></tr></thead>
+              <tbody id="agentBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </div>
@@ -446,6 +478,19 @@
     </div>
   </div>
 </div>
+<!-- 智能体编辑弹窗（admin） -->
+<div class="mask" id="agentMask">
+  <div class="modal" style="width:680px;">
+    <button class="close" id="agentModalClose" title="关闭">×</button>
+    <h2 id="agentModalTitle">新建智能体</h2>
+    <div id="agentModalBody"></div>
+    <div class="actions">
+      <button class="btn ghost" id="agentModalCancel">取消</button>
+      <button class="btn" id="agentModalSave">保存</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="/static/js/markdown.js"></script>
@@ -461,8 +506,8 @@ async function api(method,path,body){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats']);
-const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats']);
+const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats','agents']);
+const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats','agents']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   config:['我的配置','为你的飞书账号配置专属大模型'],
@@ -473,6 +518,7 @@ const VIEW_TITLES={
   audit:['审计日志','安全合规操作留痕'],
   automation:['自动化','定时任务调度与飞书推送'],
   stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
+  agents:['智能体配置','创建 / 编辑智能体并绑定飞书应用'],
 };
 function switchView(v,navItem){
   if(!ALL_VIEWS.has(v))return false;
@@ -823,11 +869,19 @@ async function send(){
   const typingBody=typing.querySelector('.msg-body');
   const finishBot=(t)=>renderMsgBody(typingBody,'bot',t||'（无回复）');
   try{
+    const modelSel=$('modelSelect'); const agentSel=$('agentSelect');
+    const model=modelSel&&modelSel.value?modelSel.value:'';
+    const agentId=agentSel&&agentSel.value?agentSel.value:'';
+    // 记住本次选择，下次进入自动恢复
+    try{ if(model)localStorage.setItem('acaily_model',model); else localStorage.removeItem('acaily_model'); }catch(e){}
+    try{ if(agentId)localStorage.setItem('acaily_agent',agentId); else localStorage.removeItem('acaily_agent'); }catch(e){}
     const {status,data}=await api('POST','/agent/chat',{
       text,
       sessionId,
       image: imageAtt ? imageAtt.dataUrl : null,
       file: fileAtt ? fileAtt.file : null,
+      model: model || null,
+      agentId: agentId || null,
     });
     finishBot(data&&data.answer);
     if(data&&data.sessionId)sessionId=data.sessionId;
@@ -843,6 +897,110 @@ async function send(){
 $('sendBtn').onclick=send;
 $('chatText').addEventListener('keydown',e=>{
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}
+});
+
+// ====================== 对话页：模型 / 智能体 下拉 ======================
+async function loadChatModels(){
+  try{
+    const {status,data}=await api('GET','/api/models');
+    const sel=$('modelSelect'); if(!sel)return;
+    const saved=(()=>{try{return localStorage.getItem('acaily_model')||''}catch(e){return''}})();
+    const opts=['<option value="">默认模型</option>'];
+    if(status===200&&data.models){data.models.forEach(m=>{if(m)opts.push(`<option value="${esc(m)}"${m===saved?' selected':''}>${esc(m)}</option>`);});}
+    sel.innerHTML=opts.join('');
+  }catch(e){}
+}
+async function loadChatAgents(){
+  try{
+    const {status,data}=await api('GET','/api/agents');
+    const sel=$('agentSelect'); if(!sel)return;
+    const saved=(()=>{try{return localStorage.getItem('acaily_agent')||''}catch(e){return''}})();
+    const opts=['<option value="">默认助手</option>'];
+    if(status===200&&data.agents){data.agents.forEach(a=>{opts.push(`<option value="${esc(a.id)}"${a.id===saved?' selected':''}>${esc((a.emoji||'')+' '+(a.name||''))}</option>`);});}
+    sel.innerHTML=opts.join('');
+  }catch(e){}
+}
+
+// ====================== 智能体管理（admin） ======================
+let currentAgentCache={};
+async function loadAgents(){
+  const {status,data}=await api('GET','/api/admin/agents');
+  const body=$('agentBody'); if(!body)return;
+  if(status!==200){body.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>';return;}
+  const list=data.agents||[];
+  currentAgentCache={}; list.forEach(a=>currentAgentCache[a.id]=a);
+  if(!list.length){body.innerHTML='<tr><td colspan="6" class="empty">暂无智能体，点击右上角「新建智能体」</td></tr>';return;}
+  body.innerHTML=list.map(a=>`<tr>
+    <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
+    <td><b>${esc(a.name)}</b></td>
+    <td class="muted">${a.description?esc(a.description.slice(0,60)):'<span class="muted">—</span>'}</td>
+    <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
+    <td class="muted">${esc((a.updatedAt||'').slice(0,10))}</td>
+    <td class="ops">
+      <button class="btn ghost sm" data-edit="${esc(a.id)}">编辑</button>
+      <button class="btn ghost sm" data-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
+      <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>
+    </td>
+  </tr>`).join('');
+}
+function agentFormHTML(a){
+  a=a||{};
+  return `<div class="form">
+    <div class="row"><label>名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
+    <label style="width:96px;">图标<input id="aEmoji" value="${esc(a.emoji||'🤖')}" maxlength="4"/></label></div>
+    <label>简介<textarea id="aDesc" rows="2" placeholder="一句话简介（可选）">${esc(a.description||'')}</textarea></label>
+    <label>身份 IDENTITY<textarea id="aIdentity" rows="4" placeholder="这个智能体是谁 / 背景 / 角色定位">${esc(a.identity||'')}</textarea></label>
+    <label>用户 USER<textarea id="aUser" rows="3" placeholder="面对的用户是谁 / 用户诉求">${esc(a.user||'')}</textarea></label>
+    <label>灵魂 SOUL<textarea id="aSoul" rows="3" placeholder="语气 / 价值观 / 禁忌">${esc(a.soul||'')}</textarea></label>
+    <label>绑定模型（可选）<input id="aModel" value="${esc(a.model||'')}" placeholder="留空则用你的个人默认模型"/></label>
+  </div>`;
+}
+let agentEditingId=null;
+function openAgentModal(id){
+  agentEditingId=id||null;
+  $('agentModalTitle').textContent=id?'编辑智能体':'新建智能体';
+  $('agentModalBody').innerHTML=agentFormHTML(id?currentAgentCache[id]:null);
+  $('agentMask').classList.add('show');
+}
+function closeAgentModal(){$('agentMask').classList.remove('show');agentEditingId=null;}
+async function saveAgentModal(){
+  const payload={
+    name:$('aName').value.trim()||'未命名智能体',
+    emoji:$('aEmoji').value.trim()||'🤖',
+    description:$('aDesc').value.trim(),
+    identity:$('aIdentity').value,
+    user:$('aUser').value,
+    soul:$('aSoul').value,
+    model:$('aModel').value.trim()||null,
+  };
+  const saveBtn=$('agentModalSave');saveBtn.disabled=true;saveBtn.textContent='保存中…';
+  const {status}=await api(agentEditingId?'PUT':'POST',agentEditingId?`/api/admin/agents/${encodeURIComponent(agentEditingId)}`:'/api/admin/agents',payload);
+  saveBtn.disabled=false;saveBtn.textContent='保存';
+  if(status===200){toast('已保存');closeAgentModal();await loadAgents();await loadChatAgents();}
+  else toast('保存失败（'+status+'）');
+}
+async function bindAgentFeishu(id){
+  if(!confirm('将在飞书组织内为该智能体创建一个自建应用（含机器人能力）并绑定。确定继续？'))return;
+  const {status,data}=await api('POST',`/api/admin/agents/${encodeURIComponent(id)}/bind-feishu`);
+  if(status===200){
+    alert(`已创建飞书应用：\napp_id = ${data.appId}\napp_secret = ${data.appSecret}\n（secret 仅显示这一次，请妥善保存）${data.botNote||''}`);
+    await loadAgents();
+  } else {
+    alert('绑定失败：'+((data&&data.error)||status));
+  }
+}
+$('agentNewBtn').onclick=()=>openAgentModal(null);
+$('agentModalClose').onclick=closeAgentModal;
+$('agentModalCancel').onclick=closeAgentModal;
+$('agentModalSave').onclick=saveAgentModal;
+$('agentBody').addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;
+  if(t.dataset.edit){openAgentModal(t.dataset.edit);}
+  else if(t.dataset.bind){bindAgentFeishu(t.dataset.bind);}
+  else if(t.dataset.del){
+    const id=t.dataset.del;
+    if(confirm('确定删除该智能体？')){api('DELETE',`/api/admin/agents/${encodeURIComponent(id)}`).then(r=>{if(r.status===200){toast('已删除');loadAgents();loadChatAgents();}else toast('删除失败');});}
+  }
 });
 
 // ====================== Admin：概览/成员/审计/自动化/统计 ======================
@@ -1414,6 +1572,11 @@ $('autoModalSave').onclick=async()=>{
 
 // ====================== 启动 ======================
 (async()=>{
+  // 浏览器插件侧边栏以 ?embed=1 嵌入：隐藏左侧导航与顶栏，只留对话区
+  try{
+    const _q=new URLSearchParams(location.search);
+    if(_q.get('embed')==='1')document.body.classList.add('embed');
+  }catch(e){}
   // Chrome 插件 / 分享链接带 ?compose= 时，先存进 sessionStorage（可跨登录跳转保留）
   try{
     const _q=new URLSearchParams(location.search);
@@ -1449,12 +1612,16 @@ $('autoModalSave').onclick=async()=>{
   // 配置 + admin 数据加载
   await loadConfig();
   me_name=d.name||'我';
+  // 对话页：填充模型 / 智能体下拉
+  await loadChatModels();
+  await loadChatAgents();
   if(d.role==='admin'){
     await loadDashboard();
     await loadUsers();
     await loadAudit();
     await loadAutomation();
     await loadStats();
+    await loadAgents();
   }
 })();
 </script>

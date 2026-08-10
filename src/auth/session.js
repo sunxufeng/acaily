@@ -99,24 +99,29 @@ function serializeCookie(name, value, opts) {
 export function setSessionCookie(res, user, req) {
   const val = encodeSession(user);
   const secure = process.env.ACAILY_COOKIE_SECURE !== 'false' && (!req || isHttps(req));
+  // SameSite=None：允许浏览器插件（chrome-extension://）以跨站 iframe 形式复用同一飞书登录会话。
+  // 仅当 secure=true（HTTPS）时 None 才生效；本地 HTTP 调试时浏览器会回退为 Lax，不影响同站使用。
+  const sameSite = process.env.ACAILY_COOKIE_SAMESITE || 'None';
   res.setHeader(
     'Set-Cookie',
-    serializeCookie(COOKIE_NAME, val, { maxAge: MAX_AGE, httpOnly: true, sameSite: 'Lax', secure })
+    serializeCookie(COOKIE_NAME, val, { maxAge: MAX_AGE, httpOnly: true, sameSite, secure })
   );
 }
 
 export function clearSessionCookie(res) {
+  const sameSite = process.env.ACAILY_COOKIE_SAMESITE || 'None';
   res.setHeader(
     'Set-Cookie',
-    serializeCookie(COOKIE_NAME, '', { maxAge: 0, httpOnly: true, sameSite: 'Lax', path: '/' })
+    serializeCookie(COOKIE_NAME, '', { maxAge: 0, httpOnly: true, sameSite, path: '/' })
   );
 }
 
 export function setOauthState(res) {
   const state = randomBytes(16).toString('hex');
+  const sameSite = process.env.ACAILY_COOKIE_SAMESITE || 'None';
   res.setHeader(
     'Set-Cookie',
-    serializeCookie(STATE_NAME, state, { maxAge: 300, httpOnly: true, sameSite: 'Lax', path: '/' })
+    serializeCookie(STATE_NAME, state, { maxAge: 300, httpOnly: true, sameSite, path: '/' })
   );
   return state;
 }

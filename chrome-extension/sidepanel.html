@@ -1,91 +1,14 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <link rel="stylesheet" href="sidepanel.css" />
+<meta charset="utf-8" />
+<title>Acaily 侧边栏</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #f5f7fb; }
+  iframe { width: 100%; height: 100%; border: 0; display: block; }
+</style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="logo">A</span> acaily 助手</div>
-    <nav class="tabs">
-      <button class="tab active" data-tab="chat">对话</button>
-      <button class="tab" data-tab="agents">智能体</button>
-      <button class="tab" data-tab="settings">设置</button>
-    </nav>
-  </header>
-
-  <!-- 登录提示 -->
-  <div id="loginBanner" class="banner hidden">
-    未登录或会话失效，请先
-    <a id="openWeb" href="#" target="_blank">在网页版登录</a>，再回来对话。
-  </div>
-
-  <!-- 对话 -->
-  <section id="chat" class="view active">
-    <div id="activeAgent" class="active-agent hidden"></div>
-    <div id="messages" class="messages"></div>
-    <div class="composer">
-      <div class="composer-row">
-        <select id="modelSelect" class="model-select" title="切换模型">
-          <option value="">默认模型</option>
-        </select>
-        <button id="micBtn" class="icon-btn" title="语音输入">🎤</button>
-      </div>
-      <textarea id="chatText" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
-      <div class="composer-actions">
-        <span id="voiceStatus" class="voice-status"></span>
-        <button id="sendBtn" class="send-btn">发送</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- 智能体 -->
-  <section id="agents" class="view">
-    <div class="agents-head">
-      <span>我的智能体</span>
-      <button id="newAgent" class="ghost-btn">+ 创建智能体</button>
-    </div>
-    <div id="agentList" class="agent-list"></div>
-
-    <div id="agentEditor" class="agent-editor hidden">
-      <h3 id="editorTitle">创建智能体</h3>
-      <label>名称 <input id="agName" type="text" maxlength="40" placeholder="如：孙旭峰(Richard)助理" /></label>
-      <label>描述 <input id="agDesc" type="text" maxlength="80" placeholder="一句话描述" /></label>
-      <label>头像 Emoji <input id="agEmoji" type="text" maxlength="4" placeholder="🤖" /></label>
-      <label>身份 IDENTITY.md
-        <textarea id="agIdentity" rows="3" placeholder="智能体的身份、角色定位"></textarea>
-      </label>
-      <label>用户 USER.md
-        <textarea id="agUser" rows="3" placeholder="关于用户的信息、偏好"></textarea>
-      </label>
-      <label>灵魂 SOUL.md
-        <textarea id="agSoul" rows="3" placeholder="语气、风格、行为准则"></textarea>
-      </label>
-      <div class="editor-actions">
-        <button id="agCancel" class="ghost-btn">取消</button>
-        <button id="agSave" class="primary-btn">保存</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- 设置 -->
-  <section id="settings" class="view">
-    <div class="setting-item">
-      <div class="k">后端地址</div>
-      <div class="v" id="baseUrl">https://acplugin.areteailab.com</div>
-    </div>
-    <div class="setting-item">
-      <div class="k">登录状态</div>
-      <div class="v" id="loginState">检测中…</div>
-    </div>
-    <div class="setting-item">
-      <div class="k">当前用户</div>
-      <div class="v" id="whoami">—</div>
-    </div>
-    <button id="openWebBtn" class="primary-btn wide">在网页版打开 / 登录</button>
-    <p class="hint">侧边栏复用网页版的登录会话（飞书账号）。首次使用请先在网页版登录一次。</p>
-  </section>
-
-  <script src="sidepanel.js"></script>
+<script src="sidepanel.js"></script>
 </body>
 </html>

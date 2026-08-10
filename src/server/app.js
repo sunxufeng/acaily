@@ -40,6 +40,8 @@ import {
 } from '../automation/store.js';
 import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } from '../automation/scheduler.js';
 import { initRunner } from '../automation/runner.js';
+import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding } from '../config/agentStore.js';
+import { createFeishuApp, enableBotCapability } from '../feishu/appMgmt.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
 const tools = [
@@ -114,6 +116,16 @@ function injectIdentityPrompt(openId, baseSys) {
   );
 }
 
+// 由智能体配置构造 systemPrompt（人设三段 + 名称/简介）
+function buildAgentSystemPrompt(agent) {
+  const parts = [`你正在以智能体「${agent.name}」${agent.emoji || ''} 的身份与用户对话。`];
+  if (agent.description) parts.push(`简介：${agent.description}`);
+  if (agent.identity) parts.push(`【身份 IDENTITY】\n${agent.identity}`);
+  if (agent.user) parts.push(`【用户 USER】\n${agent.user}`);
+  if (agent.soul) parts.push(`【灵魂 SOUL】\n${agent.soul}`);
+  return parts.join('\n\n');
+}
+
 async function handleAgent(openId, text, history, sessionId, image, context) {
   // 会话持久化 + 多轮记忆（best-effort，失败不影响主流程）
   let sid = sessionId;
@@ -148,15 +160,26 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
     await appendMessage(sid, 'user', userContent);
   } catch (e) { console.error('[conv] 持久化失败:', e.message); }
 
+  // 智能体人设解析（chat 传 agentId 时，以其人设 + 模型为准）
+  let agentPersona = null;
+  let agentModel = null;
+  if (context?.agentId) {
+    const ag = getAgent(context.agentId);
+    if (ag) {
+      agentPersona = buildAgentSystemPrompt(ag);
+      agentModel = ag.model || null;
+    }
+  }
+
   const result = await agent.run(userContent, {
-    chat: (messages) => routeChat(openId, messages, { model: context?.model || null }),
+    chat: (messages) => routeChat(openId, messages, { model: context?.model || (agentModel || null) }),
     history: hist,
     // 注入用户专属助手人设（botName + 自定义指令），实现「每个人配置自己的机器人」
     // 并锁定「当前用户身份」，防止群任务总结把别人的任务错算成本人。
-    // 若调用方（如浏览器插件「智能体」）传入 systemPrompt，则以其为准。
+    // 优先级：调用方显式 systemPrompt > 指定智能体(agentId)的人设 > 默认用户人设。
     systemPrompt: context?.systemPrompt
       ? context.systemPrompt
-      : injectIdentityPrompt(openId, buildUserSystemPromptFor(openId)),
+      : (agentPersona || injectIdentityPrompt(openId, buildUserSystemPromptFor(openId))),
     // 透传运行时上下文（openId / chatId），供飞书会话读取类工具使用
     context,
   });
@@ -437,6 +460,75 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { provider: cfg.provider, model: cfg.model, models: list });
     }
 
+    // 智能体清单（登录用户可见，供对话页「选择智能体」下拉）
+    if (method === 'GET' && pathname === '/api/agents') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      return sendJson(res, 200, { agents: listAgents() });
+    }
+
+    // ---- 智能体管理（管理员） ----
+    if (pathname === '/api/admin/agents' || pathname.startsWith('/api/admin/agents/')) {
+      const admin = requireAdminApi(req, res);
+      if (!admin) return;
+      // 详情 / 更新 / 删除 / 绑定：/api/admin/agents/:id(/bind-feishu)
+      const m = pathname.match(/^\/api\/admin\/agents\/([^/]+)(\/bind-feishu)?$/);
+      if (m) {
+        const id = decodeURIComponent(m[1]);
+        const isBind = !!m[2];
+        if (isBind) {
+          if (method !== 'POST') return sendJson(res, 405, { error: '方法不允许' });
+          const ag = getAgent(id);
+          if (!ag) return sendJson(res, 404, { error: '智能体不存在' });
+          try {
+            const created = await createFeishuApp({ name: ag.name, description: ag.description });
+            if (!created.ok) {
+              return sendJson(res, 502, { error: '创建飞书应用失败：' + (created.msg || '未知错误'), code: created.code });
+            }
+            // 落库绑定（appId），secret 仅本次回显一次
+            const updated = setFeishuBinding(id, { appId: created.appId, bound: true });
+            let botNote = '';
+            try {
+              const bot = await enableBotCapability(created.appId);
+              botNote = bot.ok ? '（机器人能力已启用）' : `（启用机器人能力提示：${bot.msg || ''}）`;
+            } catch (e) { botNote = `（启用机器人能力失败：${e.message}）`; }
+            await record({ actor: admin.openId, action: 'agent.bind_feishu', target: id, meta: { appId: created.appId } });
+            return sendJson(res, 200, { ok: true, agent: updated, appId: created.appId, appSecret: created.appSecret, botNote });
+          } catch (e) {
+            return sendJson(res, 502, { error: '绑定飞书应用异常：' + e.message });
+          }
+        }
+        if (method === 'GET') {
+          const ag = getAgent(id);
+          return ag ? sendJson(res, 200, { agent: ag }) : sendJson(res, 404, { error: '智能体不存在' });
+        }
+        if (method === 'PUT') {
+          const body = await readBody(req);
+          const ag = saveAgent(body, id);
+          await record({ actor: admin.openId, action: 'agent.update', target: id, meta: { name: ag.name } });
+          return sendJson(res, 200, { agent: ag });
+        }
+        if (method === 'DELETE') {
+          const ok = deleteAgent(id);
+          await record({ actor: admin.openId, action: 'agent.delete', target: id });
+          return sendJson(res, ok ? 200 : 404, { ok });
+        }
+        return sendJson(res, 405, { error: '方法不允许' });
+      }
+      // 集合：GET 列表 / POST 新建
+      if (method === 'GET') {
+        return sendJson(res, 200, { agents: listAgents() });
+      }
+      if (method === 'POST') {
+        const body = await readBody(req);
+        if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
+        const ag = saveAgent(body);
+        await record({ actor: admin.openId, action: 'agent.create', target: ag.id, meta: { name: ag.name } });
+        return sendJson(res, 200, { agent: ag });
+      }
+      return sendJson(res, 405, { error: '方法不允许' });
+    }
+
     // 个人配置（自服务，open_id 取自会话，绝不信任请求体）
     if (method === 'GET' && pathname === '/api/config/me') {
       const s = requireSessionApi(req, res);
@@ -525,7 +617,7 @@ const server = createServer(async (req, res) => {
       const s = requireSessionApi(req, res);
       if (!s) return;
       const body = await readBody(req);
-      let { text, history, sessionId, image, file, model, systemPrompt } = body || {};
+      let { text, history, sessionId, image, file, model, systemPrompt, agentId } = body || {};
       if (!text && !image && !file) return sendJson(res, 400, { error: 'text / image / file 至少给一项' });
       try {
         // 文档附件：把抽取出的正文拼到提示词里，再交给 agent
@@ -537,6 +629,7 @@ const server = createServer(async (req, res) => {
         const r = await handleAgent(s.openId, promptText, history, sessionId, chatImage, {
           model: model || null,
           systemPrompt: systemPrompt || null,
+          agentId: agentId || null,
         });
         return sendJson(res, 200, r);
       } catch (e) {

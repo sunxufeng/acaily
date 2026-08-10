@@ -1,5 +1,5 @@
 // 后台 Service Worker：侧边栏行为 + 右键菜单
-const APP_URL = "https://acplugin.areteailab.com/";
+const APP_URL = "https://acaily.areteailab.com/";
 
 // 点击工具栏图标即打开侧边栏
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
