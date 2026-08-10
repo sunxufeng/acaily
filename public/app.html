@@ -41,7 +41,7 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
         <span class="lbl">成员管理</span>
       </a>
-      <a class="nav-item admin-only" href="/admin" data-view="users" data-anchor="push" data-tip="组织默认配置">
+      <a class="nav-item admin-only" href="/admin" data-view="push" data-tip="组织默认配置">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
         <span class="lbl">组织默认配置</span>
       </a>
@@ -107,23 +107,11 @@
           </div>
           <div class="chat-attachments" id="chatAttachments"></div>
           <div class="chat-toolbar">
-            <button class="icon-btn plus" type="button" id="attachPlusBtn" title="添加附件 / 表情" aria-haspopup="menu" aria-expanded="false">+</button>
-            <div class="plus-pop" id="plusPop" role="menu" style="display:none;">
-              <button type="button" class="plus-menu-item" data-plus="file" role="menuitem">
-                <span class="plus-ico">📄</span><span>上传文件</span><span class="plus-hint">PDF/Word/Excel/代码…</span>
-              </button>
-              <button type="button" class="plus-menu-item" data-plus="image" role="menuitem">
-                <span class="plus-ico">🖼</span><span>上传图片</span><span class="plus-hint">支持 Ctrl+V 粘贴</span>
-              </button>
-              <button type="button" class="plus-menu-item" data-plus="emoji" role="menuitem">
-                <span class="plus-ico">😊</span><span>插入表情</span><span class="plus-hint">常用 emoji</span>
-              </button>
-            </div>
+            <button class="icon-btn plus" type="button" id="attachPlusBtn" title="点击选择文件 / 图片（也支持粘贴/拖拽）">+</button>
             <span class="grow"></span>
             <span class="muted" id="attachHint" style="font-size:12px;"></span>
           </div>
-          <input type="file" id="filePicker" accept=".txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.log,.yaml,.yml,.xml,.html,.htm,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.kt,.sh,.bash,.zsh,.sql,.ini,.cfg,.conf,.toml,.docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf" style="display:none;"/>
-          <input type="file" id="imagePicker" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none;"/>
+          <input type="file" id="filePicker" accept=".txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.log,.yaml,.yml,.xml,.html,.htm,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.kt,.sh,.bash,.zsh,.sql,.ini,.cfg,.conf,.toml,.docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf,image/png,image/jpeg,image/gif,image/webp" style="display:none;"/>
           <div class="emoji-pop" id="emojiPop" style="display:none;">
             ${['😀','😁','😂','🤣','😊','😉','😍','😘','😜','😎','🤩','🥳','🤔','😴','😢','😭','😡','🤯','🥺','👍','👎','👏','🙏','💪','🔥','✨','🎉','🎊','❤️','💔','💯','✅','❌','⭐','📌','💡','📎','📷','🎵','🚀'].map(e=>`<button type="button" class="emoji-pick">${e}</button>`).join('')}
           </div>
@@ -306,7 +294,7 @@
         <div class="card">
           <div class="card-h"><h2>最近活动</h2><span class="desc">来自审计日志，每页 5 条</span></div>
           <div class="table-wrap">
-            <table class="audit-table"><colgroup><col class="col-time"/><col class="col-actor"/><col class="col-action"/><col class="col-target"/><col class="col-level"/></colgroup><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th></tr></thead>
+            <table><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th></tr></thead>
             <tbody id="recentBody"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
             <tfoot id="recentPagerFoot"><tr><td colspan="5" class="empty">加载中…</td></tr></tfoot>
             </table>
@@ -318,7 +306,7 @@
           <ul class="quick-links">
             <li>· <a href="#" data-jump="chat">对话</a>：用你配置的 Provider 直接与 Acaily 对话（API Key 不会传给第三方）</li>
             <li>· <a href="#" data-jump="config">我的配置</a>：维护个人的 Provider / 模型 / API Key</li>
-            <li>· <a href="#" data-jump="users" data-anchor="push">组织默认配置（管理员）</a>：一键下发基础配置给所有成员</li>
+            <li>· <a href="#" data-jump="push">组织默认配置（管理员）</a>：一键下发基础配置给所有成员</li>
             <li>· <a href="#" data-jump="users">成员管理（管理员）</a>：查看 / 编辑 / 删除成员配置</li>
             <li>· <a href="#" data-jump="automation">自动化（管理员）</a>：定时任务调度与飞书推送</li>
             <li>· <a href="#" data-jump="stats">使用统计（管理员）</a>：基于全量事件日志的 Token / 模型 / 用户聚合</li>
@@ -326,8 +314,21 @@
         </div>
       </section>
 
-      <!-- 视图：用户管理（admin） -->
+      <!-- 视图：成员管理（admin） -->
       <section class="view" id="view-users">
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-h" style="padding:18px 18px 0;margin:0;">
+            <h2>成员配置</h2><span class="desc">可代为编辑或清除任意成员的模型配置</span>
+          </div>
+          <div class="table-wrap" style="border:none;box-shadow:none;">
+            <table><thead><tr><th>用户</th><th>Provider</th><th>Model</th><th>机器人</th><th>Key</th><th>更新时间</th><th>操作</th></tr></thead>
+            <tbody id="usersBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图：组织默认配置（admin） -->
+      <section class="view" id="view-push">
         <div class="card" id="push">
           <div class="card-h"><h2>组织默认配置 · 一键下发</h2><span class="desc">把一份基础模型配置应用到全员（移植自 acplugin 的组织下发）；API Key 留空则保留各人现有密钥</span></div>
           <div class="row" style="align-items:flex-end;">
@@ -347,15 +348,6 @@
           </div>
           <div id="pushResult" class="hint" style="margin-top:10px;"></div>
         </div>
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div class="card-h" style="padding:18px 18px 0;margin:0;">
-            <h2>成员配置</h2><span class="desc">可代为编辑或清除任意成员的模型配置</span>
-          </div>
-          <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th>用户</th><th>Provider</th><th>Model</th><th>机器人</th><th>Key</th><th>更新时间</th><th>操作</th></tr></thead>
-            <tbody id="usersBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody></table>
-          </div>
-        </div>
       </section>
 
       <!-- 视图：审计日志（admin） -->
@@ -365,7 +357,7 @@
             <h2>审计日志</h2><span class="desc">配置变更、对话调用、密钥解密等敏感操作留痕</span>
           </div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table class="audit-table"><colgroup><col class="col-time"/><col class="col-actor"/><col class="col-action"/><col class="col-target"/><col class="col-level"/><col class="col-detail"/></colgroup><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th><th>详情</th></tr></thead>
+            <table><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th><th>详情</th></tr></thead>
             <tbody id="auditBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
             <tfoot id="auditPagerFoot"><tr><td colspan="6" class="empty">加载中…</td></tr></tfoot>
             </table>
@@ -469,14 +461,15 @@ async function api(method,path,body){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','config','about','dash','users','audit','automation','stats']);
-const ADMIN_ONLY=new Set(['dash','users','audit','automation','stats']);
+const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats']);
+const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   config:['我的配置','为你的飞书账号配置专属大模型'],
   about:['关于 Acaily','核心理念 / 使用方法'],
   dash:['概览','组织级概览与成员配置管理'],
   users:['成员管理','查看与编辑成员模型配置'],
+  push:['组织默认配置','一键下发基础模型配置到全员'],
   audit:['审计日志','安全合规操作留痕'],
   automation:['自动化','定时任务调度与飞书推送'],
   stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
@@ -760,33 +753,14 @@ function renderAttachments() {
     btn.onclick = () => removeAttachment(Number(btn.dataset.i));
   });
 }
-// + 号按钮：点击展开菜单（文件 / 图片 / 表情），点击外部或菜单项后收起
+// + 号按钮：直接打开文件选择器（accept 同时支持 文档 + 图片；浏览器会按类型过滤）。
+//    粘贴 / 拖拽 / + 号都进同一个 filePicker 通道，逻辑更一致。
 const PLUS_BTN = $('attachPlusBtn');
-const PLUS_POP = $('plusPop');
-function openPlus(){ PLUS_POP.style.display='flex'; PLUS_BTN.setAttribute('aria-expanded','true'); }
-function closePlus(){ PLUS_POP.style.display='none'; PLUS_BTN.setAttribute('aria-expanded','false'); }
-function togglePlus(){ PLUS_POP.style.display === 'none' ? openPlus() : closePlus(); }
-PLUS_BTN.onclick = (e) => { e.stopPropagation(); togglePlus(); };
-PLUS_POP.querySelectorAll('.plus-menu-item').forEach((b) => {
-  b.onclick = (e) => {
-    e.stopPropagation();
-    const what = b.dataset.plus;
-    closePlus();
-    if (what === 'file')      $('filePicker').click();
-    else if (what === 'image') $('imagePicker').click();
-    else if (what === 'emoji') toggleEmojiPop();
-  };
-});
+PLUS_BTN.onclick = (e) => { e.stopPropagation(); $('filePicker').click(); };
 document.addEventListener('click', (e) => {
-  if (PLUS_POP.style.display !== 'none' && !PLUS_POP.contains(e.target) && e.target !== PLUS_BTN) closePlus();
   if (EMOJI_POP.style.display !== 'none' && !EMOJI_POP.contains(e.target) && e.target !== PLUS_BTN) EMOJI_POP.style.display = 'none';
 });
 $('filePicker').onchange = (e) => {
-  const f = e.target.files && e.target.files[0];
-  if (f) addFileAttachment(f);
-  e.target.value = '';
-};
-$('imagePicker').onchange = (e) => {
   const f = e.target.files && e.target.files[0];
   if (f) addFileAttachment(f);
   e.target.value = '';
@@ -892,12 +866,14 @@ function renderAuditTable(targetBodyId, targetFootId, opts){
   $(targetBodyId).innerHTML = slice.map(r=>auditRow(r,!!full)).join('');
   _refreshTruncStates($(targetBodyId));
   const foot=$(targetFootId);
-  foot.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px 14px;">
+  const colspan = full ? 6 : 5;
+  foot.innerHTML=`<tr><td colspan="${colspan}">
+    <div class="pager-bar">
       <button class="btn sm ghost" data-aud-prev ${auditPage===0?'disabled':''}>‹ 上一页</button>
-      <span class="muted" style="font-size:12px;">第 ${auditPage+1} / ${totalPages} 页 · 共 ${auditEventsAll.length} 条</span>
+      <span class="muted pager-info">第 ${auditPage+1} / ${totalPages} 页 · 共 ${auditEventsAll.length} 条</span>
       <button class="btn sm ghost" data-aud-next ${auditPage>=totalPages-1?'disabled':''}>下一页 ›</button>
-    </div>`;
+    </div>
+  </td></tr>`;
   foot.querySelector('[data-aud-prev]').onclick = () => { auditPage--; renderAuditTable(targetBodyId, targetFootId, opts); };
   foot.querySelector('[data-aud-next]').onclick = () => { auditPage++; renderAuditTable(targetBodyId, targetFootId, opts); };
 }
@@ -961,7 +937,7 @@ function auditRow(r,full){
         : '<span class="muted">-</span>')
     : '';
   const cols=`<td class="muted">${esc((r.ts||'').slice(0,19).replace('T',' '))}</td>
-    <td><span class="mono-sm" title="${esc(r.actor||'')}">${esc(r.actor||'-')}</span></td>
+    <td>${r.actor?truncCell(r.actor,{label:'actor',max:170,mono:true}):'<span class="muted">-</span>'}</td>
     <td>${esc(r.action||'-')}</td>
     <td>${r.target?truncCell(r.target,{label:'target',max:220,mono:true}):'<span class="muted">-</span>'}</td>
     <td>${lvl?`<span class="pill ${lvl}">${esc(r.level)}</span>`:'<span class="pill">info</span>'}</td>`;
