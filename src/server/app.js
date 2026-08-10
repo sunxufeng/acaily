@@ -25,7 +25,7 @@ import { AgentRuntime } from '../agent/runtime.js';
 import { parseEvent, verifySignature, extractMessage } from '../feishu/event.js';
 import { sendText, sendMarkdown } from '../feishu/client.js';
 import { startFeishuConnection, getFeishuWsStatus } from '../feishu/connection.js';
-import { extractFeishuDocLinks, isReadableCloudDoc, fetchFeishuDoc } from '../feishu/docRead.js';
+import { extractFeishuDocLinks, isReadableCloudDoc, fetchFeishuDoc, fetchFeishuWiki } from '../feishu/docRead.js';
 import { extractText, truncateExtracted } from '../feishu/fileExtract.js';
 import { readRawBody, parseMultipart } from './multipart.js';
 import { webTools } from '../tools/web.js';
@@ -203,8 +203,8 @@ async function processFeishuMessage(openId, text, image, file, chatId) {
   }
 }
 
-// 处理用户发来的飞书云文档链接：能自动读取的（docx/doc）拉正文喂模型；
-// 暂不支持的类型（wiki/sheets/base 等）给出友好提示。
+// 处理用户发来的飞书云文档链接：能自动读取的（docx / doc / wiki）拉正文喂模型；
+// 暂不支持的类型（sheets / base / slides 等）给出友好提示。
 async function handleFeishuDocLink(openId, links, userText, context) {
   // 优先取第一个「可自动读取」的链接；其余类型给提示
   const readable = links.find(isReadableCloudDoc);
@@ -212,7 +212,7 @@ async function handleFeishuDocLink(openId, links, userText, context) {
     const url = links[0].url;
     await sendText(
       openId,
-      `📄 你发来的飞书链接（${url}）属于在线表格 / 知识库 / 多维表格等类型，我暂时无法直接读取。\n\n` +
+      `📄 你发来的飞书链接（${url}）属于在线表格 / 多维表格 / 幻灯片等类型，我暂时无法直接读取。\n\n` +
         `请任选一种方式发给我：\n` +
         `1）把内容导出为 Word / PDF 后作为文件发送；\n` +
         `2）直接把正文粘贴到对话框。`
@@ -220,7 +220,10 @@ async function handleFeishuDocLink(openId, links, userText, context) {
     return;
   }
   try {
-    const doc = await fetchFeishuDoc(readable.token);
+    // docx / doc → 直接读 raw_content；wiki → 先 resolve node_token 为 obj_token
+    const doc = readable.type === 'wiki'
+      ? await fetchFeishuWiki(readable.token)
+      : await fetchFeishuDoc(readable.token);
     if (!doc.ok) {
       await sendText(
         openId,
@@ -450,11 +453,13 @@ const server = createServer(async (req, res) => {
     if (method === 'POST' && pathname === '/api/upload') {
       const s = requireSessionApi(req, res);
       if (!s) return;
-      const ct = (req.headers['content-type'] || '').toLowerCase();
-      // 提取 boundary 时仅匹配到第一个 ';'（部分代理/客户端会在 boundary 后追加 charset 等参数）
-      const m = ct.match(/^multipart\/form-data;\s*boundary=([^;\r\n]+)/);
+      // ⚠️ 不能对 Content-Type 整串 toLowerCase()：boundary 值大小写会被改，但 body 内的 boundary
+      //    仍是原大小写（Curl/Node fetch 等客户端可能用混合大小写），导致 indexOf 永远找不到分隔符。
+      //    用 /i 正则只匹配前缀，捕获的 boundary 保留原大小写。
+      const ct = req.headers['content-type'] || '';
+      const m = ct.match(/^multipart\/form-data;\s*boundary=(?:"([^"]+)"|([^;\r\n]+))/i);
       if (!m) return sendJson(res, 400, { error: '需要 multipart/form-data（缺少 boundary）' });
-      const boundary = m[1].trim().replace(/^"(.*)"$/, '$1');
+      const boundary = (m[1] || m[2]).trim();
       try {
         const buf = await readRawBody(req, 25 * 1024 * 1024);
         const parts = parseMultipart(buf, boundary);
