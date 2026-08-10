@@ -16,7 +16,7 @@ function backoffMs(attempt) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 按 open_id 路由到用户自配模型：解析配置 → 信封解密 Key → 选适配器 → 限流 → 重试 → 降级
-export async function routeChat(openId, messages) {
+export async function routeChat(openId, messages, opts = {}) {
   const cfg = getConfig(openId);
   if (!cfg) {
     throw new ProviderError(
@@ -35,7 +35,8 @@ export async function routeChat(openId, messages) {
 
   const apiKey = decryptApiKey(openId); // ollama 为 null
   // 用户配置字段名为 provider，适配器注册表按 type 索引，这里做一次映射
-  const provider = getProvider({ ...cfg, type: cfg.provider, apiKey });
+  // opts.model：调用方可临时覆盖本次请求的模型（如浏览器插件切换模型）
+  const provider = getProvider({ ...cfg, type: cfg.provider, apiKey, model: opts.model || cfg.model });
 
   // 单用户可单独配置重试次数；缺失则走系统默认（环境变量或 2）
   const maxRetries = Number.isInteger(cfg.retries) ? cfg.retries : DEFAULT_MAX_RETRIES;

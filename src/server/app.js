@@ -149,11 +149,14 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
   } catch (e) { console.error('[conv] 持久化失败:', e.message); }
 
   const result = await agent.run(userContent, {
-    chat: (messages) => routeChat(openId, messages),
+    chat: (messages) => routeChat(openId, messages, { model: context?.model || null }),
     history: hist,
     // 注入用户专属助手人设（botName + 自定义指令），实现「每个人配置自己的机器人」
     // 并锁定「当前用户身份」，防止群任务总结把别人的任务错算成本人。
-    systemPrompt: injectIdentityPrompt(openId, buildUserSystemPromptFor(openId)),
+    // 若调用方（如浏览器插件「智能体」）传入 systemPrompt，则以其为准。
+    systemPrompt: context?.systemPrompt
+      ? context.systemPrompt
+      : injectIdentityPrompt(openId, buildUserSystemPromptFor(openId)),
     // 透传运行时上下文（openId / chatId），供飞书会话读取类工具使用
     context,
   });
@@ -327,6 +330,16 @@ const server = createServer(async (req, res) => {
     const { pathname } = url;
     const method = req.method || 'GET';
 
+    // CORS：允许浏览器扩展（chrome-extension://）与网页同源跨域带凭据调用 API
+    const _origin = req.headers.origin;
+    if (_origin && (_origin.startsWith('chrome-extension://') || _origin.endsWith('acplugin.areteailab.com'))) {
+      res.setHeader('Access-Control-Allow-Origin', _origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    }
+    if (method === 'OPTIONS') return res.writeHead(204).end();
+
     // 公开：健康检查（监控/探活）
     if (method === 'GET' && pathname === '/health') {
       return sendJson(res, 200, { ok: true, ts: Date.now(), service: 'acaily', feishuWs: getFeishuWsStatus(), automationJobs: activeJobCount() });
@@ -412,6 +425,16 @@ const server = createServer(async (req, res) => {
       const s = requireSessionApi(req, res);
       if (!s) return;
       return sendJson(res, 200, { openId: s.openId, name: s.name, avatar: s.avatar, email: s.email, role: s.role });
+    }
+
+    // 可用模型清单（供浏览器插件「切换模型」下拉填充）
+    if (method === 'GET' && pathname === '/api/models') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const cfg = getConfig(s.openId);
+      if (!cfg) return sendJson(res, 404, { error: '尚未配置模型' });
+      const list = Array.isArray(cfg.models) && cfg.models.length ? cfg.models : (cfg.model ? [cfg.model] : []);
+      return sendJson(res, 200, { provider: cfg.provider, model: cfg.model, models: list });
     }
 
     // 个人配置（自服务，open_id 取自会话，绝不信任请求体）
@@ -502,7 +525,7 @@ const server = createServer(async (req, res) => {
       const s = requireSessionApi(req, res);
       if (!s) return;
       const body = await readBody(req);
-      let { text, history, sessionId, image, file } = body || {};
+      let { text, history, sessionId, image, file, model, systemPrompt } = body || {};
       if (!text && !image && !file) return sendJson(res, 400, { error: 'text / image / file 至少给一项' });
       try {
         // 文档附件：把抽取出的正文拼到提示词里，再交给 agent
@@ -511,7 +534,10 @@ const server = createServer(async (req, res) => {
         if (file && file.text) {
           promptText = buildFilePrompt(file, promptText);
         }
-        const r = await handleAgent(s.openId, promptText, history, sessionId, chatImage);
+        const r = await handleAgent(s.openId, promptText, history, sessionId, chatImage, {
+          model: model || null,
+          systemPrompt: systemPrompt || null,
+        });
         return sendJson(res, 200, r);
       } catch (e) {
         return sendJson(res, 502, { error: e.message });
