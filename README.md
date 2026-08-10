@@ -1,7 +1,7 @@
 # Acaily · 飞书 AI 助手（模型网关版）
 
 复刻飞书 Aily 的 AI 对话 / 技能工作流 / 知识库能力，**核心差异化**是：
-**组织内每位飞书用户可自配各自的模型 Provider（OpenAI 兼容 / Anthropic / Ollama / 自建网关）的 URL、API Key 与 Model 参数**，由「模型网关层」按飞书 `open_id` 路由并注入解密后的密钥。
+**组织内每位飞书用户可自配各自的模型 Provider（OpenAI 兼容 / Anthropic / Ollama / 自建网关 / Acplugin）的 URL、API Key 与 Model 参数**，由「模型网关层」按飞书 `open_id` 路由并注入解密后的密钥。
 
 > 对应交付物：需求说明书 `Acaily需求说明书.md`、实施计划 `Acaily实施计划.docx`、架构图 `Acaily架构图.svg`（见上级目录）。
 
@@ -11,7 +11,7 @@
 用户(飞书) → 接入层(事件/回调/open_id校验)
           → 应用服务层(会话/Agent Runtime/技能MCP/RAG)
           → 模型网关层★(按open_id路由 + KMS密钥保险库 + 多Provider适配 + 限流降级)
-          → 外部 Provider(OpenAI兼容/Claude/Ollama/自建网关)
+          → 外部 Provider(OpenAI兼容/Claude/Ollama/自建网关/Acplugin)
           → 数据层(对话历史/向量库/密文/审计) → 安全层
 ```
 
@@ -22,7 +22,7 @@ src/
   crypto/kms.js          信封加密：DEK(AES-256-GCM) + KEK(主密钥env) 包裹，密钥不出库
   config/schema.js       用户模型配置校验 schema
   config/userConfigStore.js  配置持久化（JSON 文件）+ 密钥密文分离存储
-  providers/             多 Provider 适配：base / openai / anthropic / ollama / custom + 注册表
+  providers/             多 Provider 适配：base / openai / anthropic / ollama / custom / acplugin + 注册表
   gateway/rateLimiter.js 令牌桶限流（按 open_id）
   gateway/router.js      网关路由：解析配置 → 解密 → 选适配器 → 限流/重试/降级
   feishu/event.js        飞书事件签名校验 + 消息抽取（open_id）

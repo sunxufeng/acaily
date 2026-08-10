@@ -2,7 +2,7 @@ import { OpenAICompatibleProvider } from './openai.js';
 import { AnthropicProvider } from './anthropic.js';
 import { OllamaProvider } from './ollama.js';
 import { CustomProvider } from './custom.js';
-import { YuanBaoProvider } from './yuanbao.js';
+import { AcpluginProvider } from './acplugin.js';
 import { ProviderError } from './base.js';
 
 // Provider 注册表：type -> 适配器工厂
@@ -11,7 +11,7 @@ const REGISTRY = {
   anthropic: (cfg) => new AnthropicProvider(cfg),
   ollama: (cfg) => new OllamaProvider(cfg),
   custom: (cfg) => new CustomProvider(cfg),
-  yuanbao: (cfg) => new YuanBaoProvider(cfg),
+  acplugin: (cfg) => new AcpluginProvider(cfg),
 };
 
 export function getProvider(cfg) {

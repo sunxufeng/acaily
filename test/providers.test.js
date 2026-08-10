@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getProvider, ProviderError } from '../src/providers/index.js';
+import { DEFAULT_ACPLUGIN_BASEURL } from '../src/providers/acplugin.js';
 
 function mockFetch(jsonBody, { ok = true, status = 200 } = {}) {
   global.fetch = async () => ({ ok, status, text: async () => JSON.stringify(jsonBody) });
@@ -50,16 +51,16 @@ test('未知 provider 类型抛错', () => {
   assert.throws(() => getProvider({ type: 'unknown', baseUrl: 'x', model: 'm' }), ProviderError);
 });
 
-test('yuanbao：默认 base URL 命中腾讯元宝网关 /api/chat/completions', async () => {
+test('acplugin：默认 base URL 命中 acplugin 网关 /api/chat/completions', async () => {
   let calledUrl = '';
   global.fetch = async (url, opts) => {
     calledUrl = url;
-    return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: '元宝回复' } }], usage: {} }) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: 'Acplugin回复' } }], usage: {} }) };
   };
-  const p = getProvider({ type: 'yuanbao', apiKey: 'x', model: 'hunyuan' });
+  const p = getProvider({ type: 'acplugin', apiKey: 'x', model: 'hunyuan' });
   const r = await p.chat([{ role: 'user', content: 'hi' }]);
-  assert.equal(r.content, '元宝回复');
-  assert.ok(calledUrl.includes('yuanbao.tencent.com/api/chat/completions'), 'endpoint=' + calledUrl);
+  assert.equal(r.content, 'Acplugin回复');
+  assert.equal(calledUrl, DEFAULT_ACPLUGIN_BASEURL + '/chat/completions');
 });
 
 test('错误提示：401 给出 API Key 排查提示', async () => {
