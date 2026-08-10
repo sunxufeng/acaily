@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Acaily</title>
+<link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+<div class="shell">
+  <!-- 侧边栏 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-head">
+      <a class="brand" id="brandLink" href="/settings" data-default-view="chat" title="返回主页">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill="#fff" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="brand-text">Acaily</span>
+      </a>
+      <button class="collapse-btn" id="collapseBtn" type="button" title="折叠/展开菜单" aria-label="折叠侧边栏">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="nav-group">工作台</div>
+      <a class="nav-item admin-only" href="/admin" data-view="dash" data-tip="概览">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg></span>
+        <span class="lbl">概览</span>
+      </a>
+      <a class="nav-item" href="/settings" data-view="chat" data-tip="对话">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+        <span class="lbl">对话</span>
+      </a>
+      <a class="nav-item" href="/settings" data-view="config" data-tip="我的配置">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+        <span class="lbl">我的配置</span>
+      </a>
+
+      <div class="nav-group admin-only">管理</div>
+      <a class="nav-item admin-only" href="/admin" data-view="users" data-tip="成员管理">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
+        <span class="lbl">成员管理</span>
+      </a>
+      <a class="nav-item admin-only" href="/admin" data-view="users" data-anchor="push" data-tip="组织默认配置">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
+        <span class="lbl">组织默认配置</span>
+      </a>
+      <a class="nav-item admin-only" href="/admin" data-view="audit" data-tip="审计日志">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".7" fill="currentColor"/><circle cx="3.5" cy="12" r=".7" fill="currentColor"/><circle cx="3.5" cy="18" r=".7" fill="currentColor"/></svg></span>
+        <span class="lbl">审计日志</span>
+      </a>
+      <a class="nav-item admin-only" href="/admin" data-view="automation" data-tip="自动化">
+        <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+        <span class="lbl">自动化</span>
+      </a>
+      <a class="nav-item admin-only" href="/admin" data-view="stats" data-tip="使用统计">
+        <span class="ic"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/><line x1="3" y1="20" x2="21" y2="20"/></svg></span>
+        <span class="lbl">使用统计</span>
+      </a>
+
+      <!-- 关于固定在所有菜单最下方 -->
+      <a class="nav-item nav-about" href="/settings" data-view="about" data-tip="关于">
+        <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+        <span class="lbl">关于</span>
+      </a>
+    </nav>
+    <div class="side-foot">
+      <div class="me">
+        <img id="sbAvatar" alt="" />
+        <div class="me-info">
+          <div class="nm" id="sbName">…</div>
+          <div class="rl" id="sbRole">成员</div>
+        </div>
+        <span class="out" id="sbLogout" title="退出登录">退出</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主区域 -->
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="pageTitle">对话</h1>
+        <div class="sub" id="pageSub">与你的专属 AI 助手对话</div>
+      </div>
+      <div class="right">
+        <button class="theme-toggle" id="themeBtn" type="button" title="切换主题">
+          <span class="theme-icon" id="themeIcon"></span>
+          <span class="theme-text" id="themeText">月之暗面</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- 视图：对话（workbench） -->
+      <section class="view" id="view-chat">
+        <div class="chat-wrap">
+          <div class="chat-head">
+            <div class="avatar" id="botAvatar">A</div>
+            <div>
+              <div class="t" id="botName">Acaily</div>
+              <div class="s">由你的个人模型驱动 · 网页对话</div>
+            </div>
+          </div>
+          <div class="chat-body" id="chatBody">
+            <div class="msg bot"><div class="av">A</div><div class="bubble"><div class="role">Acaily</div>你好，我是你的专属 AI 助手。在左侧「我的配置」里填好模型后即可在此对话；也可以直接在飞书里 @我。</div></div>
+          </div>
+          <div class="chat-attachments" id="chatAttachments"></div>
+          <div class="chat-toolbar">
+            <button class="icon-btn plus" type="button" id="attachPlusBtn" title="添加附件 / 表情" aria-haspopup="menu" aria-expanded="false">+</button>
+            <div class="plus-pop" id="plusPop" role="menu" style="display:none;">
+              <button type="button" class="plus-menu-item" data-plus="file" role="menuitem">
+                <span class="plus-ico">📄</span><span>上传文件</span><span class="plus-hint">PDF/Word/Excel/代码…</span>
+              </button>
+              <button type="button" class="plus-menu-item" data-plus="image" role="menuitem">
+                <span class="plus-ico">🖼</span><span>上传图片</span><span class="plus-hint">支持 Ctrl+V 粘贴</span>
+              </button>
+              <button type="button" class="plus-menu-item" data-plus="emoji" role="menuitem">
+                <span class="plus-ico">😊</span><span>插入表情</span><span class="plus-hint">常用 emoji</span>
+              </button>
+            </div>
+            <span class="grow"></span>
+            <span class="muted" id="attachHint" style="font-size:12px;"></span>
+          </div>
+          <input type="file" id="filePicker" accept=".txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.log,.yaml,.yml,.xml,.html,.htm,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.kt,.sh,.bash,.zsh,.sql,.ini,.cfg,.conf,.toml,.docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf" style="display:none;"/>
+          <input type="file" id="imagePicker" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none;"/>
+          <div class="emoji-pop" id="emojiPop" style="display:none;">
+            ${['😀','😁','😂','🤣','😊','😉','😍','😘','😜','😎','🤩','🥳','🤔','😴','😢','😭','😡','🤯','🥺','👍','👎','👏','🙏','💪','🔥','✨','🎉','🎊','❤️','💔','💯','✅','❌','⭐','📌','💡','📎','📷','🎵','🚀'].map(e=>`<button type="button" class="emoji-pick">${e}</button>`).join('')}
+          </div>
+          <div class="chat-input">
+            <textarea id="chatText" placeholder="输入消息，Enter 发送，Shift+Enter 换行；可粘贴图片截图"></textarea>
+            <button class="btn send" id="sendBtn">发送</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图：我的配置（workbench） -->
+      <section class="view" id="view-config">
+        <div class="card">
+          <div class="card-h">
+            <h2>我的配置（个人 Provider）</h2>
+            <span class="desc">在这里维护你个人的 Provider（API Key、Base URL、模型、采样参数、System Prompt、多模态等）。未设置的项目会自动回退使用管理员在「组织默认配置」中下发的默认值。<br>apiKey 仅保存在服务端（AES-256-GCM 加密）。Temperature / Top P / Max Tokens / Top K / Frequency·Presence Penalty / 超时 / 重试 / 自定义请求头 / System Prompt / 流式 / 多模态开关均作用于「对话」与插件调用。</span>
+          </div>
+
+          <div class="row">
+            <div style="flex:1;">
+              <label>名称 <span class="hint" style="font-weight:400;">（仅展示，方便你识别）</span></label>
+              <input id="configName" placeholder="例如：Richard OpenAI" maxlength="60" />
+            </div>
+            <div style="flex:1;">
+              <label>类型 <span class="req">*</span></label>
+              <select id="provider">
+                <option value="openai">OpenAI 兼容</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="ollama">Ollama（本地）</option>
+                <option value="custom">其他兼容网关</option>
+                <option value="acplugin">Acplugin（端口自 acplugin 项目）</option>
+              </select>
+            </div>
+          </div>
+
+          <label>API Key <span class="hint" style="font-weight:400;">（Ollama 留空。已保存的 Key 明文不返回前端；显示时仅展示占位掩码，不会覆盖已存密钥）</span></label>
+          <div class="row" style="gap:8px;align-items:center;">
+            <input id="apiKey" type="password" placeholder="sk-...（留空则不修改已存密钥）" autocomplete="off" data-masked="0" style="flex:1;" />
+            <button class="btn ghost" type="button" id="keyToggle">显示</button>
+          </div>
+          <div class="hint" id="keyStatus" style="margin-top:4px;"></div>
+
+          <label>Base URL <span class="req">*</span></label>
+          <input id="baseUrl" placeholder="https://api.openai.com/v1 或 http://localhost:11434" />
+          <div class="hint">OpenAI 兼容填 <code>/v1</code> 结尾；Ollama 默认 <code>http://localhost:11434</code></div>
+
+          <div class="row" style="align-items:flex-start;">
+            <div style="flex:2;">
+              <label>模型列表 <span class="hint" style="font-weight:400;">（每行一个，首项作为「默认模型」）</span></label>
+              <textarea id="models" rows="4" placeholder="gpt-4o-mini&#10;gpt-5.5-sol"></textarea>
+            </div>
+            <div style="flex:1;min-width:160px;">
+              <label>默认模型 / API 路径</label>
+              <input id="model" placeholder="gpt-4o-mini" />
+              <input id="chatCompletionsPath" placeholder="/v1/chat/completions（可选）" style="margin-top:8px;" />
+            </div>
+          </div>
+
+          <div class="section-title">采样参数（Sampling）</div>
+          <div class="row">
+            <div>
+              <label style="margin-top:0;">Temperature</label>
+              <input id="temperature" type="number" step="0.1" min="0" max="2" value="0.7" />
+              <div class="hint">0–2，越大越发散</div>
+            </div>
+            <div>
+              <label style="margin-top:0;">Max Tokens</label>
+              <input id="maxTokens" type="number" step="1" min="1" value="2048" />
+              <div class="hint">单次最大输出</div>
+            </div>
+            <div>
+              <label style="margin-top:0;">Top P</label>
+              <input id="topP" type="number" step="0.05" min="0" max="1" value="1" />
+              <div class="hint">0–1，核采样</div>
+            </div>
+          </div>
+
+          <div class="section-title">System Prompt <span class="muted" style="font-weight:400;">（默认系统提示词，留空不注入）</span></div>
+          <textarea id="systemPrompt" rows="4" placeholder="例如：你是一个乐于助人的 AI 助手。" maxlength="4000"></textarea>
+
+          <div class="section-title">能力与输出</div>
+          <div class="row" style="gap:18px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input id="capMultimodal" type="checkbox" /> 支持多模态（图像输入）</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input id="capStream" type="checkbox" /> 流式输出（取消勾选可强制一次性返回）</label>
+          </div>
+
+          <div class="section-title">高级采样参数</div>
+          <div class="row">
+            <div>
+              <label style="margin-top:0;">Top K</label>
+              <input id="topK" type="number" step="1" min="1" placeholder="留空" />
+              <div class="hint">部分模型支持（如 Gemini 等），其余可忽略</div>
+            </div>
+            <div>
+              <label style="margin-top:0;">Frequency Penalty</label>
+              <input id="frequencyPenalty" type="number" step="0.1" min="-2" max="2" value="0" />
+              <div class="hint">-2..2，降低重复</div>
+            </div>
+            <div>
+              <label style="margin-top:0;">Presence Penalty</label>
+              <input id="presencePenalty" type="number" step="0.1" min="-2" max="2" value="0" />
+              <div class="hint">-2..2，增加新鲜</div>
+            </div>
+          </div>
+
+          <div class="section-title">请求控制</div>
+          <div class="row">
+            <div>
+              <label style="margin-top:0;">超时（秒）</label>
+              <input id="timeout" type="number" step="1" min="1" max="600" placeholder="留空用服务端默认（90s）" />
+              <div class="hint">仅对网络错误 / 5xx 重试</div>
+            </div>
+            <div>
+              <label style="margin-top:0;">失败重试次数</label>
+              <input id="retries" type="number" step="1" min="0" max="5" placeholder="默认 2" />
+              <div class="hint">重试采用指数退避（1s→2s→4s）</div>
+            </div>
+          </div>
+
+          <div class="section-title">自定义请求头（可选）</div>
+          <textarea id="customHeaders" rows="3" placeholder='{"X-Trace-Id":"acaily"}' spellcheck="false"></textarea>
+          <div class="hint">JSON 对象，键名仅允许字母/数字/<code>-</code>；合并到每次外发请求（覆盖默认 content-type）</div>
+
+          <div class="section-title">专属机器人</div>
+          <div class="section-desc">配置你自己的助手名称与个性指令，让这位「机器人」只属于你。</div>
+
+          <label>助手名称（Bot Name）</label>
+          <input id="botName" placeholder="例如：小艾 / 助理 / 你的昵称（留空则用默认 Acaily）" maxlength="40" />
+
+          <div class="actions" style="margin-top:18px;">
+            <button class="btn" id="saveBtn">保存配置</button>
+            <button class="btn ghost" id="testBtn">连通性测试</button>
+          </div>
+          <div id="cfgStatus" class="status"></div>
+        </div>
+        <div class="card">
+          <div class="section-desc">本页仅你本人可访问（飞书登录后由服务端注入身份）；配置与对话均按你的 open_id 租户隔离，他人不可见。组织默认配置项可在管理员处「全员下发」。</div>
+        </div>
+      </section>
+
+      <!-- 视图：关于 -->
+      <section class="view" id="view-about">
+        <div class="card">
+          <div class="card-h"><h2>关于 Acaily</h2></div>
+          <p style="color:var(--text-2);">Acaily 是飞书 AI 助手，核心理念是 <b>模型选择权下放到每位成员</b>：你用自己的 API Key 接任意大模型，组织只做网关路由与安全合规，看不到你的密钥明文。</p>
+          <div class="tag-row" style="margin:14px 0;">
+            <span class="pill brand">个人模型网关</span>
+            <span class="pill">信封加密</span>
+            <span class="pill">租户隔离</span>
+            <span class="pill">飞书原生</span>
+            <span class="pill">审计留痕</span>
+          </div>
+          <h3 style="font-size:14px;">怎么用</h3>
+          <ol style="color:var(--text-2);margin:6px 0 0;padding-left:20px;">
+            <li>在「我的配置」填写 Provider / Base URL / Model / API Key 并保存。</li>
+            <li>在飞书任意会话里 <span class="kbd">@Acaily</span> 并提问，或在本页「对话」里直接聊。</li>
+            <li>管理员可在「管理后台」统一查看成员配置与审计日志。</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 视图：概览（admin） -->
+      <section class="view" id="view-dash">
+        <div class="card welcome-card">
+          <div class="welcome-title">欢迎回来，<span id="welcomeName">…</span></div>
+          <div class="welcome-desc">这是 Acaily AI 助手的管理后台。左侧切换「管理」类目，右上角可在「月之暗面 / 月之明面」主题间切换。</div>
+          <div class="identity-grid">
+            <div><span class="lbl">登录身份</span><span class="val" id="meOpenId">…</span></div>
+            <div><span class="lbl">角色</span><span class="val"><span class="pill brand" id="meRole">…</span></span></div>
+            <div><span class="lbl">所属组织</span><span class="val muted" id="meOrg">…</span></div>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat"><div class="n brand" id="sUsers">–</div><div class="l">本组成员</div></div>
+          <div class="stat"><div class="n ok" id="sProviders">–</div><div class="l">可用 Provider</div></div>
+          <div class="stat"><div class="n" id="sDefaultModel">–</div><div class="l">默认模型</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>最近活动</h2><span class="desc">来自审计日志，每页 5 条</span></div>
+          <div class="table-wrap">
+            <table class="audit-table"><colgroup><col class="col-time"/><col class="col-actor"/><col class="col-action"/><col class="col-target"/><col class="col-level"/></colgroup><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th></tr></thead>
+            <tbody id="recentBody"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+            <tfoot id="recentPagerFoot"><tr><td colspan="5" class="empty">加载中…</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>快捷入口</h2><span class="desc">跳转到常用页面</span></div>
+          <ul class="quick-links">
+            <li>· <a href="#" data-jump="chat">对话</a>：用你配置的 Provider 直接与 Acaily 对话（API Key 不会传给第三方）</li>
+            <li>· <a href="#" data-jump="config">我的配置</a>：维护个人的 Provider / 模型 / API Key</li>
+            <li>· <a href="#" data-jump="users" data-anchor="push">组织默认配置（管理员）</a>：一键下发基础配置给所有成员</li>
+            <li>· <a href="#" data-jump="users">成员管理（管理员）</a>：查看 / 编辑 / 删除成员配置</li>
+            <li>· <a href="#" data-jump="automation">自动化（管理员）</a>：定时任务调度与飞书推送</li>
+            <li>· <a href="#" data-jump="stats">使用统计（管理员）</a>：基于全量事件日志的 Token / 模型 / 用户聚合</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 视图：用户管理（admin） -->
+      <section class="view" id="view-users">
+        <div class="card" id="push">
+          <div class="card-h"><h2>组织默认配置 · 一键下发</h2><span class="desc">把一份基础模型配置应用到全员（移植自 acplugin 的组织下发）；API Key 留空则保留各人现有密钥</span></div>
+          <div class="row" style="align-items:flex-end;">
+            <div><label>Provider</label>
+              <select id="pushProvider">
+                <option value="openai">OpenAI 兼容</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="ollama">Ollama</option>
+                <option value="custom">自建网关</option>
+                <option value="acplugin">Acplugin</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:240px;"><label>Base URL <span class="req">*</span></label><input id="pushBaseUrl" placeholder="https://api.openai.com/v1"/></div>
+            <div><label>Model <span class="req">*</span></label><input id="pushModel" placeholder="gpt-4o-mini"/></div>
+            <div style="flex:1;min-width:200px;"><label>API Key（可选）</label><input id="pushApiKey" type="password" placeholder="留空=保留各人现有 Key"/></div>
+            <button class="btn" id="pushBtn">确认下发到全员</button>
+          </div>
+          <div id="pushResult" class="hint" style="margin-top:10px;"></div>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-h" style="padding:18px 18px 0;margin:0;">
+            <h2>成员配置</h2><span class="desc">可代为编辑或清除任意成员的模型配置</span>
+          </div>
+          <div class="table-wrap" style="border:none;box-shadow:none;">
+            <table><thead><tr><th>用户</th><th>Provider</th><th>Model</th><th>机器人</th><th>Key</th><th>更新时间</th><th>操作</th></tr></thead>
+            <tbody id="usersBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图：审计日志（admin） -->
+      <section class="view" id="view-audit">
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-h" style="padding:18px 18px 0;margin:0;">
+            <h2>审计日志</h2><span class="desc">配置变更、对话调用、密钥解密等敏感操作留痕</span>
+          </div>
+          <div class="table-wrap" style="border:none;box-shadow:none;">
+            <table class="audit-table"><colgroup><col class="col-time"/><col class="col-actor"/><col class="col-action"/><col class="col-target"/><col class="col-level"/><col class="col-detail"/></colgroup><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th><th>详情</th></tr></thead>
+            <tbody id="auditBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+            <tfoot id="auditPagerFoot"><tr><td colspan="6" class="empty">加载中…</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图：自动化（admin） -->
+      <section class="view" id="view-automation">
+        <div class="card">
+          <div class="card-h">
+            <div>
+              <h2>自动化</h2>
+              <div class="desc">按计划调用 Acaily 助手并把结果推送给指定飞书用户（参考 aily 工作台·自动化）</div>
+            </div>
+            <button class="btn" id="autoNewBtn">+ 新建自动化</button>
+          </div>
+          <div id="autoList" class="auto-list">加载中…</div>
+        </div>
+      </section>
+
+      <!-- 视图：使用统计（admin） -->
+      <section class="view" id="view-stats">
+        <div class="card">
+          <div class="card-h">
+            <div>
+              <h2>使用统计</h2>
+              <div class="desc">基于 data/usage.jsonl 的全量事件日志聚合（参考 aily 工作台·使用统计）</div>
+            </div>
+            <div class="row" style="align-items:flex-end;gap:10px;">
+              <div><label>时间范围</label>
+                <select id="statsRange">
+                  <option value="7d">近 7 天</option>
+                  <option value="30d" selected>近 30 天</option>
+                </select>
+              </div>
+              <button class="btn" id="statsRefreshBtn">刷新数据</button>
+            </div>
+          </div>
+          <div class="muted" id="statsAsOf" style="margin:6px 0 14px;font-size:12px;"></div>
+          <div class="stat-grid stat-grid-6" id="statsSummary"></div>
+          <div class="table-wrap" style="margin-top:18px;">
+            <h3 style="margin:0 0 8px;">📊 模型消费榜（按 Token 总量排序）</h3>
+            <table><thead><tr><th>排名</th><th>模型</th><th>请求数</th><th>输入 Token</th><th>输出 Token</th><th>总 Token</th><th>占比</th></tr></thead>
+            <tbody id="statsModelBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody></table>
+          </div>
+          <div class="table-wrap" style="margin-top:18px;">
+            <h3 style="margin:0 0 8px;">📉 Token 使用趋势</h3>
+            <table><thead><tr><th>日期</th><th>请求数</th><th>Token 趋势</th><th>输入</th><th>输出</th><th>合计</th></tr></thead>
+            <tbody id="statsTrendBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+            <tfoot><tr><td colspan="6" id="statsTrendPager" class="pager"></td></tr></tfoot></table>
+          </div>
+          <div class="table-wrap" style="margin-top:18px;">
+            <h3 style="margin:0 0 8px;">👤 用户使用情况</h3>
+            <table><thead><tr><th>用户</th><th>Open ID</th><th>请求数</th><th>输入 Token</th><th>输出 Token</th><th>总 Token</th></tr></thead>
+            <tbody id="statsUserBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody></table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑弹窗（admin） -->
+<div class="mask" id="mask">
+  <div class="modal">
+    <button class="close" id="modalClose" title="关闭">×</button>
+    <h2 id="modalTitle">编辑用户配置</h2>
+    <div id="modalBody"></div>
+    <div class="actions">
+      <button class="btn ghost" id="modalCancel">取消</button>
+      <button class="btn" id="modalSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 自动化弹窗（admin） -->
+<div class="mask" id="autoMask">
+  <div class="modal" style="width:640px;">
+    <button class="close" id="autoModalClose" title="关闭">×</button>
+    <h2 id="autoModalTitle">新建自动化</h2>
+    <div id="autoModalBody"></div>
+    <div class="actions">
+      <button class="btn ghost" id="autoModalCancel">取消</button>
+      <button class="btn" id="autoModalSave">保存</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/markdown.js"></script>
+<script src="/static/js/theme.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+async function api(method,path,body){
+  const opt={method,headers:{}};
+  if(body){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body);}
+  const r=await fetch(path,opt);const data=await r.json().catch(()=>({}));return {status:r.status,data};
+}
+
+// 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
+const ALL_VIEWS=new Set(['chat','config','about','dash','users','audit','automation','stats']);
+const ADMIN_ONLY=new Set(['dash','users','audit','automation','stats']);
+const VIEW_TITLES={
+  chat:['对话','与你的专属 AI 助手对话'],
+  config:['我的配置','为你的飞书账号配置专属大模型'],
+  about:['关于 Acaily','核心理念 / 使用方法'],
+  dash:['概览','组织级概览与成员配置管理'],
+  users:['成员管理','查看与编辑成员模型配置'],
+  audit:['审计日志','安全合规操作留痕'],
+  automation:['自动化','定时任务调度与飞书推送'],
+  stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
+};
+function switchView(v,navItem){
+  if(!ALL_VIEWS.has(v))return false;
+  if(ADMIN_ONLY.has(v)&&!document.body.classList.contains('is-admin'))return false;
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
+  const view=$('view-'+v);
+  if(!view)return false;
+  view.classList.add('active');
+  $('pageTitle').textContent=VIEW_TITLES[v]?VIEW_TITLES[v][0]:'';
+  $('pageSub').textContent=VIEW_TITLES[v]?VIEW_TITLES[v][1]:'';
+  if(navItem)navItem.classList.add('active');
+  else{
+    const match=document.querySelector(`.nav-item[data-view="${v}"]`);
+    if(match)match.classList.add('active');
+  }
+  return true;
+}
+
+// 默认页（按当前 URL）： /admin → dash，/settings → chat
+const DEFAULT_VIEW=location.pathname.indexOf('/admin')===0?'dash':'chat';
+
+// 所有 sidebar 菜单点击：纯 SPA 切换，不改 URL
+document.querySelectorAll('.nav-item').forEach(it=>{
+  it.addEventListener('click',(e)=>{
+    e.preventDefault();
+    const v=it.dataset.view;
+    if(!v)return;
+    if(switchView(v,it)){
+      const anchor=it.dataset.anchor;
+      if(anchor){
+        setTimeout(()=>{
+          const el=document.getElementById(anchor);
+          if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+        },50);
+      }
+    }
+  });
+});
+// Brand 链接：纯 SPA 切回默认页（不刷新页面，不改 URL）
+$('brandLink').addEventListener('click',(e)=>{
+  e.preventDefault();
+  switchView(DEFAULT_VIEW);
+});
+// 快捷入口（概览页里的 "对话" / "成员管理" 等）也是 SPA 切换
+document.querySelectorAll('[data-jump]').forEach(a=>{
+  a.addEventListener('click',(e)=>{
+    e.preventDefault();
+    const v=a.dataset.jump;if(!v)return;
+    switchView(v);
+    const anchor=a.dataset.anchor;
+    if(anchor){
+      setTimeout(()=>{
+        const el=document.getElementById(anchor);
+        if(el)el.scrollIntoView({behavior:'smooth',block:'start'});
+      },50);
+    }
+  });
+});
+
+// 折叠侧边栏
+const SB_KEY='acaily_sidebar_collapsed';
+function applyCollapsed(collapsed){
+  const sb=$('sidebar');
+  if(collapsed)sb.classList.add('collapsed');
+  else sb.classList.remove('collapsed');
+}
+$('collapseBtn').onclick=()=>{
+  const sb=$('sidebar');
+  const next=!sb.classList.contains('collapsed');
+  applyCollapsed(next);
+  try{localStorage.setItem(SB_KEY,next?'1':'0');}catch{}
+};
+try{applyCollapsed(localStorage.getItem(SB_KEY)==='1');}catch{}
+
+// ====================== 身份 & 初始化 ======================
+let BOT_NAME='Acaily';
+let me_name='我';
+let HAS_API_KEY=false;
+async function loadConfig(){
+  const res=await api('GET','/api/config/me');
+  if(res.status===200&&res.data.config){
+    const c=res.data.config;
+    $('provider').value=c.provider||'openai';
+    $('configName').value=c.configName||'';
+    $('baseUrl').value=c.baseUrl||'';
+    $('model').value=c.model||'';
+    $('models').value=Array.isArray(c.models)?c.models.join('\n'):'';
+    $('chatCompletionsPath').value=c.chatCompletionsPath||'';
+    $('temperature').value=(c.temperature??0.7);
+    $('maxTokens').value=(c.maxTokens??2048);
+    $('topP').value=(c.topP??1);
+    $('topK').value=(c.topK??'');
+    $('frequencyPenalty').value=(c.frequencyPenalty??0);
+    $('presencePenalty').value=(c.presencePenalty??0);
+    $('timeout').value=(c.timeout??'');
+    $('retries').value=(c.retries??'');
+    $('customHeaders').value=c.customHeaders?JSON.stringify(c.customHeaders):'';
+    $('botName').value=c.botName||'';
+    $('systemPrompt').value=c.systemPrompt||'';
+    $('capMultimodal').checked=c.multimodal===true;
+    $('capStream').checked=c.stream!==false;
+    syncBotName();
+  }
+  // 是否已存 Key（明文永不返回）
+  HAS_API_KEY = !!(res.data && res.data.hasApiKey);
+  updateKeyStatus();
+}
+function syncBotName(){
+  const n=$('botName').value.trim()||'Acaily';
+  BOT_NAME=n;
+  const head=document.querySelector('.chat-head .t');if(head)head.textContent=n;
+  const av=document.querySelector('.chat-head .avatar');if(av)av.textContent=n[0]||'A';
+  document.querySelectorAll('.msg.bot .role').forEach(r=>r.textContent=n);
+}
+function collect(includeKey){
+  const c={
+    configName:$('configName').value.trim(),
+    provider:$('provider').value,
+    baseUrl:$('baseUrl').value.trim(),
+    model:$('model').value.trim(),
+    models:$('models').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    chatCompletionsPath:$('chatCompletionsPath').value.trim(),
+    temperature:Number($('temperature').value),
+    maxTokens:Number($('maxTokens').value),
+    topP:Number($('topP').value),
+    topK:$('topK').value===''?undefined:Number($('topK').value),
+    frequencyPenalty:Number($('frequencyPenalty').value),
+    presencePenalty:Number($('presencePenalty').value),
+    timeout:$('timeout').value===''?undefined:Number($('timeout').value),
+    retries:$('retries').value===''?undefined:Number($('retries').value),
+    botName:$('botName').value.trim(),
+    systemPrompt:$('systemPrompt').value,
+    stream:$('capStream').checked,
+    multimodal:$('capMultimodal').checked,
+  };
+  const ch=$('customHeaders').value.trim();
+  if(ch){try{c.customHeaders=JSON.parse(ch);}catch(e){throw new Error('自定义请求头不是合法 JSON: '+e.message);}}
+  if(includeKey&&$('apiKey').value&&$('apiKey').dataset.masked!=='1')c.apiKey=$('apiKey').value;
+  return c;
+}
+$('saveBtn').onclick=async()=>{
+  let c;try{c=collect(true);}catch(err){return showCfg('❌ '+err.message,false);}
+  if(!c.provider||!c.baseUrl)return showCfg('请至少填写 Provider 与 Base URL',false);
+  if(!c.model&&c.models&&c.models.length)c.model=c.models[0];
+  if(!c.model)return showCfg('请填写「默认模型」或在「模型列表」里至少填一项',false);
+  if(!c.models||!c.models.length)c.models=[c.model];
+  else if(!c.models.includes(c.model))c.models=[c.model,...c.models];
+  const {status,data}=await api('POST','/api/config/me',c);
+  if(status===200){showCfg('✅ 配置已保存（API Key 已加密入库）',true);syncBotName();}
+  else showCfg('❌ 保存失败：'+(data.error||status),false);
+};
+const PROVIDER_DEFAULTS={
+  openai:'https://api.openai.com/v1',
+  anthropic:'https://api.anthropic.com/v1',
+  ollama:'http://localhost:11434',
+  custom:'https://your-gateway/v1',
+  acplugin:'https://yuanbao.tencent.com/api',
+};
+$('provider').addEventListener('change',()=>{
+  const p=$('provider').value;
+  $('baseUrl').placeholder=PROVIDER_DEFAULTS[p]||'https://api.openai.com/v1';
+  if(!$('baseUrl').value)$('baseUrl').value=PROVIDER_DEFAULTS[p]||'';
+});
+$('keyToggle').onclick=()=>{
+  const inp=$('apiKey');
+  const btn=$('keyToggle');
+  const showing = inp.type==='password'; // 即将切到明文
+  if(showing){
+    // 切换到「明文」视图
+    if(!inp.value && HAS_API_KEY){
+      // 没有输入内容但服务端有 Key：展示占位掩码，标 data-masked 以避免被 collect 当成新密钥覆盖
+      inp.value='••••••••••••';
+      inp.dataset.masked='1';
+    }
+    inp.type='text'; btn.textContent='隐藏';
+  }else{
+    // 切回「密文」：若是占位掩码则一并清空，恢复 placeholder
+    if(inp.dataset.masked==='1'){ inp.value=''; inp.dataset.masked='0'; }
+    inp.type='password'; btn.textContent='显示';
+  }
+  updateKeyStatus();
+};
+$('apiKey').addEventListener('input',()=>{
+  // 用户开始输入：清除占位掩码标记，避免误传到后端
+  if($('apiKey').dataset.masked==='1'){
+    $('apiKey').value='';
+    $('apiKey').dataset.masked='0';
+    updateKeyStatus();
+  }
+});
+function updateKeyStatus(){
+  const s=$('keyStatus'); if(!s) return;
+  const inp=$('apiKey');
+  if(!HAS_API_KEY){ s.textContent='⚠️ 尚未配置 API Key（保存时若留空则不会写入）'; s.style.color='var(--warn,#c08a00)'; return; }
+  if(inp.dataset.masked==='1'){ s.textContent='🔒 已显示占位掩码（不会覆盖已存密钥；如需更换请直接覆盖输入）'; s.style.color='var(--muted)'; return; }
+  if(inp.value){ s.textContent='✏️ 当前输入将作为新 Key 保存（覆盖旧值）'; s.style.color='var(--muted)'; return; }
+  s.textContent='🔒 已保存 API Key，明文不返回前端；点击「显示」可查看占位掩码';
+  s.style.color='var(--muted)';
+}
+$('testBtn').onclick=async()=>{
+  let c;try{c=collect(true);}catch(err){return showCfg('❌ '+err.message,false);}
+  if(!c.provider||!c.baseUrl||!c.model)return showCfg('请先填写 Provider / Base URL / Model',false);
+  showCfg('⏳ 正在测试连通性…',true);
+  const {status,data}=await api('POST','/config/test',{provider:c.provider,baseUrl:c.baseUrl,apiKey:c.apiKey,model:c.model,chatCompletionsPath:c.chatCompletionsPath});
+  if(data&&data.ok)showCfg('✅ 连通性正常：'+(data.provider||'')+' / '+(data.model||''),true);
+  else showCfg('❌ 连通失败：'+(data&&data.error||status)+(data&&data.attemptedUrl?' ｜ 请求地址：'+data.attemptedUrl:''),false);
+};
+function showCfg(msg,ok){const s=$('cfgStatus');s.textContent=msg;s.className='status '+(ok?'ok':'err');}
+
+// 网页对话
+const chatBody=$('chatBody');
+let sessionId=null;
+function addMsg(role,text){
+  const m=document.createElement('div');
+  m.className='msg '+role;
+  const av=document.createElement('div');av.className='av';av.textContent=role==='user'?'我':(BOT_NAME[0]||'A');
+  const b=document.createElement('div');b.className='bubble';
+  const rl=document.createElement('div');rl.className='role';rl.textContent=role==='user'?(me_name||'我'):BOT_NAME;
+  const body=document.createElement('div');body.className='msg-body';
+  renderMsgBody(body,role,text);
+  b.appendChild(rl);b.appendChild(body);
+  m.appendChild(av);m.appendChild(b);chatBody.appendChild(m);
+  chatBody.scrollTop=chatBody.scrollHeight;
+  return m;
+}
+function renderMsgBody(el,role,text){
+  if(role==='user'){ el.textContent=text||''; return; }
+  const md=window.AcailyMd;
+  el.innerHTML = (md && md.mdToHtml) ? md.mdToHtml(text||'') : escHtml(text||'');
+}
+// ===== 附件上传（文件 / 图片 / 粘贴截图）=====
+// 流程：用户选择/粘贴 → 上传到 /api/upload → 服务端返回 {kind:'image',dataUrl} 或 {kind:'file',file:{name,type,text,truncated}}
+//       存到 chatAttachments，渲染成 chip；发送时随 /agent/chat 一并提交。
+let chatAttachments = []; // [{kind, name, mime?, dataUrl?, file?}]
+function collectAttachments(){ return chatAttachments; }
+function clearAttachments(){ chatAttachments = []; renderAttachments(); }
+async function uploadBlob(blob, fileName) {
+  const fd = new FormData();
+  fd.append('file', blob, fileName);
+  const r = await fetch('/api/upload', { method: 'POST', body: fd });
+  let data = {};
+  try { data = await r.json(); } catch {}
+  if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+  return data;
+}
+async function addFileAttachment(file) {
+  if (!file) return;
+  $('attachHint').textContent = '⏳ 正在上传 ' + file.name + '…';
+  try {
+    const res = await uploadBlob(file, file.name);
+    if (res.kind === 'image') {
+      chatAttachments.push({ kind: 'image', name: res.name, mime: res.mime, dataUrl: res.dataUrl });
+    } else if (res.kind === 'file') {
+      chatAttachments.push({ kind: 'file', name: res.file.name, mime: res.file.type, file: res.file });
+    }
+    renderAttachments();
+    $('attachHint').textContent = '✅ ' + file.name + ' 已就绪';
+  } catch (e) {
+    toast('上传失败：' + e.message);
+    $('attachHint').textContent = '❌ ' + file.name + '：' + e.message;
+  }
+}
+function removeAttachment(idx) {
+  chatAttachments.splice(idx, 1);
+  renderAttachments();
+}
+function renderAttachments() {
+  const wrap = $('chatAttachments');
+  if (!chatAttachments.length) { wrap.innerHTML = ''; $('attachHint').textContent = ''; return; }
+  wrap.innerHTML = chatAttachments.map((a, i) => {
+    if (a.kind === 'image') {
+      return `<div class="attach-chip image"><img src="${esc(a.dataUrl)}" alt=""/><span class="attach-name">${esc(a.name)}</span><button class="attach-x" type="button" data-i="${i}" title="移除">×</button></div>`;
+    }
+    return `<div class="attach-chip file"><span class="attach-ico">📄</span><span class="attach-name" title="${esc(a.name)}（${a.file.text.length} 字${a.file.truncated ? '，已截断' : ''}）">${esc(a.name)}${a.file.truncated ? ' <em>(已截断)</em>' : ''}</span><button class="attach-x" type="button" data-i="${i}" title="移除">×</button></div>`;
+  }).join('');
+  wrap.querySelectorAll('.attach-x').forEach(btn => {
+    btn.onclick = () => removeAttachment(Number(btn.dataset.i));
+  });
+}
+// + 号按钮：点击展开菜单（文件 / 图片 / 表情），点击外部或菜单项后收起
+const PLUS_BTN = $('attachPlusBtn');
+const PLUS_POP = $('plusPop');
+function openPlus(){ PLUS_POP.style.display='flex'; PLUS_BTN.setAttribute('aria-expanded','true'); }
+function closePlus(){ PLUS_POP.style.display='none'; PLUS_BTN.setAttribute('aria-expanded','false'); }
+function togglePlus(){ PLUS_POP.style.display === 'none' ? openPlus() : closePlus(); }
+PLUS_BTN.onclick = (e) => { e.stopPropagation(); togglePlus(); };
+PLUS_POP.querySelectorAll('.plus-menu-item').forEach((b) => {
+  b.onclick = (e) => {
+    e.stopPropagation();
+    const what = b.dataset.plus;
+    closePlus();
+    if (what === 'file')      $('filePicker').click();
+    else if (what === 'image') $('imagePicker').click();
+    else if (what === 'emoji') toggleEmojiPop();
+  };
+});
+document.addEventListener('click', (e) => {
+  if (PLUS_POP.style.display !== 'none' && !PLUS_POP.contains(e.target) && e.target !== PLUS_BTN) closePlus();
+  if (EMOJI_POP.style.display !== 'none' && !EMOJI_POP.contains(e.target) && e.target !== PLUS_BTN) EMOJI_POP.style.display = 'none';
+});
+$('filePicker').onchange = (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (f) addFileAttachment(f);
+  e.target.value = '';
+};
+$('imagePicker').onchange = (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (f) addFileAttachment(f);
+  e.target.value = '';
+};
+// 粘贴截图/图片：直接上传
+$('chatText').addEventListener('paste', async (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.kind === 'file') {
+      const blob = it.getAsFile();
+      if (!blob) continue;
+      if (blob.type && blob.type.startsWith('image/')) {
+        e.preventDefault();
+        await addFileAttachment(blob);
+      }
+    }
+  }
+});
+// 拖拽文件
+['dragover', 'drop'].forEach(evt => {
+  $('chatText').addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); });
+});
+$('chatText').addEventListener('drop', async (e) => {
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if (!files || !files.length) return;
+  for (const f of files) await addFileAttachment(f);
+});
+// Emoji 选择器
+const EMOJI_POP = $('emojiPop');
+function toggleEmojiPop(){
+  EMOJI_POP.style.display = EMOJI_POP.style.display === 'none' ? 'grid' : 'none';
+  if (EMOJI_POP.style.display !== 'none' && PLUS_POP.style.display !== 'none') closePlus();
+}
+EMOJI_POP.querySelectorAll('.emoji-pick').forEach(b => {
+  b.onclick = () => {
+    const ta = $('chatText');
+    const ins = b.textContent;
+    const s = ta.selectionStart || ta.value.length;
+    const e = ta.selectionEnd || ta.value.length;
+    ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+    ta.selectionStart = ta.selectionEnd = s + ins.length;
+    ta.focus();
+  };
+});
+// ===== /附件 =====
+async function send(){
+  const ta=$('chatText');
+  const text=ta.value.trim();
+  const atts=collectAttachments();
+  if(!text && !atts.length)return;
+  // 把附件数组折叠成 image / file（每类最多 1 个）
+  const imageAtt = atts.find(a=>a.kind==='image');
+  const fileAtt = atts.find(a=>a.kind==='file');
+  ta.value='';
+  addMsg('user',text || (imageAtt?'[图片]':'')+(fileAtt?` [文件: ${fileAtt.name}]`:''));
+  const sendBtn=$('sendBtn');
+  sendBtn.disabled=true;sendBtn.innerHTML='<span class="spin"></span>';
+  const typing=addMsg('bot','…');
+  const typingBody=typing.querySelector('.msg-body');
+  const finishBot=(t)=>renderMsgBody(typingBody,'bot',t||'（无回复）');
+  try{
+    const {status,data}=await api('POST','/agent/chat',{
+      text,
+      sessionId,
+      image: imageAtt ? imageAtt.dataUrl : null,
+      file: fileAtt ? fileAtt.file : null,
+    });
+    finishBot(data&&data.answer);
+    if(data&&data.sessionId)sessionId=data.sessionId;
+    if(status!==200)finishBot('⚠️ '+(data&&data.error||status));
+  }catch(e){
+    finishBot('⚠️ 请求失败：'+e.message);
+  }finally{
+    clearAttachments();
+    sendBtn.disabled=false;sendBtn.textContent='发送';
+    chatBody.scrollTop=chatBody.scrollHeight;
+  }
+}
+$('sendBtn').onclick=send;
+$('chatText').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}
+});
+
+// ====================== Admin：概览/成员/审计/自动化/统计 ======================
+let ADMINS=[];let CURRENT=null;
+// 审计日志分页（最近活动卡片 + 审计日志页共用）：每页 5 行，最新事件在最上
+const AUDIT_PAGE_SIZE = 5;
+let auditEventsAll = [];   // 最新事件在最前
+let auditPage = 0;
+function renderAuditTable(targetBodyId, targetFootId, opts){
+  const { full } = opts || {};
+  if(!auditEventsAll.length){
+    $(targetBodyId).innerHTML='<tr><td colspan="'+(full?6:5)+'" class="empty">暂无审计记录</td></tr>';
+    $(targetFootId).innerHTML='';
+    return;
+  }
+  const totalPages=Math.max(1,Math.ceil(auditEventsAll.length/AUDIT_PAGE_SIZE));
+  if(auditPage>=totalPages)auditPage=totalPages-1;
+  if(auditPage<0)auditPage=0;
+  const start=auditPage*AUDIT_PAGE_SIZE;
+  const slice=auditEventsAll.slice(start,start+AUDIT_PAGE_SIZE);
+  $(targetBodyId).innerHTML = slice.map(r=>auditRow(r,!!full)).join('');
+  _refreshTruncStates($(targetBodyId));
+  const foot=$(targetFootId);
+  foot.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px 14px;">
+      <button class="btn sm ghost" data-aud-prev ${auditPage===0?'disabled':''}>‹ 上一页</button>
+      <span class="muted" style="font-size:12px;">第 ${auditPage+1} / ${totalPages} 页 · 共 ${auditEventsAll.length} 条</span>
+      <button class="btn sm ghost" data-aud-next ${auditPage>=totalPages-1?'disabled':''}>下一页 ›</button>
+    </div>`;
+  foot.querySelector('[data-aud-prev]').onclick = () => { auditPage--; renderAuditTable(targetBodyId, targetFootId, opts); };
+  foot.querySelector('[data-aud-next]').onclick = () => { auditPage++; renderAuditTable(targetBodyId, targetFootId, opts); };
+}
+async function loadDashboard(){
+  const me=await api('GET','/api/me');
+  if(me.status===200){
+    $('welcomeName').textContent=me.data.name||'管理员';
+    $('meOpenId').textContent=me.data.openId||'–';
+    $('meRole').textContent=me.data.role||'admin';
+    $('meOrg').textContent=me.data.orgId||'org_default';
+  }
+  const [u]=await Promise.all([api('GET','/api/admin/users')]);
+  if(u.status===200){
+    const users=u.data.users||[];ADMINS=u.data.adminOpenIds||[];
+    $('sUsers').textContent=users.length;
+    const set=new Set();users.forEach(x=>x.provider&&set.add(x.provider));
+    $('sProviders').textContent=set.size;
+    const latest=users.filter(x=>x.model).slice().sort((a,b)=>(a.updatedAt>b.updatedAt?-1:1))[0];
+    $('sDefaultModel').textContent=latest?latest.model:'–';
+  }
+  const ev=await api('GET','/api/admin/audit');
+  const events = (ev.data && ev.data.events) || [];
+  // 服务端的事件一般是 append-only，倒序以保证最新在最上
+  auditEventsAll = events.slice().sort((a,b)=>(a.ts>b.ts?-1:1));
+  auditPage = 0;
+  renderAuditTable('recentBody', 'recentPagerFoot', { full:false });
+}
+async function loadUsers(){
+  const res=await api('GET','/api/admin/users');
+  if(res.status!==200){$('usersBody').innerHTML='<tr><td colspan="7" class="empty">加载失败</td></tr>';return;}
+  const users=res.data.users||[];ADMINS=res.data.adminOpenIds||[];
+  if(!users.length){$('usersBody').innerHTML='<tr><td colspan="7" class="empty">暂无用户配置</td></tr>';return;}
+  $('usersBody').innerHTML=users.map(u=>{
+    const isAdmin=ADMINS.includes(u.openId);
+    return `<tr>
+      <td><div class="nm">${esc(u.displayName||'(未命名)')}</div><div class="oid">${esc(u.openId)}</div></td>
+      <td>${esc(u.provider||'-')}</td>
+      <td>${esc(u.model||'-')}</td>
+      <td>${u.botName?`<span class="pill brand">${esc(u.botName)}</span>`:'-'}</td>
+      <td>${u.hasApiKey?'<span class="pill ok">已填</span>':'<span class="pill">未填</span>'}</td>
+      <td class="muted">${esc((u.updatedAt||'').slice(0,19).replace('T',' '))}</td>
+      <td><div class="actions">
+        <button class="btn sm" onclick="editUser('${esc(u.openId)}')">编辑</button>
+        <button class="btn sm danger" onclick="deleteUser('${esc(u.openId)}')">删除</button>
+      </div></td></tr>`;
+  }).join('');
+}
+async function loadAudit(){
+  const res=await api('GET','/api/admin/audit');
+  const events = (res.data && res.data.events) || [];
+  auditEventsAll = events.slice().sort((a,b)=>(a.ts>b.ts?-1:1));
+  auditPage = 0;
+  renderAuditTable('auditBody', 'auditPagerFoot', { full:true });
+}
+function auditRow(r,full){
+  const lvl=r.level==='error'?'err':r.level==='warn'?'warn':'';
+  const metaStr = r.meta ? JSON.stringify(r.meta, null, 2) : '';
+  const detailCell = full
+    ? (metaStr
+        ? truncCell(metaStr, { label: 'meta', max: 380, mono: true })
+        : '<span class="muted">-</span>')
+    : '';
+  const cols=`<td class="muted">${esc((r.ts||'').slice(0,19).replace('T',' '))}</td>
+    <td><span class="mono-sm" title="${esc(r.actor||'')}">${esc(r.actor||'-')}</span></td>
+    <td>${esc(r.action||'-')}</td>
+    <td>${r.target?truncCell(r.target,{label:'target',max:220,mono:true}):'<span class="muted">-</span>'}</td>
+    <td>${lvl?`<span class="pill ${lvl}">${esc(r.level)}</span>`:'<span class="pill">info</span>'}</td>`;
+  return '<tr>'+cols+(full?`<td>${detailCell}</td>`:'')+'</tr>';
+}
+
+// 表格单元截断：长内容显示省略号 + "…" 按钮，点击展开全文气泡
+// truncCell(html|string, { label, max, mono }) → inline HTML
+function truncCell(content, opts){
+  const o = opts || {};
+  const max = o.max || 200;
+  const isStr = typeof content === 'string';
+  const safe = isStr ? esc(content) : content;
+  const full = isStr ? esc(content) : content;
+  const lbl = o.label ? esc(o.label) : '';
+  return `<span class="trunc-cell" data-trunc="1" data-full="${full}"${lbl?` data-label="${lbl}"`:''}>
+      <span class="trunc-text" style="max-width:${max}px;">${safe}</span>
+      <button class="trunc-more" type="button" title="点击查看完整内容" aria-label="查看完整内容">…</button>
+    </span>`;
+}
+function _refreshTruncStates(root){
+  (root || document).querySelectorAll('.trunc-cell[data-trunc="1"]').forEach(cell=>{
+    const txt = cell.querySelector('.trunc-text');
+    if(!txt) return;
+    if (txt.scrollWidth > txt.clientWidth + 1) cell.classList.add('trunc-overflow');
+    else cell.classList.remove('trunc-overflow');
+  });
+}
+function _ensureTruncPop(){
+  let pop = document.getElementById('truncPop');
+  if(pop) return pop;
+  pop = document.createElement('div');
+  pop.className = 'trunc-pop';
+  pop.id = 'truncPop';
+  pop.innerHTML = '<div class="lbl" data-trunc-lbl></div><pre data-trunc-pre></pre>';
+  document.body.appendChild(pop);
+  return pop;
+}
+function _showTruncPop(cell){
+  const pop = _ensureTruncPop();
+  const full = cell.getAttribute('data-full') || '';
+  const lbl = cell.getAttribute('data-label') || '';
+  pop.querySelector('[data-trunc-lbl]').textContent = lbl;
+  pop.querySelector('[data-trunc-pre]').textContent = full;
+  pop.classList.add('show');
+  // 先置为可见，再用同步布局测量（rAF 后再定位更准）
+  const r = cell.getBoundingClientRect();
+  const popR = pop.getBoundingClientRect();
+  let top = window.scrollY + r.bottom + 6;
+  let left = window.scrollX + r.left;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (left + popR.width > vw - 12) left = Math.max(12, vw - popR.width - 12);
+  if (top + popR.height > window.scrollY + vh - 12) top = window.scrollY + r.top - popR.height - 6;
+  pop.style.top = Math.max(window.scrollY + 12, top) + 'px';
+  pop.style.left = Math.max(12, left) + 'px';
+  // 二次校正尺寸
+  requestAnimationFrame(()=>{
+    const pr2 = pop.getBoundingClientRect();
+    if (pr2.left + pr2.width > vw - 12) pop.style.left = Math.max(12, vw - pr2.width - 12) + 'px';
+  });
+}
+function _hideTruncPop(){ const p = document.getElementById('truncPop'); if(p) p.classList.remove('show'); }
+// 代理：点击 trunc-more 或 trunc-overflow 区域 → 展开气泡
+document.addEventListener('click', e=>{
+  const btn = e.target.closest('.trunc-more');
+  const cell = e.target.closest('.trunc-cell');
+  if(btn && cell){
+    e.stopPropagation();
+    _showTruncPop(cell);
+    return;
+  }
+  if(!e.target.closest('#truncPop')) _hideTruncPop();
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') _hideTruncPop(); });
+window.addEventListener('resize', ()=>{ _hideTruncPop(); _refreshTruncStates(document); });
+window.addEventListener('scroll', _hideTruncPop, true);
+
+window.editUser=async function(openId){
+  CURRENT=openId;
+  const res=await api('GET','/api/admin/config/'+encodeURIComponent(openId));
+  if(res.status!==200){toast('加载失败：'+(res.data.error||res.status));return;}
+  const c=res.data.config||{};
+  const opts=['openai','anthropic','ollama','custom','acplugin'];
+  const providerChoices=opts.map(p=>`<option value="${p}" ${c.provider===p?'selected':''}>${p}</option>`).join('');
+  const modelsText=Array.isArray(c.models)?c.models.join('\n'):'';
+  const chJson=c.customHeaders?JSON.stringify(c.customHeaders):'';
+  $('modalTitle').textContent='编辑：'+(c.displayName||openId);
+  $('modalBody').innerHTML=`
+    <label>显示名称</label><input id="f_displayName" value="${esc(c.displayName||'')}" maxlength="60"/>
+    <label>配置名（个人维护时展示）</label><input id="f_configName" value="${esc(c.configName||'')}" maxlength="60"/>
+    <label>Provider</label><select id="f_provider">${providerChoices}</select>
+    <label>Base URL</label><input id="f_baseUrl" value="${esc(c.baseUrl||'')}"/>
+    <label>API Key（留空=不修改；勾选下方可清除）</label><input id="f_apiKey" type="password" placeholder="sk-..." autocomplete="off"/>
+    <label style="font-weight:400;color:var(--muted)"><input type="checkbox" id="f_clearKey" style="width:auto;margin-right:6px;"/>清除已存 API Key</label>
+    <label>默认模型 + 模型列表（每行一个）</label>
+    <input id="f_model" placeholder="默认模型" value="${esc(c.model||'')}"/>
+    <textarea id="f_models" rows="3" placeholder="模型列表（每行一个）">${esc(modelsText)}</textarea>
+    <label>Chat 接口路径</label><input id="f_chatCompletionsPath" value="${esc(c.chatCompletionsPath||'')}"/>
+    <details><summary style="cursor:pointer;color:var(--muted);margin:10px 0 4px;">高级采样 / 请求控制</summary>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+        <div><label style="margin-top:0;">Temperature</label><input id="f_temperature" type="number" step="0.1" min="0" max="2" value="${c.temperature??0.7}"/></div>
+        <div><label style="margin-top:0;">Max Tokens</label><input id="f_maxTokens" type="number" step="1" min="1" value="${c.maxTokens??2048}"/></div>
+        <div><label style="margin-top:0;">Top P</label><input id="f_topP" type="number" step="0.05" min="0" max="1" value="${c.topP??1}"/></div>
+        <div><label style="margin-top:0;">Top K</label><input id="f_topK" type="number" step="1" min="1" value="${c.topK??''}"/></div>
+        <div><label style="margin-top:0;">Freq Penalty</label><input id="f_frequencyPenalty" type="number" step="0.1" min="-2" max="2" value="${c.frequencyPenalty??0}"/></div>
+        <div><label style="margin-top:0;">Pres Penalty</label><input id="f_presencePenalty" type="number" step="0.1" min="-2" max="2" value="${c.presencePenalty??0}"/></div>
+        <div><label style="margin-top:0;">超时（秒）</label><input id="f_timeout" type="number" step="1" min="1" max="600" value="${c.timeout??''}"/></div>
+        <div><label style="margin-top:0;">失败重试次数</label><input id="f_retries" type="number" step="1" min="0" max="5" value="${c.retries??''}"/></div>
+      </div>
+      <label style="margin-top:10px;">能力开关</label>
+      <label style="font-weight:400;display:inline-flex;gap:6px;align-items:center;margin-right:14px;"><input id="f_multimodal" type="checkbox" ${c.multimodal===true?'checked':''}/>支持多模态</label>
+      <label style="font-weight:400;display:inline-flex;gap:6px;align-items:center;"><input id="f_stream" type="checkbox" ${c.stream!==false?'checked':''}/>流式输出</label>
+      <label>自定义请求头（JSON）</label>
+      <textarea id="f_customHeaders" rows="2" spellcheck="false">${esc(chJson)}</textarea>
+    </details>
+    <label>助手名称 (Bot Name)</label><input id="f_botName" value="${esc(c.botName||'')}" maxlength="40"/>
+    <label>自定义指令 (System Prompt)</label><textarea id="f_systemPrompt" maxlength="4000">${esc(c.systemPrompt||'')}</textarea>
+    <div id="modalStatus" class="status"></div>`;
+  $('mask').classList.add('show');
+};
+window.deleteUser=async function(openId){
+  if(!confirm('确认删除用户 '+openId+' 的全部配置？此操作不可恢复。'))return;
+  const res=await api('DELETE','/api/admin/config/'+encodeURIComponent(openId));
+  if(res.status===200){toast('已删除');await loadUsers();}
+  else toast('删除失败：'+(res.data.error||res.status));
+};
+$('modalCancel').onclick=()=>$('mask').classList.remove('show');
+$('modalClose').onclick=()=>$('mask').classList.remove('show');
+$('mask').onclick=(e)=>{if(e.target===$('mask'))$('mask').classList.remove('show');};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('mask').classList.contains('show'))$('mask').classList.remove('show');});
+$('modalSave').onclick=async()=>{
+  const body={
+    displayName:$('f_displayName').value.trim(),
+    configName:$('f_configName').value.trim(),
+    provider:$('f_provider').value,
+    baseUrl:$('f_baseUrl').value.trim(),
+    model:$('f_model').value.trim(),
+    models:$('f_models').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    chatCompletionsPath:$('f_chatCompletionsPath').value.trim(),
+    temperature:Number($('f_temperature').value),
+    maxTokens:Number($('f_maxTokens').value),
+    topP:Number($('f_topP').value),
+    topK:$('f_topK').value===''?undefined:Number($('f_topK').value),
+    frequencyPenalty:Number($('f_frequencyPenalty').value),
+    presencePenalty:Number($('f_presencePenalty').value),
+    timeout:$('f_timeout').value===''?undefined:Number($('f_timeout').value),
+    retries:$('f_retries').value===''?undefined:Number($('f_retries').value),
+    multimodal:$('f_multimodal').checked,
+    stream:$('f_stream').checked,
+    botName:$('f_botName').value.trim(),
+    systemPrompt:$('f_systemPrompt').value,
+  };
+  const ch=$('f_customHeaders').value.trim();
+  if(ch){try{body.customHeaders=JSON.parse(ch);}catch(e){const st=$('modalStatus');st.className='status err';st.textContent='❌ 自定义请求头不是合法 JSON: '+e.message;return;}}
+  if(!body.models.length)delete body.models;
+  const key=$('f_apiKey').value;if(key)body.apiKey=key;if($('f_clearKey').checked)body.clearApiKey=true;
+  const res=await api('PUT','/api/admin/config/'+encodeURIComponent(CURRENT),body);
+  const st=$('modalStatus');
+  if(res.status===200){st.className='status ok';st.textContent='✅ 已保存';setTimeout(()=>{$('mask').classList.remove('show');loadUsers();loadDashboard();},600);}
+  else{st.className='status err';st.textContent='❌ '+(res.data.error||res.status);}
+};
+$('pushBtn').onclick=async()=>{
+  const body={provider:$('pushProvider').value,baseUrl:$('pushBaseUrl').value.trim(),model:$('pushModel').value.trim()};
+  if(!body.baseUrl||!body.model){$('pushResult').textContent='请填写 Base URL 与 Model';return;}
+  const k=$('pushApiKey').value.trim();if(k)body.apiKey=k;
+  const res=await api('POST','/api/admin/push',body);
+  if(res.status===200){
+    $('pushResult').textContent='✅ 已下发到 '+res.data.affected+' 位用户'+(res.data.skipped?('，跳过 '+res.data.skipped+' 位（配置非法）'):'');
+    $('pushApiKey').value='';
+    loadUsers();loadDashboard();
+  }else{
+    $('pushResult').textContent='❌ 下发失败：'+(res.data.error||res.status);
+  }
+};
+
+// ====================== 自动化 ======================
+let AUTO_LIST=[];
+let AUTO_EDITING=null;
+let AUTO_USERS=[];
+
+function describeCron(cron){
+  if(!cron)return '';
+  const p=cron.trim().split(/\s+/);
+  if(p.length!==5)return cron;
+  const [m,h,dom,_,dow]=p;
+  const hh=String(h).padStart(2,'0'),mm=String(m).padStart(2,'0');
+  if(dom!=='*')return `每月 ${dom} 日 ${hh}:${mm}`;
+  if(dow!=='*'){const n=['日','一','二','三','四','五','六'];return `每周${n[Number(dow)]||dow} ${hh}:${mm}`;}
+  return `每天 ${hh}:${mm}`;
+}
+function statusPill(s){
+  if(s==='ok')return '<span class="pill ok">成功</span>';
+  if(s==='err')return '<span class="pill err">失败</span>';
+  if(s==='running')return '<span class="pill warn">执行中</span>';
+  return '<span class="pill">未运行</span>';
+}
+function autoRow(a){
+  const desc=describeCron(a.cron)+(a.idleOnly?' · 闲时执行':'')+` · 最长 ${Number.isFinite(a.maxSteps)?a.maxSteps:10} 步`;
+  const lastRun=a.lastRunAt?`<span class="muted">最近 ${esc((new Date(a.lastRunAt).toISOString().slice(0,16).replace('T',' ')))}</span> ${statusPill(a.lastRunStatus||'')}`:'<span class="muted">尚未运行</span>';
+  const pushToText=(a.pushTo||[]).map(uid=>{
+    const u=AUTO_USERS.find(x=>x.openId===uid);
+    return u?`${esc(u.displayName||uid)}`:esc(uid);
+  }).join('、 ')||'<span class="muted">未设置</span>';
+  const enabled=a.enabled!==false;
+  const runs=(a.runs||[]).slice().reverse().slice(0,5).map(r=>{
+    const t=(new Date(r.ts).toISOString().slice(0,16).replace('T',' '));
+    return `<div class="run-row"><span class="muted">${t}</span> ${statusPill(r.status)} <span class="muted">${r.durationMs||0}ms</span>${r.error?` <span class="muted">${esc(String(r.error).slice(0,60))}</span>`:''}</div>`;
+  }).join('')||'<div class="muted" style="font-size:12px;margin-top:6px;">暂无执行记录</div>';
+  return `
+  <div class="auto-item" data-id="${esc(a.id)}">
+    <div class="auto-main">
+      <div class="auto-title">${esc(a.title)}</div>
+      <div class="auto-meta">
+        <span class="pill brand">${esc(desc)}</span>
+        <span class="muted">→ ${pushToText}</span>
+      </div>
+      ${lastRun}
+      <div class="runs">${runs}</div>
+    </div>
+    <div class="auto-actions">
+      <label class="switch" title="${enabled?'点击关闭':'点击启用'}">
+        <input type="checkbox" ${enabled?'checked':''} data-action="toggle"/>
+        <span class="slider"></span>
+      </label>
+      <button class="btn sm" data-action="run">运行</button>
+      <button class="btn sm ghost" data-action="edit">编辑</button>
+      <button class="btn sm danger" data-action="del">删除</button>
+    </div>
+  </div>`;
+}
+
+async function loadAutomation(){
+  const [u,res]=await Promise.all([api('GET','/api/admin/users'),api('GET','/api/admin/automations')]);
+  if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
+  AUTO_USERS=(u.data&&u.data.users)||[];
+  const list=res.data.automations||[];
+  AUTO_LIST=list;
+  if(!list.length){$('autoList').innerHTML='<div class="empty">暂无自动化。点击右上角「+ 新建自动化」创建第一条定时任务。</div>';return;}
+  $('autoList').innerHTML=list.map(autoRow).join('');
+  $('autoList').querySelectorAll('.auto-item').forEach(el=>{
+    const id=el.dataset.id;
+    el.querySelector('[data-action="toggle"]').onchange=(e)=>toggleAuto(id,e.target.checked);
+    el.querySelector('[data-action="run"]').onclick=()=>runAuto(id);
+    el.querySelector('[data-action="edit"]').onclick=()=>editAuto(id);
+    el.querySelector('[data-action="del"]').onclick=()=>deleteAuto(id);
+  });
+}
+
+async function toggleAuto(id,enabled){
+  const res=await api('PATCH','/api/admin/automations/'+encodeURIComponent(id),{enabled});
+  if(res.status===200){toast(enabled?'已启用':'已停用');loadAutomation();}
+  else toast('操作失败：'+(res.data.error||res.status));
+}
+async function runAuto(id){
+  const res=await api('POST','/api/admin/automations/'+encodeURIComponent(id)+'/run',{});
+  if(res.status===200){toast('已触发；执行日志稍后刷新可见');setTimeout(loadAutomation,2500);}
+  else toast('触发失败：'+(res.data.error||res.status));
+}
+async function deleteAuto(id){
+  if(!confirm('确认删除该自动化？'))return;
+  const res=await api('DELETE','/api/admin/automations/'+encodeURIComponent(id));
+  if(res.status===200){toast('已删除');loadAutomation();}
+  else toast('删除失败：'+(res.data.error||res.status));
+}
+
+function newAuto(){openAutoModal(null);}
+async function editAuto(id){
+  const a=AUTO_LIST.find(x=>x.id===id);if(!a)return;
+  openAutoModal(a);
+}
+function openAutoModal(a){
+  AUTO_EDITING=a?a.id:null;
+  $('autoModalTitle').textContent=a?'编辑自动化：'+a.title:'新建自动化';
+  let freq='daily',hour=9,minute=35,weeklyDay=1,monthlyDay=1;
+  if(a&&a.cron){const p=a.cron.trim().split(/\s+/);if(p.length===5){
+    minute=Number(p[0])||0;hour=Number(p[1])||0;
+    if(p[2]!=='*'){freq='monthly';monthlyDay=Number(p[2])||1;}
+    else if(p[4]!=='*'){freq='weekly';weeklyDay=Number(p[4])||1;}
+  }}
+  const userOptions=AUTO_USERS.map(u=>{
+    const checked=a&&(a.pushTo||[]).includes(u.openId);
+    return `<label class="user-pick"><input type="checkbox" value="${esc(u.openId)}" ${checked?'checked':''}/> <span>${esc(u.displayName||u.openId)}</span> <span class="muted" style="font-size:11px;">${esc(u.openId)}</span></label>`;
+  }).join('')||'<div class="muted">还没有任何配置过模型的用户；请先在「用户管理」让他们完成配置。</div>';
+  $('autoModalBody').innerHTML=`
+    <label>标题 <span class="req">*</span></label>
+    <input id="a_title" value="${esc((a&&a.title)||'')}" maxlength="80" placeholder="例如：每日工作简报"/>
+    <label>描述 / 提示词 <span class="req">*</span></label>
+    <textarea id="a_desc" maxlength="8000" placeholder="例如：综合上一个工作日的飞书消息/日程/纪要/待办，梳理完成或推进的事项，特别标注未处理的待回复事项…">${esc((a&&a.description)||'')}</textarea>
+    <div class="row">
+      <div><label>频率</label>
+        <select id="a_freq">
+          <option value="daily" ${freq==='daily'?'selected':''}>每天</option>
+          <option value="weekly" ${freq==='weekly'?'selected':''}>每周</option>
+          <option value="monthly" ${freq==='monthly'?'selected':''}>每月</option>
+        </select>
+      </div>
+      <div id="a_weekday_wrap" style="display:${freq==='weekly'?'block':'none'};"><label>星期</label>
+        <select id="a_weekday">
+          ${['日','一','二','三','四','五','六'].map((n,i)=>`<option value="${i}" ${weeklyDay===i?'selected':''}>周${n}</option>`).join('')}
+        </select>
+      </div>
+      <div id="a_monthday_wrap" style="display:${freq==='monthly'?'block':'none'};"><label>日期</label>
+        <input id="a_monthday" type="number" min="1" max="31" value="${monthlyDay}"/>
+      </div>
+      <div style="max-width:140px;"><label>小时</label><input id="a_hour" type="number" min="0" max="23" value="${hour}"/></div>
+      <div style="max-width:140px;"><label>分钟</label><input id="a_minute" type="number" min="0" max="59" value="${minute}"/></div>
+      <div style="max-width:160px;"><label>最大步数 <span class="hint" style="font-weight:400;">（1-50）</span></label><input id="a_maxSteps" type="number" min="1" max="50" value="${esc((a&&a.maxSteps)||10)}"/></div>
+    </div>
+    <label style="font-weight:400;color:var(--text-2);margin-top:8px;">
+      <input type="checkbox" id="a_idle" ${a&&a.idleOnly?'checked':''} style="width:auto;margin-right:6px;"/>
+      闲时执行（00:00-06:00）：开启后任务在空闲窗口执行，结果照常推送
+    </label>
+    <label>推送给 <span class="req">*</span> <span class="muted" style="font-weight:400;">（首个用于调模型，其余收推送）</span></label>
+    <div class="user-pick-list">${userOptions}</div>
+    <div class="hint">预览 cron：<code id="a_cron_prev"></code></div>
+    <div id="autoModalStatus" class="status"></div>`;
+  $('autoMask').classList.add('show');
+  const refreshCron=()=>{
+    const f=$('a_freq').value;
+    $('a_weekday_wrap').style.display=f==='weekly'?'block':'none';
+    $('a_monthday_wrap').style.display=f==='monthly'?'block':'none';
+    const h=Number($('a_hour').value)||0, m=Number($('a_minute').value)||0;
+    let cron;
+    if(f==='weekly')cron=`${m} ${h} * * ${$('a_weekday').value}`;
+    else if(f==='monthly')cron=`${m} ${h} ${Number($('a_monthday').value)||1} * *`;
+    else cron=`${m} ${h} * * *`;
+    $('a_cron_prev').textContent=cron;
+  };
+  ['a_freq','a_weekday','a_monthday','a_hour','a_minute'].forEach(id=>$(id).oninput=refreshCron);
+  refreshCron();
+}
+
+$('autoNewBtn').onclick=()=>newAuto();
+$('autoModalClose').onclick=()=>$('autoMask').classList.remove('show');
+$('autoModalCancel').onclick=()=>$('autoMask').classList.remove('show');
+$('autoMask').onclick=(e)=>{if(e.target===$('autoMask'))$('autoMask').classList.remove('show');};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('autoMask').classList.contains('show'))$('autoMask').classList.remove('show');});
+
+// ====================== 使用统计 ======================
+const STATS_TREND_PAGE_SIZE=5;
+let statsTrendData=[];      // 最新日期在最前
+let statsTrendPage=0;       // 0-based
+function fmtNum(n){
+  if(!Number.isFinite(n))return '–';
+  if(n>=10000)return Math.round(n/100)/10+'k';
+  return n.toLocaleString('zh-CN');
+}
+function trendBar(value,max){
+  const pct=max>0?Math.max(2,Math.round((value/max)*100)):0;
+  return `<div class="trend-bar"><span class="trend-bar-fill" style="width:${pct}%"></span><span class="trend-bar-label">${fmtNum(value)}</span></div>`;
+}
+function progressCell(pct){
+  return `<div class="share-bar"><span class="share-fill" style="width:${Math.min(100,pct)}%"></span><span class="share-label">${pct}%</span></div>`;
+}
+function renderStatsTrend(){
+  const body=$('statsTrendBody');
+  const pager=$('statsTrendPager');
+  if(!statsTrendData.length){
+    body.innerHTML='<tr><td colspan="6" class="empty">暂无趋势数据</td></tr>';
+    pager.innerHTML='';
+    return;
+  }
+  const maxDayTotal=statsTrendData.reduce((a,b)=>Math.max(a,b.totalTokens),0);
+  const totalPages=Math.max(1,Math.ceil(statsTrendData.length/STATS_TREND_PAGE_SIZE));
+  if(statsTrendPage>=totalPages)statsTrendPage=totalPages-1;
+  if(statsTrendPage<0)statsTrendPage=0;
+  const start=statsTrendPage*STATS_TREND_PAGE_SIZE;
+  const slice=statsTrendData.slice(start,start+STATS_TREND_PAGE_SIZE);
+  body.innerHTML=slice.map(t=>`<tr>
+    <td>${esc(t.date)}</td>
+    <td>${fmtNum(t.requests)}</td>
+    <td>${trendBar(t.totalTokens,maxDayTotal)}</td>
+    <td>${fmtNum(t.inputTokens)}</td>
+    <td>${fmtNum(t.outputTokens)}</td>
+    <td><strong>${fmtNum(t.totalTokens)}</strong></td>
+  </tr>`).join('');
+  pager.innerHTML=`
+    <button class="btn sm ghost" data-trend-prev ${statsTrendPage===0?'disabled':''}>‹ 上一页</button>
+    <span class="muted" style="margin:0 10px;">第 ${statsTrendPage+1} / ${totalPages} 页 · 共 ${statsTrendData.length} 天</span>
+    <button class="btn sm ghost" data-trend-next ${statsTrendPage>=totalPages-1?'disabled':''}>下一页 ›</button>`;
+  pager.querySelector('[data-trend-prev]').onclick=()=>{ statsTrendPage--; renderStatsTrend(); };
+  pager.querySelector('[data-trend-next]').onclick=()=>{ statsTrendPage++; renderStatsTrend(); };
+}
+async function loadStats(){
+  const range=$('statsRange').value;
+  const res=await api('GET','/api/admin/usage?range='+encodeURIComponent(range));
+  if(res.status!==200){
+    $('statsSummary').innerHTML='<div class="empty">加载失败：'+(res.data&&res.data.error||res.status)+'</div>';
+    return;
+  }
+  const d=res.data||{};
+  const s=d.summary||{};
+  $('statsSummary').innerHTML=[
+    ['总请求数',fmtNum(s.totalRequests),'brand'],
+    ['总 Token',fmtNum(s.totalTokens),'brand'],
+    ['输入 Token',fmtNum(s.inputTokens),'ok'],
+    ['输出 Token',fmtNum(s.outputTokens),'warn'],
+    ['使用模型数',s.modelsUsed,'neutral'],
+    ['活跃用户数',s.activeUsers,'neutral'],
+  ].map(([l,n,cls])=>`<div class="stat"><div class="n ${cls}">${n}</div><div class="l">${l}</div></div>`).join('');
+  const byModel=d.byModel||[];
+  const maxModelTotal=byModel.reduce((a,b)=>Math.max(a,b.totalTokens),0);
+  $('statsModelBody').innerHTML=byModel.length?byModel.map(m=>{
+    const displayName=m.model==='default'?`${m.provider} (默认)`:`${m.model}`;
+    return `<tr>
+      <td>${m.rank}</td>
+      <td><strong>${esc(displayName)}</strong> <span class="muted" style="font-size:11px;">${esc(m.provider)}</span></td>
+      <td>${fmtNum(m.requests)}</td>
+      <td>${fmtNum(m.inputTokens)}</td>
+      <td>${fmtNum(m.outputTokens)}</td>
+      <td><strong>${fmtNum(m.totalTokens)}</strong></td>
+      <td>${progressCell(m.share)}</td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="7" class="empty">近 '+d.rangeDays+' 天暂无模型调用记录</td></tr>';
+  // 趋势：按日期倒序（最新在最上）、每页 5 行；分页由 #statsTrendPager 控制
+  const rawTrend=d.trend||[];
+  statsTrendData = rawTrend.slice().reverse();
+  statsTrendPage = 0;
+  renderStatsTrend();
+  const users=d.byUser||[];
+  $('statsUserBody').innerHTML=users.length?users.map(u=>`<tr>
+    <td><strong>${esc(u.name||u.openId)}</strong></td>
+    <td><code style="font-size:11px;">${esc(u.openId)}</code></td>
+    <td>${fmtNum(u.requests)}</td>
+    <td>${fmtNum(u.inputTokens)}</td>
+    <td>${fmtNum(u.outputTokens)}</td>
+    <td><strong>${fmtNum(u.totalTokens)}</strong></td>
+  </tr>`).join(''):'<tr><td colspan="6" class="empty">近 '+d.rangeDays+' 天暂无用户调用</td></tr>';
+  $('statsAsOf').textContent='数据截至 '+new Date(d.asOf||Date.now()).toISOString().slice(0,19).replace('T',' ');
+}
+$('statsRefreshBtn').onclick=()=>loadStats();
+$('statsRange').onchange=()=>loadStats();
+$('autoModalSave').onclick=async()=>{
+  const title=$('a_title').value.trim();
+  const desc=$('a_desc').value;
+  const freq=$('a_freq').value;
+  const hour=Number($('a_hour').value)||0, minute=Number($('a_minute').value)||0;
+  let cron;
+  if(freq==='weekly')cron=`${minute} ${hour} * * ${$('a_weekday').value}`;
+  else if(freq==='monthly')cron=`${minute} ${hour} ${Number($('a_monthday').value)||1} * *`;
+  else cron=`${minute} ${hour} * * *`;
+  const idleOnly=$('a_idle').checked;
+  const pushTo=Array.from($('autoModalBody').querySelectorAll('.user-pick input:checked')).map(i=>i.value);
+  const maxStepsRaw=Number($('a_maxSteps').value);
+  const maxSteps=Number.isFinite(maxStepsRaw)&&maxStepsRaw>0?Math.min(50,Math.floor(maxStepsRaw)):10;
+  const st=$('autoModalStatus');
+  if(!title){st.className='status err';st.textContent='请填写标题';toast('请填写标题');return;}
+  if(!desc.trim()){st.className='status err';st.textContent='请填写描述/提示词';toast('请填写描述/提示词');return;}
+  if(!pushTo.length){st.className='status err';st.textContent='请至少选择一个推送目标';toast('请至少选择一个推送目标');return;}
+  const body={title,description:desc,cron,idleOnly,pushTo,maxSteps};
+  const url=AUTO_EDITING?('/api/admin/automations/'+encodeURIComponent(AUTO_EDITING)):'/api/admin/automations';
+  const method=AUTO_EDITING?'PATCH':'POST';
+  const saveBtn=$('autoModalSave');
+  saveBtn.disabled=true;saveBtn.textContent='保存中…';
+  try{
+    const res=await api(method,url,body);
+    if(res.status===200){
+      st.className='status ok';st.textContent='✅ 已保存';
+      toast('已保存');
+      setTimeout(()=>{$('autoMask').classList.remove('show');loadAutomation();},600);
+    }else{
+      const err=res.data&&res.data.error?res.data.error:('HTTP '+res.status);
+      st.className='status err';st.textContent='❌ '+esc(err);
+      toast('保存失败：'+err);
+    }
+  }catch(e){
+    st.className='status err';st.textContent='❌ '+esc(e&&e.message||String(e));
+    toast('保存异常：'+(e&&e.message||e));
+    console.error('[autoSave] error',e);
+  }finally{
+    saveBtn.disabled=false;saveBtn.textContent='保存';
+  }
+};
+
+// ====================== 启动 ======================
+(async()=>{
+  const me=await api('GET','/api/me');
+  if(me.status!==200){location.href='/login';return;}
+  const d=me.data;
+  $('sbName').textContent=d.name||'未命名用户';
+  $('sbRole').textContent=d.role==='admin'?'管理员':'成员';
+  if(d.avatar)$('sbAvatar').src=d.avatar;
+  if(d.role==='admin')document.body.classList.add('is-admin');
+  $('sbLogout').onclick=()=>location.href='/logout';
+  // 默认显示：URL 决定默认 view
+  switchView(DEFAULT_VIEW);
+  // 配置 + admin 数据加载
+  await loadConfig();
+  me_name=d.name||'我';
+  if(d.role==='admin'){
+    await loadDashboard();
+    await loadUsers();
+    await loadAudit();
+    await loadAutomation();
+    await loadStats();
+  }
+})();
+</script>
+</body>
+</html>

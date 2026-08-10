@@ -9,13 +9,21 @@ export class OpenAICompatibleProvider extends BaseProvider {
   }
 
   async chat(messages) {
+    const mp = this._modelParams();
     const body = {
       model: this.cfg.model,
       messages,
-      stream: false,
-      ...this._modelParams(),
+      // 默认同步非流式（_request 已支持 SSE 解析，stream:true 也能解析）。
+      // 这里必须显式传一个 boolean，否则某些上游只接收 stream:false 的请求体。
+      stream: mp.stream === true,
     };
-    if (this.cfg.maxTokens !== undefined) body.max_tokens = this.cfg.maxTokens;
+    // base._modelParams() 返回 camelCase 字段；OpenAI 兼容协议线缆是 snake_case
+    if (mp.temperature !== undefined) body.temperature = mp.temperature;
+    if (mp.maxTokens !== undefined) body.max_tokens = mp.maxTokens;
+    if (mp.topP !== undefined) body.top_p = mp.topP;
+    if (mp.topK !== undefined) body.top_k = mp.topK;
+    if (mp.frequencyPenalty !== undefined) body.frequency_penalty = mp.frequencyPenalty;
+    if (mp.presencePenalty !== undefined) body.presence_penalty = mp.presencePenalty;
 
     const data = await this._request(this.chatCompletionsPath, {
       headers: { authorization: `Bearer ${this.cfg.apiKey || ''}` },

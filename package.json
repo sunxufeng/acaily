@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "description": "Acaily — 飞书 AI 助手：每位飞书用户自配模型 Provider 的模型网关",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server/app.js",
     "test": "node --test"
   },
   "dependencies": {
-    "@larksuiteoapi/node-sdk": "^1.72.0"
+    "@larksuiteoapi/node-sdk": "^1.72.0",
+    "croner": "^10.0.1"
   }
 }

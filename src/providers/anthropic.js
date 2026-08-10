@@ -9,14 +9,18 @@ export class AnthropicProvider extends BaseProvider {
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, content: m.content }));
 
+    const mp = this._modelParams();
     const body = {
       model: this.cfg.model,
       messages: conv,
-      stream: false,
-      ...this._modelParams(),
+      stream: mp.stream === true,
     };
     if (system) body.system = system;
-    if (this.cfg.maxTokens !== undefined) body.max_tokens = this.cfg.maxTokens;
+    // Anthropic 仅支持 temperature / top_p / top_k；其余字段忽略
+    if (mp.temperature !== undefined) body.temperature = mp.temperature;
+    if (mp.maxTokens !== undefined) body.max_tokens = mp.maxTokens;
+    if (mp.topP !== undefined) body.top_p = mp.topP;
+    if (mp.topK !== undefined) body.top_k = mp.topK;
 
     const data = await this._request('/v1/messages', {
       headers: {

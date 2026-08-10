@@ -19,6 +19,7 @@ test('routeChat 按 open_id 路由并返回模型内容（含信封解密 API Ke
   global.fetch = async () => ({
     ok: true,
     status: 200,
+    headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'application/json' : null) },
     text: async () => JSON.stringify({ choices: [{ message: { content: '路由成功' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }),
   });
   const r = await routeChat('ou_userA', [{ role: 'user', content: 'hi' }]);
@@ -41,6 +42,7 @@ test('testConnection：成功与失败两种路径', async () => {
   global.fetch = async () => ({
     ok: true,
     status: 200,
+    headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'application/json' : null) },
     text: async () => JSON.stringify({ choices: [{ message: { content: 'pong' } }], usage: {} }),
   });
   let r = await testConnection('ou_userB');
@@ -50,6 +52,7 @@ test('testConnection：成功与失败两种路径', async () => {
   global.fetch = async () => ({
     ok: false,
     status: 500,
+    headers: { get: () => 'application/json' },
     text: async () => JSON.stringify({ error: { message: 'boom' } }),
   });
   r = await testConnection('ou_userB');
@@ -62,7 +65,7 @@ test('下游 4xx（非 429）不重试，直接抛出带 status 的错误', asyn
   let calls = 0;
   global.fetch = async () => {
     calls++;
-    return { ok: false, status: 401, text: async () => JSON.stringify({ error: { message: 'unauthorized' } }) };
+    return { ok: false, status: 401, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ error: { message: 'unauthorized' } }) };
   };
   await assert.rejects(
     () => routeChat('ou_userC', [{ role: 'user', content: 'hi' }]),

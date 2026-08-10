@@ -59,18 +59,32 @@ export class BaseProvider {
     return typeof res.content === 'string' && res.content.length > 0;
   }
 
-  // 统一请求封装：超时 + JSON + 错误包装
-  async _request(path, { method = 'POST', headers = {}, body } = {}) {
+  // 统一请求封装：超时 + JSON + SSE 流式 + 错误包装
+  // 当上游返回 text/event-stream（SSE）时，自动按 data: {...} 增量解析，
+  // 累积 delta.content 为完整 content，并在最后一个 chunk 里读 usage。
+  // 这样不论用户提供 stream=true 还是 false，OpenAI 兼容 / Claude 兼容协议都能 work。
+  async _request(path, { method = 'POST', headers = {}, body, timeoutMs } = {}) {
     const url = this._url(path);
+    const ms = timeoutMs || (Number(this.cfg.timeout) > 0 ? Number(this.cfg.timeout) * 1000 : DEFAULT_TIMEOUT_MS);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), ms);
+    // 合并请求头：自定义头 < 自定义调用方头 < API Key 类头
+    const userHeaders = (this.cfg.customHeaders && typeof this.cfg.customHeaders === 'object')
+      ? { ...this.cfg.customHeaders }
+      : {};
     try {
       const res = await fetch(url, {
         method,
-        headers: { 'content-type': 'application/json', ...headers },
+        headers: { 'content-type': 'application/json', ...userHeaders, ...headers },
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
+      const ctype = res.headers.get('content-type') || '';
+      // 上游判定为 SSE（流式响应）：逐 chunk 解析并累计
+      if (res.ok && /text\/event-stream/i.test(ctype)) {
+        return await parseSseResponse(res, url, this.type);
+      }
+      // 否则按 JSON/text 处理
       const text = await res.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { /* 非 JSON 响应 */ }
@@ -86,7 +100,7 @@ export class BaseProvider {
     } catch (err) {
       if (err instanceof ProviderError) throw err;
       if (err.name === 'AbortError') {
-        throw new ProviderError(`${this.type} 请求超时（>${DEFAULT_TIMEOUT_MS}ms）`, { provider: this.type, cause: err });
+        throw new ProviderError(`${this.type} 请求超时（>${ms}ms）`, { provider: this.type, cause: err });
       }
       throw new ProviderError(`${this.type} 网络错误: ${err.message}`, { provider: this.type, cause: err });
     } finally {
@@ -105,8 +119,79 @@ export class BaseProvider {
 
   _modelParams() {
     const p = {};
-    if (this.cfg.temperature !== undefined) p.temperature = this.cfg.temperature;
-    if (this.cfg.maxTokens !== undefined) p.maxTokens = this.cfg.maxTokens;
+    const num = (k, v) => (v === undefined || v === null || v === '' ? undefined : Number(v));
+    const t = num('temperature', this.cfg.temperature);
+    if (t !== undefined && !Number.isNaN(t)) p.temperature = t;
+    const mx = num('maxTokens', this.cfg.maxTokens);
+    if (mx !== undefined && !Number.isNaN(mx)) p.maxTokens = mx;
+    const tp = num('topP', this.cfg.topP);
+    if (tp !== undefined && !Number.isNaN(tp)) p.topP = tp;
+    const tk = num('topK', this.cfg.topK);
+    if (tk !== undefined && !Number.isNaN(tk)) p.topK = tk;
+    const fp = num('frequencyPenalty', this.cfg.frequencyPenalty);
+    if (fp !== undefined && !Number.isNaN(fp)) p.frequencyPenalty = fp;
+    const pp = num('presencePenalty', this.cfg.presencePenalty);
+    if (pp !== undefined && !Number.isNaN(pp)) p.presencePenalty = pp;
+    // 流式：默认同步非流式（更兼容各种 OpenAI 兼容上游；用户显式 true 才走 SSE）
+    if (this.cfg.stream === true) p.stream = true;
     return p;
+  }
+}
+
+// 解析 OpenAI 兼容协议的 Server-Sent Events（SSE）响应：
+// 把每行 `data: {...}` 视作增量，choices[0].delta.content 累加成完整回复；
+// usage 通常在最后一个 chunk（choices:[] + usage 非空）出现，结束标记为 `data: [DONE]`。
+// 返回结构与普通 JSON 一致：{ choices:[{message:{role,content}}], usage }，
+// 这样所有 provider（openai/anthropic/custom/acplugin）透明复用，不再被「流式返回空内容」卡死。
+export async function parseSseResponse(res /* , attemptedUrl, providerType */) {
+  const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+  if (!reader) {
+    const text = await res.text();
+    return { choices: [{ message: { role: 'assistant', content: text } }], usage: {} };
+  }
+  const decoder = new TextDecoder('utf-8');
+  let buf = '';
+  let full = '';
+  let lastUsage = null;
+  let finishReason = null;
+  let role = 'assistant';
+  const flush = () => ({
+    choices: [{ message: { role, content: full }, finish_reason: finishReason || 'stop' }],
+    usage: lastUsage || {},
+  });
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) return flush();
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const evt = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      let dataLine = null;
+      for (const line of evt.split('\n')) {
+        if (line.startsWith('data:')) {
+          const payload = line.slice(5).trim();
+          if (payload === '[DONE]') { dataLine = '[DONE]'; break; }
+          if (dataLine == null) dataLine = payload;
+        }
+      }
+      if (dataLine == null) continue;
+      if (dataLine === '[DONE]') return flush();
+      try {
+        const obj = JSON.parse(dataLine);
+        const ch0 = obj.choices && obj.choices[0];
+        if (ch0) {
+          const delta = ch0.delta || {};
+          if (delta.role) role = delta.role;
+          if (delta.content) full += delta.content;
+          if (ch0.finish_reason) finishReason = ch0.finish_reason;
+        }
+        if (obj.usage && (obj.usage.prompt_tokens != null || obj.usage.completion_tokens != null)) {
+          lastUsage = obj.usage;
+        }
+      } catch {
+        // 跳过非 JSON 行（部分代理会插入心跳 / 注释）
+      }
+    }
   }
 }

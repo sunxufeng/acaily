@@ -1,13 +1,14 @@
 import { getConfig, decryptApiKey } from '../config/userConfigStore.js';
 import { getProvider, ProviderError } from '../providers/index.js';
 import { TokenBucket, RateLimitError } from './rateLimiter.js';
+import { track } from '../admin/stats.js';
 
 const limiter = new TokenBucket({
   capacity: Number(process.env.ACAILY_RATE_CAPACITY || 20),
   refillPerSec: Number(process.env.ACAILY_RATE_REFILL || 2),
 });
 
-const MAX_RETRIES = Number(process.env.ACAILY_MAX_RETRIES || 2);
+const DEFAULT_MAX_RETRIES = Number(process.env.ACAILY_MAX_RETRIES || 2);
 
 function backoffMs(attempt) {
   return 200 * 2 ** (attempt - 1); // 200, 400, 800...
@@ -36,16 +37,31 @@ export async function routeChat(openId, messages) {
   // 用户配置字段名为 provider，适配器注册表按 type 索引，这里做一次映射
   const provider = getProvider({ ...cfg, type: cfg.provider, apiKey });
 
+  // 单用户可单独配置重试次数；缺失则走系统默认（环境变量或 2）
+  const maxRetries = Number.isInteger(cfg.retries) ? cfg.retries : DEFAULT_MAX_RETRIES;
+
   let lastErr;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       if (attempt > 0) await sleep(backoffMs(attempt));
       const res = await provider.chat(messages);
+      // 单点统计：所有成功 chat 调用都会被记录，无论来自 /chat、/agent/chat 还是自动化 runner
+      try {
+        await track({
+          openId,
+          name: cfg.displayName || '',
+          provider: cfg.provider,
+          model: cfg.model,
+          promptTokens: res.usage?.promptTokens || 0,
+          completionTokens: res.usage?.completionTokens || 0,
+        });
+      } catch { /* 统计失败不影响主流程 */ }
       return {
         content: res.content,
         usage: res.usage,
         provider: cfg.provider,
         model: cfg.model,
+        userName: cfg.displayName || '',
         attempt: attempt + 1,
       };
     } catch (err) {

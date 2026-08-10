@@ -1,12 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
 import { record, query } from '../src/audit/auditLog.js';
-import { track, snapshot, reset } from '../src/admin/stats.js';
 import { isAdmin } from '../src/auth/rbac.js';
 import { selfAssess, COMPLIANCE_CHECKLIST } from '../src/compliance/checklist.js';
 
 const AUDIT = '/tmp/acaily-test-audit.json';
 process.env.ACAILY_AUDIT_STORE = AUDIT;
+process.env.ACAILY_USAGE_LOG = '/tmp/acaily-test-usage-admin.jsonl';
+rmSync(process.env.ACAILY_USAGE_LOG, { force: true });
+// 动态 import（在设置 ACAILY_USAGE_LOG 之后），否则 ESM 提升会让 stats.js 读到默认路径
+const { track, snapshot, reset } = await import('../src/admin/stats.js');
 
 test('auditLog: 记录后按 actor/action 查询', async () => {
   await record({ actor: 'ou_a', action: 'config.update', target: 'model-config', meta: { provider: 'openai' } });

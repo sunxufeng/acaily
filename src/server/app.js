@@ -7,7 +7,7 @@ import { createSession, appendMessage, getHistory, listSessions } from '../confi
 import { Retriever } from '../rag/retriever.js';
 import { EmbeddingService } from '../rag/embeddings.js';
 import { record, query as queryAudit } from '../audit/auditLog.js';
-import { track, snapshot as statsSnapshot } from '../admin/stats.js';
+import { track, snapshot as statsSnapshot, aggregateUsage, ensureLoaded } from '../admin/stats.js';
 import { isAdmin, isAdminOpenId, ensureAdmin, listAdmins } from '../auth/rbac.js';
 import {
   parseSession,
@@ -26,9 +26,20 @@ import { parseEvent, verifySignature, extractMessage } from '../feishu/event.js'
 import { sendText, sendMarkdown } from '../feishu/client.js';
 import { startFeishuConnection, getFeishuWsStatus } from '../feishu/connection.js';
 import { extractFeishuDocLinks, isReadableCloudDoc, fetchFeishuDoc } from '../feishu/docRead.js';
-import { truncateExtracted } from '../feishu/fileExtract.js';
+import { extractText, truncateExtracted } from '../feishu/fileExtract.js';
+import { readRawBody, parseMultipart } from './multipart.js';
 import { webTools } from '../tools/web.js';
 import { feishuChatTools } from '../tools/feishuChat.js';
+import {
+  listAutomations,
+  getAutomation,
+  createAutomation,
+  updateAutomation,
+  deleteAutomation,
+  appendRun as appendAutomationRun,
+} from '../automation/store.js';
+import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } from '../automation/scheduler.js';
+import { initRunner } from '../automation/runner.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
 const tools = [
@@ -42,6 +53,10 @@ const tools = [
 ];
 
 const agent = new AgentRuntime({ tools });
+
+// 自动化（T7.2）runner 依赖注入：让 runner 能复用 app.js 已建好的 agent 单例与函数，
+// 避免重复构造或循环引用。
+initRunner({ agent });
 
 // 知识库 RAG（T4）：共享检索器实例
 const retriever = new Retriever(new EmbeddingService());
@@ -68,6 +83,8 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+
+// 读取原始字节 + multipart 解析已抽到 ./multipart.js（这里仅保留 readBody）。
 
 async function handleChat(openId, messages) {
   return routeChat(openId, messages);
@@ -309,7 +326,7 @@ const server = createServer(async (req, res) => {
 
     // 公开：健康检查（监控/探活）
     if (method === 'GET' && pathname === '/health') {
-      return sendJson(res, 200, { ok: true, ts: Date.now(), service: 'acaily', feishuWs: getFeishuWsStatus() });
+      return sendJson(res, 200, { ok: true, ts: Date.now(), service: 'acaily', feishuWs: getFeishuWsStatus(), automationJobs: activeJobCount() });
     }
 
     // 登录页（公开）
@@ -365,14 +382,15 @@ const server = createServer(async (req, res) => {
     // 个人设置页（需登录）
     if (method === 'GET' && (pathname === '/' || pathname === '/settings')) {
       if (!requireSessionHtml(req, res)) return;
-      return serveHtml(res, 'settings.html');
+      return serveHtml(res, 'app.html');
     }
-    // 管理后台（需登录 + 管理员）
+    // 管理后台（需登录 + 管理员） —— 与 /settings 共用同一个 SPA shell，
+    // 由 body 上的 is-admin class 控制 admin 入口可见性。
     if (method === 'GET' && pathname === '/admin') {
       const s = requireSessionHtml(req, res);
       if (!s) return;
-      if (s.role !== 'admin') return sendJson(res, 403, { error: '需要管理员权限' });
-      return serveHtml(res, 'admin.html');
+      if (s.role !== 'admin') { res.writeHead(302, { 'location': '/settings' }); return res.end(); }
+      return serveHtml(res, 'app.html');
     }
 
     // 公开：飞书事件回调（签名校验内置于 handleFeishuEvent）
@@ -428,14 +446,67 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, r);
     }
 
+    // 网页附件上传：表单字段 file（任意类型，图片走 base64 dataUrl，文档走文本抽取）
+    if (method === 'POST' && pathname === '/api/upload') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const ct = (req.headers['content-type'] || '').toLowerCase();
+      // 提取 boundary 时仅匹配到第一个 ';'（部分代理/客户端会在 boundary 后追加 charset 等参数）
+      const m = ct.match(/^multipart\/form-data;\s*boundary=([^;\r\n]+)/);
+      if (!m) return sendJson(res, 400, { error: '需要 multipart/form-data（缺少 boundary）' });
+      const boundary = m[1].trim().replace(/^"(.*)"$/, '$1');
+      try {
+        const buf = await readRawBody(req, 25 * 1024 * 1024);
+        const parts = parseMultipart(buf, boundary);
+        const filePart = parts.find((p) => p.name === 'file');
+        if (!filePart) {
+          const seen = parts.map((p) => p.name).filter(Boolean).join(',') || '(无字段)';
+          return sendJson(res, 400, {
+            error: '缺少 file 字段（解析到字段：' + seen + '；body=' + buf.length + 'B；boundary="' + boundary + '"）',
+          });
+        }
+        const fileName = filePart.filename || 'upload';
+        const mime = (filePart.contentType || '').toLowerCase();
+        if (mime.startsWith('image/')) {
+          if (filePart.data.length > 10 * 1024 * 1024) {
+            return sendJson(res, 413, { error: '图片超过 10MB 上限' });
+          }
+          const dataUrl = 'data:' + (mime || 'image/png') + ';base64,' + filePart.data.toString('base64');
+          return sendJson(res, 200, { kind: 'image', name: fileName, mime: mime, dataUrl });
+        }
+        // 文档类：走 fileExtract 抽文本
+        const ext = (fileName.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+        const allowedDocExt = new Set(['.txt', '.md', '.csv', '.json', '.xml', '.html', '.htm', '.js', '.ts', '.py', '.java', '.go', '.rs', '.sh', '.sql', '.yml', '.yaml', '.log', '.docx', '.docm', '.xlsx', '.xlsm', '.pptx', '.pptm', '.pdf']);
+        if (!allowedDocExt.has(ext)) {
+          return sendJson(res, 400, { error: '不支持的文件类型：' + (ext || '(无扩展名)') });
+        }
+        const result = extractText(filePart.data, fileName, mime);
+        if (result.unsupported) {
+          return sendJson(res, 400, { error: result.reason || '此文件类型暂不支持抽取文本' });
+        }
+        const tr = truncateExtracted(result.text);
+        const fileObj = { name: fileName, type: mime || ext, text: tr.text, truncated: !!tr.truncated };
+        return sendJson(res, 200, { kind: 'file', file: fileObj });
+      } catch (e) {
+        return sendJson(res, 400, { error: '上传解析失败：' + e.message });
+      }
+    }
+
     // 网页对话（自服务，open_id 取会话）
     if (method === 'POST' && pathname === '/agent/chat') {
       const s = requireSessionApi(req, res);
       if (!s) return;
-      const { text, history, sessionId } = await readBody(req);
-      if (!text) return sendJson(res, 400, { error: 'text 必填' });
+      const body = await readBody(req);
+      let { text, history, sessionId, image, file } = body || {};
+      if (!text && !image && !file) return sendJson(res, 400, { error: 'text / image / file 至少给一项' });
       try {
-        const r = await handleAgent(s.openId, text, history, sessionId);
+        // 文档附件：把抽取出的正文拼到提示词里，再交给 agent
+        let promptText = text || '';
+        let chatImage = image || null;
+        if (file && file.text) {
+          promptText = buildFilePrompt(file, promptText);
+        }
+        const r = await handleAgent(s.openId, promptText, history, sessionId, chatImage);
         return sendJson(res, 200, r);
       } catch (e) {
         return sendJson(res, 502, { error: e.message });
@@ -450,7 +521,6 @@ const server = createServer(async (req, res) => {
         const r = await handleChat(s.openId, messages);
         await record({ actor: s.openId, action: 'chat.call', target: 'model-gateway', meta: { provider: r.provider, model: r.model, attempt: r.attempt } });
         await record({ actor: s.openId, action: 'key.decrypt', target: 'kms', level: 'warn', meta: { provider: r.provider } });
-        track({ openId: s.openId, provider: r.provider, tokens: (r.usage?.completionTokens || 0) + (r.usage?.promptTokens || 0) });
         return sendJson(res, 200, r);
       } catch (e) {
         await record({ actor: s.openId, action: 'chat.error', target: 'model-gateway', level: 'error', meta: { error: e.message } });
@@ -582,6 +652,79 @@ const server = createServer(async (req, res) => {
       if (!s) return;
       return sendJson(res, 200, statsSnapshot());
     }
+    // ---- 使用统计（T9.0）：按时间窗口聚合 token/调用 ----
+    if (method === 'GET' && pathname === '/api/admin/usage') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const rangeParam = (url.searchParams.get('range') || '30d').toLowerCase();
+      const m = /^(\d+)d$/.exec(rangeParam);
+      const rangeDays = m ? Math.min(365, Math.max(1, Number(m[1]))) : 30;
+      const users = listUsers() || [];
+      const userMap = {};
+      for (const u of users) { if (u.openId) userMap[u.openId] = u.displayName || ''; }
+      // 注入 admin 自己（万一没在配置表里）
+      userMap[s.openId] = (await getConfig(s.openId))?.displayName || userMap[s.openId] || '';
+      await ensureLoaded();
+      return sendJson(res, 200, aggregateUsage({ rangeDays, userMap }));
+    }
+
+    // ---- 自动化（T7.2）后台 API ----
+    if (method === 'GET' && pathname === '/api/admin/automations') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const list = await listAutomations();
+      return sendJson(res, 200, { automations: list, activeJobs: activeJobCount() });
+    }
+    if (method === 'POST' && pathname === '/api/admin/automations') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      try {
+        const body = await readBody(req);
+        const auto = await createAutomation(body);
+        if (auto.enabled !== false) scheduleOne(auto);
+        await record({ actor: s.openId, action: 'automation.create', target: auto.id, meta: { title: auto.title, cron: auto.cron, pushTo: auto.pushTo.length } });
+        return sendJson(res, 200, { ok: true, automation: auto });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
+    // 路径参数路由：/api/admin/automations/:id[/action]
+    if (method === 'PATCH' && pathname.startsWith('/api/admin/automations/')) {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const id = decodeURIComponent(pathname.slice('/api/admin/automations/'.length));
+      try {
+        const body = await readBody(req);
+        const auto = await updateAutomation(id, body);
+        // 变更后重新调度：cron / enabled 改了都要重排；其它字段改了也重排最稳
+        if (auto.enabled !== false) scheduleOne(auto); else unscheduleOne(id);
+        await record({ actor: s.openId, action: 'automation.update', target: id, meta: { enabled: auto.enabled, cron: auto.cron } });
+        return sendJson(res, 200, { ok: true, automation: auto });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
+    if (method === 'DELETE' && pathname.startsWith('/api/admin/automations/')) {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const id = decodeURIComponent(pathname.slice('/api/admin/automations/'.length));
+      const ok = await deleteAutomation(id);
+      if (ok) unscheduleOne(id);
+      await record({ actor: s.openId, action: 'automation.delete', target: id });
+      return sendJson(res, 200, { ok });
+    }
+    if (method === 'POST' && /^\/api\/admin\/automations\/[^/]+\/run$/.test(pathname)) {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const id = decodeURIComponent(pathname.slice('/api/admin/automations/'.length, -'/run'.length));
+      try {
+        await triggerNow(id);
+        await record({ actor: s.openId, action: 'automation.manual_run', target: id });
+        return sendJson(res, 200, { ok: true });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
 
     // 兼容：旧的程序化后台接口（X-Admin-Token 静态令牌）
     if (pathname.startsWith('/admin/')) {
@@ -606,10 +749,18 @@ const server = createServer(async (req, res) => {
 });
 
 const PORT = Number(process.env.PORT || 3000);
+// 启动时加载 usage.jsonl，避免「重启即失去历史数据」
+ensureLoaded()
+  .then(() => console.log('[usage] 历史事件加载完毕'))
+  .catch((e) => console.error('[usage] 历史加载失败:', e.message));
 server.listen(PORT, () => {
   console.log(`[acaily] 服务已启动 http://localhost:${PORT}`);
   // 飞书事件接收：长连接（WebSocket）主通道；Webhook 回调 /feishu/event 仍保留作兼容。
   startFeishuConnection(processFeishuMessage);
+  // 自动化（T7.2）启动调度：加载持久化的全部自动化并挂上 cron。
+  scheduleAll()
+    .then((r) => console.log(`[automation] 已加载 ${r.total} 条，调度 ${r.scheduled} 条`))
+    .catch((e) => console.error('[automation] 启动调度失败:', e.message));
 });
 
 export { server };

@@ -3,8 +3,13 @@ import assert from 'node:assert/strict';
 import { getProvider, ProviderError } from '../src/providers/index.js';
 import { DEFAULT_ACPLUGIN_BASEURL } from '../src/providers/acplugin.js';
 
-function mockFetch(jsonBody, { ok = true, status = 200 } = {}) {
-  global.fetch = async () => ({ ok, status, text: async () => JSON.stringify(jsonBody) });
+function mockFetch(jsonBody, { ok = true, status = 200, headers = {} } = {}) {
+  global.fetch = async () => ({
+    ok,
+    status,
+    headers: { get: (k) => headers[k.toLowerCase()] || headers[k] || null },
+    text: async () => JSON.stringify(jsonBody),
+  });
 }
 
 test('openai 兼容：解析 choices/message/content + usage', async () => {
@@ -53,9 +58,14 @@ test('未知 provider 类型抛错', () => {
 
 test('acplugin：默认 base URL 命中 acplugin 网关 /api/chat/completions', async () => {
   let calledUrl = '';
-  global.fetch = async (url, opts) => {
+  global.fetch = async (url) => {
     calledUrl = url;
-    return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: 'Acplugin回复' } }], usage: {} }) };
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      text: async () => JSON.stringify({ choices: [{ message: { content: 'Acplugin回复' } }], usage: {} }),
+    };
   };
   const p = getProvider({ type: 'acplugin', apiKey: 'x', model: 'hunyuan' });
   const r = await p.chat([{ role: 'user', content: 'hi' }]);
@@ -79,4 +89,69 @@ test('错误提示：429 给出限流/额度提示', async () => {
     () => p.chat([{ role: 'user', content: 'hi' }]),
     (e) => /额度|频繁/.test(e.message) && e.status === 429
   );
+});
+
+// === 流式响应（SSE）===
+import { parseSseResponse } from '../src/providers/base.js';
+
+// 构造一个 ReadableStream，模拟 SSE 多 chunk + [DONE] 结束
+function sseReadable(chunks) {
+  const enc = new TextEncoder();
+  return new ReadableStream({
+    start(ctrl) {
+      for (const c of chunks) ctrl.enqueue(enc.encode(c));
+      ctrl.close();
+    },
+  });
+}
+
+test('SSE：解析 OpenAI 兼容协议的多 chunk 回复', async () => {
+  const events = [
+    'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":"你好"}}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":"，世界"}}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":"！"}}],"usage":{"prompt_tokens":5,"completion_tokens":4,"total_tokens":9}}\n\n',
+    'data: [DONE]\n\n',
+  ].join('');
+  const res = {
+    ok: true,
+    status: 200,
+    headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'text/event-stream' : null) },
+    body: sseReadable([events]),
+  };
+  const data = await parseSseResponse(res);
+  assert.equal(data.choices[0].message.content, '你好，世界！');
+  assert.equal(data.usage.prompt_tokens, 5);
+  assert.equal(data.usage.completion_tokens, 4);
+});
+
+test('SSE：流式 + openai provider 应该获得完整文本（不是空内容）', async () => {
+  const events = [
+    'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":"Acaily 在的"}}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":"，请讲"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ].join('');
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'text/event-stream' : null) },
+    body: sseReadable([events]),
+  });
+  const p = getProvider({ type: 'openai', baseUrl: 'https://x', apiKey: 'x', model: 'gpt-4o', stream: true });
+  const r = await p.chat([{ role: 'user', content: 'hi' }]);
+  assert.equal(r.content, 'Acaily 在的，请讲');
+});
+
+test('SSE：无 reader 时降级读 text 并包装成回复', async () => {
+  // 极端兜底：body 是个 ReadableStream 但 getReader 不存在的旧运行时
+  const res = {
+    ok: true,
+    status: 200,
+    headers: { get: () => 'text/event-stream' },
+    body: null,
+    text: async () => 'plain text fallback',
+  };
+  const data = await parseSseResponse(res);
+  assert.equal(data.choices[0].message.content, 'plain text fallback');
 });
