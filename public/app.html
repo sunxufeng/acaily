@@ -61,6 +61,10 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 013 3v1a3 3 0 010 6v1a3 3 0 11-6 0v-1a3 3 0 010-6V5a3 3 0 013-3z"/><circle cx="12" cy="12" r="9"/></svg></span>
         <span class="lbl">智能体配置</span>
       </a>
+      <a class="nav-item admin-only" href="/admin" data-view="providers" data-tip="Provider 池">
+        <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></span>
+        <span class="lbl">Provider 池</span>
+      </a>
 
       <!-- 关于固定在所有菜单最下方 -->
       <a class="nav-item nav-about" href="/settings" data-view="about" data-tip="关于">
@@ -116,6 +120,11 @@
                 <select id="modelSelect"><option value="">默认模型</option></select>
               </label>
             </div>
+          </div>
+          <div class="chat-session-bar" id="chatSessionBar">
+            <div class="csb-title">对话历史（<span id="csbAgentName">默认</span>）</div>
+            <div class="csb-list" id="chatSessionList"></div>
+            <button class="btn ghost sm" id="csbNewBtn">+ 新对话</button>
           </div>
           <div class="chat-body" id="chatBody">
             <div class="msg bot"><div class="av">A</div><div class="bubble"><div class="role">Acaily</div>你好，我是你的专属 AI 助手。在左侧「我的配置」里填好模型后即可在此对话；也可以直接在飞书里 @我。</div></div>
@@ -442,12 +451,44 @@
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:200px;">操作</th></tr></thead>
+              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:260px;">操作</th></tr></thead>
               <tbody id="agentBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
             </table>
           </div>
         </div>
       </section>
+
+      <!-- 视图：Provider 池（admin） -->
+      <section class="view" id="view-providers">
+        <div class="card">
+          <div class="card-h">
+            <div>
+              <h2>Provider 池</h2>
+              <div class="desc">管理员维护的 Provider/Model 组合，智能体和用户都可从此选择。「type / baseUrl / apiKey」由池统一管理，避免每个智能体重复配置。<br>智能体表单的「Provider」下拉框会自动列出这里的条目。</div>
+            </div>
+            <button class="btn" id="provNewBtn">+ 新建 Provider</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>更新时间</th><th style="width:200px;">操作</th></tr></thead>
+              <tbody id="provBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Provider 池编辑弹窗（admin） -->
+<div class="mask" id="provMask">
+  <div class="modal" style="width:560px;">
+    <button class="close" id="provModalClose" title="关闭">×</button>
+    <h2 id="provModalTitle">新建 Provider</h2>
+    <div id="provModalBody"></div>
+    <div class="actions">
+      <button class="btn ghost" id="provModalCancel">取消</button>
+      <button class="btn" id="provModalSave">保存</button>
     </div>
   </div>
 </div>
@@ -497,6 +538,63 @@
 <script>
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// ====================== Markdown 渲染（轻量本地实现） ======================
+// 支持：# / ## / ### 标题，- 列表，1. 有序列表，**粗体**，*斜体*，`code`，```代码块```，[link](url)，
+//      > 引用，--- 分隔线。自动转义 HTML；输出已 sanitize。
+function renderMd(s){
+  if(!s) return '';
+  // 1. 提取代码块（占位）
+  const codeBlocks=[]; let tmp=String(s).replace(/```([\s\S]*?)```/g,(_,c)=>{codeBlocks.push(c);return `\u0001CB${codeBlocks.length-1}\u0001`;});
+  // 2. 转义
+  tmp=tmp.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  // 3. 行级替换
+  tmp=tmp.replace(/^###### (.*)$/gm,'<h6>$1</h6>')
+         .replace(/^##### (.*)$/gm,'<h5>$1</h5>')
+         .replace(/^#### (.*)$/gm,'<h4>$1</h4>')
+         .replace(/^### (.*)$/gm,'<h3>$1</h3>')
+         .replace(/^## (.*)$/gm,'<h2>$1</h2>')
+         .replace(/^# (.*)$/gm,'<h1>$1</h1>')
+         .replace(/^---$/gm,'<hr/>')
+         .replace(/^> (.*)$/gm,'<blockquote>$1</blockquote>');
+  // 4. 列表（合并连续项）
+  tmp=tmp.replace(/(^|\n)((?:- .*(?:\n|$))+)/g,(m,pre,block)=>{
+    const items=block.trim().split(/\n/).map(l=>l.replace(/^- /,'')).map(t=>`<li>${t}</li>`).join('');
+    return `${pre}<ul>${items}</ul>`;
+  });
+  tmp=tmp.replace(/(^|\n)((?:\d+\. .*(?:\n|$))+)/g,(m,pre,block)=>{
+    const items=block.trim().split(/\n/).map(l=>l.replace(/^\d+\. /,'')).map(t=>`<li>${t}</li>`).join('');
+    return `${pre}<ol>${items}</ol>`;
+  });
+  // 5. 内联：粗体 / 斜体 / code / link
+  tmp=tmp.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+         .replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>')
+         .replace(/`([^`\n]+)`/g,'<code>$1</code>')
+         .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 6. 换行
+  tmp=tmp.replace(/\n{2,}/g,'</p><p>').replace(/\n/g,'<br/>');
+  tmp='<p>'+tmp+'</p>';
+  // 7. 回填代码块
+  tmp=tmp.replace(/\u0001CB(\d+)\u0001/g,(_,i)=>`<pre><code>${esc(codeBlocks[+i]||'')}</code></pre>`);
+  return tmp;
+}
+function setupMdToggles(scope){
+  scope.querySelectorAll('.md-edit').forEach(box=>{
+    const ta=box.querySelector('textarea'); const pv=box.querySelector('.md-preview');
+    box.querySelectorAll('.md-tab').forEach(btn=>{
+      btn.onclick=()=>{
+        box.querySelectorAll('.md-tab').forEach(x=>x.classList.remove('active'));
+        btn.classList.add('active');
+        if(btn.dataset.mode==='preview'){
+          pv.innerHTML=renderMd(ta.value);
+          pv.hidden=false; ta.style.display='none';
+        }else{
+          pv.hidden=true; ta.style.display='';
+        }
+      };
+    });
+  });
+}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 async function api(method,path,body){
   const opt={method,headers:{}};
@@ -505,8 +603,8 @@ async function api(method,path,body){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats','agents']);
-const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats','agents']);
+const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats','agents','providers']);
+const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats','agents','providers']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   config:['我的配置','为你的飞书账号配置专属大模型'],
@@ -518,6 +616,7 @@ const VIEW_TITLES={
   automation:['自动化','定时任务调度与飞书推送'],
   stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
   agents:['智能体配置','创建 / 编辑智能体并绑定飞书应用'],
+  providers:['Provider 池','管理员维护的可复用 Provider/Model 组合，智能体和用户都可从这里选择'],
 };
 function switchView(v,navItem){
   if(!ALL_VIEWS.has(v))return false;
@@ -731,6 +830,7 @@ function showCfg(msg,ok){const s=$('cfgStatus');s.textContent=msg;s.className='s
 // 网页对话
 const chatBody=$('chatBody');
 let sessionId=null;
+let currentSessionAgentId=null; // 当前会话归属的智能体（null = 默认助手）
 function addMsg(role,text){
   const m=document.createElement('div');
   m.className='msg '+role;
@@ -915,9 +1015,98 @@ async function loadChatAgents(){
     const sel=$('agentSelect'); if(!sel)return;
     const saved=(()=>{try{return localStorage.getItem('acaily_agent')||''}catch(e){return''}})();
     const opts=['<option value="">默认助手</option>'];
-    if(status===200&&data.agents){data.agents.forEach(a=>{opts.push(`<option value="${esc(a.id)}"${a.id===saved?' selected':''}>${esc((a.emoji||'')+' '+(a.name||''))}</option>`);});}
+    if(status===200&&data.agents){
+      data.agents.forEach(a=>{
+        if(!currentAgentCache[a.id]) currentAgentCache[a.id]=a;
+        opts.push(`<option value="${esc(a.id)}"${a.id===saved?' selected':''}>${esc((a.emoji||'')+' '+(a.name||''))}</option>`);
+      });
+    }
     sel.innerHTML=opts.join('');
   }catch(e){}
+}
+
+// ====================== 对话会话列表（按智能体隔离） ======================
+async function loadSessionList(agentId){
+  const list=$('chatSessionList'); const nameEl=$('csbAgentName');
+  if(!list)return;
+  const ag=currentAgentCache&&currentAgentCache[agentId];
+  if(nameEl) nameEl.textContent = ag ? (ag.emoji+' '+ag.name) : '默认助手';
+  try{
+    const {status,data}=await api('GET','/api/chat/sessions'+(agentId?`?agentId=${encodeURIComponent(agentId)}`:''));
+    if(status!==200){list.innerHTML='<div class="muted" style="font-size:12px;padding:4px;">加载失败</div>';return;}
+    const arr=data.sessions||[];
+    if(!arr.length){list.innerHTML='<div class="muted" style="font-size:12px;padding:4px;">暂无历史会话</div>';return;}
+    list.innerHTML=arr.map(s=>`<div class="csb-item ${s.id===sessionId?'active':''}" data-sid="${esc(s.id)}" data-agent="${esc(s.tag||'')}">
+      <div class="t">${esc(s.title||'新对话')}</div>
+      <div class="m">${esc((s.updatedAt||'').slice(5,16).replace('T',' '))}</div>
+      <button class="x" data-delsid="${esc(s.id)}" title="删除">×</button>
+    </div>`).join('');
+    // 绑定点击 / 删除
+    list.querySelectorAll('.csb-item').forEach(el=>{
+      el.addEventListener('click',e=>{
+        if(e.target.classList.contains('x'))return;
+        openSession(el.dataset.sid, el.dataset.agent||null);
+      });
+    });
+    list.querySelectorAll('[data-delsid]').forEach(btn=>{
+      btn.onclick=async(e)=>{
+        e.stopPropagation();
+        if(!confirm('删除该对话？此操作不可恢复。'))return;
+        const r=await api('DELETE','/api/chat/sessions/'+encodeURIComponent(btn.dataset.delsid));
+        if(r.status===200){
+          if(btn.dataset.delsid===sessionId){sessionId=null;currentSessionAgentId=null;$('chatBody').innerHTML='';}
+          loadSessionList(agentId);
+        }else toast('删除失败');
+      };
+    });
+  }catch(e){list.innerHTML='<div class="muted" style="font-size:12px;padding:4px;">加载异常</div>';}
+}
+async function openSession(sid, agentId){
+  sessionId=sid; currentSessionAgentId=agentId||null;
+  // 若 agentId 跟当前选择不一致，提示
+  if(agentId){ const cur=$('agentSelect').value; if(cur!==agentId){ $('agentSelect').value=agentId; } }
+  // 加载历史
+  $('chatBody').innerHTML='<div class="msg bot"><div class="av">A</div><div class="bubble">加载中…</div></div>';
+  const r=await api('GET','/api/chat/sessions/'+encodeURIComponent(sid));
+  if(r.status===200){
+    $('chatBody').innerHTML='';
+    const hist=r.data.history||[];
+    if(!hist.length){addMsg('bot','（此对话暂无内容）');}
+    else hist.forEach(m=>{
+      if(m.role==='user'){
+        const ta=document.createElement('div'); ta.className='bubble'; ta.style.whiteSpace='pre-wrap';
+        if(typeof m.content==='string'){ta.textContent=m.content;} else {ta.textContent=JSON.stringify(m.content);}
+        const wrap=document.createElement('div'); wrap.className='msg user';
+        const av=document.createElement('div'); av.className='av'; av.textContent='我';
+        wrap.appendChild(av); wrap.appendChild(ta);
+        $('chatBody').appendChild(wrap);
+      } else {
+        const body=document.createElement('div'); body.className='msg-body';
+        body.textContent = typeof m.content==='string'?m.content:JSON.stringify(m.content);
+        const wrap=document.createElement('div'); wrap.className='msg bot';
+        const av=document.createElement('div'); av.className='av'; av.textContent=BOT_NAME[0]||'A';
+        const bubble=document.createElement('div'); bubble.className='bubble';
+        const role=document.createElement('div'); role.className='role'; role.textContent=BOT_NAME;
+        bubble.appendChild(role); bubble.appendChild(body);
+        wrap.appendChild(av); wrap.appendChild(bubble);
+        $('chatBody').appendChild(wrap);
+      }
+    });
+    loadSessionList($('agentSelect').value||null);
+    $('chatBody').scrollTop=$('chatBody').scrollHeight;
+  } else toast('加载失败');
+}
+async function createNewChatSession(){
+  const agentId=$('agentSelect').value||null;
+  const ag=currentAgentCache&&currentAgentCache[agentId];
+  const title=(ag?(ag.emoji+' '+ag.name):'默认助手')+' · 新对话';
+  const r=await api('POST','/api/chat/sessions',{agentId,title});
+  if(r.status===200 && r.data && r.data.sessionId){
+    sessionId=r.data.sessionId; currentSessionAgentId=agentId;
+    $('chatBody').innerHTML='';
+    addMsg('bot','已为你创建新会话，开始对话吧。');
+    loadSessionList(agentId);
+  } else toast('创建失败');
 }
 
 // ====================== 智能体管理（admin） ======================
@@ -932,10 +1121,11 @@ async function loadAgents(){
   body.innerHTML=list.map(a=>`<tr>
     <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
     <td><b>${esc(a.name)}</b></td>
-    <td class="muted">${a.description?esc(a.description.slice(0,60)):'<span class="muted">—</span>'}</td>
+    <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
     <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
     <td class="muted">${esc((a.updatedAt||'').slice(0,10))}</td>
     <td class="ops">
+      <button class="btn ghost sm" data-chat="${esc(a.id)}" title="用该智能体开启新对话">开启对话</button>
       <button class="btn ghost sm" data-edit="${esc(a.id)}">编辑</button>
       <button class="btn ghost sm" data-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
       <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>
@@ -944,21 +1134,37 @@ async function loadAgents(){
 }
 function agentFormHTML(a){
   a=a||{};
-  const providerOpts=['openai','anthropic','ollama','custom','acplugin'].map(p=>`<option value="${p}" ${a.provider===p?'selected':''}>${p}</option>`).join('');
   return `<div class="form">
     <div class="row"><label>名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
     <label style="width:96px;">图标<input id="aEmoji" value="${esc(a.emoji||'🤖')}" maxlength="4"/></label></div>
-    <label>简介<textarea id="aDesc" rows="2" placeholder="一句话简介（可选）">${esc(a.description||'')}</textarea></label>
-    <label>身份 IDENTITY<textarea id="aIdentity" rows="4" placeholder="这个智能体是谁 / 背景 / 角色定位">${esc(a.identity||'')}</textarea></label>
-    <label>用户 USER<textarea id="aUser" rows="3" placeholder="面对的用户是谁 / 用户诉求">${esc(a.user||'')}</textarea></label>
-    <label>灵魂 SOUL<textarea id="aSoul" rows="3" placeholder="语气 / 价值观 / 禁忌">${esc(a.soul||'')}</textarea></label>
-    <div class="card-h" style="margin-top:8px;"><h3>模型配置（可选）</h3><span class="desc">为该智能体指定独立模型；留空则回退到「对话者的个人默认模型」</span></div>
+    <label>简介（Markdown）<div class="md-edit" data-md="aDesc">
+      <textarea id="aDesc" rows="2" placeholder="一句话简介（支持 **加粗** / 列表 / 链接 等 Markdown）">${esc(a.description||'')}</textarea>
+      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
+      <div class="md-preview" hidden></div>
+    </div></label>
+    <label>身份 IDENTITY（Markdown）<div class="md-edit" data-md="aIdentity">
+      <textarea id="aIdentity" rows="6" placeholder="这个智能体是谁 / 背景 / 角色定位&#10;&#10;示例：&#10;# 角色&#10;你是一位资深的产品经理……&#10;## 职责&#10;- 需求分析&#10;- 方案设计">${esc(a.identity||'')}</textarea>
+      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
+      <div class="md-preview" hidden></div>
+    </div></label>
+    <label>用户 USER（Markdown）<div class="md-edit" data-md="aUser">
+      <textarea id="aUser" rows="4" placeholder="面对的用户是谁 / 用户诉求">${esc(a.user||'')}</textarea>
+      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
+      <div class="md-preview" hidden></div>
+    </div></label>
+    <label>灵魂 SOUL（Markdown）<div class="md-edit" data-md="aSoul">
+      <textarea id="aSoul" rows="4" placeholder="语气 / 价值观 / 禁忌&#10;&#10;示例：&#10;- 回答简洁，不啰嗦&#10;- 永远先说结论&#10;- 禁用表情符号">${esc(a.soul||'')}</textarea>
+      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
+      <div class="md-preview" hidden></div>
+    </div></label>
+    <div class="card-h" style="margin-top:8px;"><h3>模型配置（可选）</h3><span class="desc">优先从「Provider 池」选择；选池条目后会自动填入类型 / Base URL / API Key，再自定义 Model。池为空时退化为下方手填字段。</span></div>
+    <label>Provider 池<select id="aProviderPool"><option value="">（不选池，下方手填）</option></select></label>
     <div class="row">
-      <label>Provider<select id="aProvider">${providerOpts}</select></label>
-      <label>Model<input id="aModel" value="${esc(a.model||'')}" placeholder="如 gpt-4o"/></label>
+      <label>类型（来自池或手填）<select id="aProvider"><option value="openai">openai</option><option value="anthropic">anthropic</option><option value="ollama">ollama</option><option value="custom">custom</option><option value="acplugin">acplugin</option></select></label>
+      <label>Model<select id="aModelSel" style="display:none;"></select><input id="aModel" value="${esc(a.model||'')}" placeholder="如 gpt-4o"/></label>
     </div>
     <label>Base URL<input id="aBaseUrl" value="${esc(a.baseUrl||'')}" placeholder="https://api.openai.com/v1（ollama 可留空）"/></label>
-    <label>API Key${a.hasApiKey?'（已配置，留空则保留）':''}<input id="aApiKey" type="password" value="" placeholder="密钥仅保存在服务端（AES-256-GCM 加密），留空不修改"/></label>
+    <label>API Key<span id="aKeyHint"></span><input id="aApiKey" type="password" value="" placeholder="留空不修改已存密钥（来自池时自动沿用）"/></label>
   </div>`;
 }
 let agentEditingId=null;
@@ -966,10 +1172,64 @@ function openAgentModal(id){
   agentEditingId=id||null;
   $('agentModalTitle').textContent=id?'编辑智能体':'新建智能体';
   $('agentModalBody').innerHTML=agentFormHTML(id?currentAgentCache[id]:null);
+  // 异步加载 Provider 池 + 智能体 markdown 切换器
+  loadProviderPoolIntoAgentForm();
+  setupMdToggles($('agentModalBody'));
   $('agentMask').classList.add('show');
 }
 function closeAgentModal(){$('agentMask').classList.remove('show');agentEditingId=null;}
+async function loadProviderPoolIntoAgentForm(){
+  const sel=$('aProviderPool'); if(!sel)return;
+  try{
+    const {status,data}=await api('GET','/api/providers');
+    let opts=['<option value="">（不选池，下方手填）</option>'];
+    if(status===200 && data.providers && data.providers.length){
+      data.providers.forEach(p=>{opts.push(`<option value="${esc(p.id)}">${esc(p.name||p.type)} (${esc(p.type)} · ${esc((p.models||[])[0]||'无')})</option>`);});
+    }
+    sel.innerHTML=opts.join('');
+    // 若当前编辑的智能体已绑定池，预选
+    if(agentEditingId && currentAgentCache[agentEditingId] && currentAgentCache[agentEditingId].providerPoolId){
+      sel.value=currentAgentCache[agentEditingId].providerPoolId;
+    }
+    sel.onchange=()=>applyProviderPoolToAgentForm();
+    applyProviderPoolToAgentForm();
+  }catch(e){console.warn('loadProviderPool failed',e);}
+}
+function applyProviderPoolToAgentForm(){
+  const sel=$('aProviderPool'); if(!sel)return;
+  const id=sel.value;
+  if(!id){
+    $('aKeyHint').textContent='';
+    const ms=$('aModelSel'); if(ms)ms.style.display='none';
+    $('aModel').style.display='';
+    return;
+  }
+  // 拉池条目详情（直接用已加载列表缓存）
+  api('GET','/api/admin/providers/'+encodeURIComponent(id)).then(({status,data})=>{
+    if(status!==200||!data.provider)return;
+    const p=data.provider;
+    $('aProvider').value=p.type||'openai';
+    $('aBaseUrl').value=p.baseUrl||'';
+    $('aKeyHint').textContent = p.hasKey ? '（API Key 将沿用池里的密钥）' : '（池条目未配置 API Key，需下方手填）';
+    $('aApiKey').placeholder=p.hasKey?'沿用池密钥，留空不修改':'该池条目尚未配置 API Key';
+    // 切换 Model 为下拉
+    const ms=$('aModelSel'); const mi=$('aModel');
+    const cur=mi.value;
+    if(p.models && p.models.length){
+      ms.innerHTML='<option value="">（自定义）</option>'+p.models.map(m=>`<option value="${esc(m)}" ${m===cur?'selected':''}>${esc(m)}</option>`).join('');
+      ms.value=cur;
+      ms.style.display='';
+      ms.onchange=()=>{if(ms.value){mi.value=ms.value;mi.style.display='none';ms.style.display='';}else{mi.style.display='';ms.style.display='none';}};
+      // 若原 model 在池里，隐藏 input
+      if(p.models.includes(cur)){mi.style.display='none';}else{mi.style.display='';}
+    } else {
+      ms.style.display='none';
+      mi.style.display='';
+    }
+  });
+}
 async function saveAgentModal(){
+  const poolId=$('aProviderPool').value||null;
   const payload={
     name:$('aName').value.trim()||'未命名智能体',
     emoji:$('aEmoji').value.trim()||'🤖',
@@ -977,10 +1237,11 @@ async function saveAgentModal(){
     identity:$('aIdentity').value,
     user:$('aUser').value,
     soul:$('aSoul').value,
-    provider:$('aProvider').value||null,
+    providerPoolId: poolId || null,
+    provider:poolId?null:($('aProvider').value||null),
     model:$('aModel').value.trim()||null,
-    baseUrl:$('aBaseUrl').value.trim()||null,
-    apiKey:$('aApiKey').value||null, // 空字符串 → 服务端保留既有密钥
+    baseUrl:poolId?null:($('aBaseUrl').value.trim()||null),
+    apiKey:poolId?null:($('aApiKey').value||null),
   };
   const saveBtn=$('agentModalSave');saveBtn.disabled=true;saveBtn.textContent='保存中…';
   const {status}=await api(agentEditingId?'PUT':'POST',agentEditingId?`/api/admin/agents/${encodeURIComponent(agentEditingId)}`:'/api/admin/agents',payload);
@@ -1004,11 +1265,105 @@ $('agentModalCancel').onclick=closeAgentModal;
 $('agentModalSave').onclick=saveAgentModal;
 $('agentBody').addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
-  if(t.dataset.edit){openAgentModal(t.dataset.edit);}
+  if(t.dataset.chat){startAgentChat(t.dataset.chat);}
+  else if(t.dataset.edit){openAgentModal(t.dataset.edit);}
   else if(t.dataset.bind){bindAgentFeishu(t.dataset.bind);}
   else if(t.dataset.del){
     const id=t.dataset.del;
     if(confirm('确定删除该智能体？')){api('DELETE',`/api/admin/agents/${encodeURIComponent(id)}`).then(r=>{if(r.status===200){toast('已删除');loadAgents();loadChatAgents();}else toast('删除失败');});}
+  }
+});
+
+// 「开启对话」：切到对话视图 + 选中该智能体 + 新建一个该智能体的会话
+async function startAgentChat(agentId){
+  try{ localStorage.setItem('acaily_agent', agentId); }catch(e){}
+  const sel=$('agentSelect'); if(sel){ sel.value=agentId; sel.dispatchEvent(new Event('change')); }
+  switchView('chat');
+  // 新建一个会话
+  const ag=currentAgentCache[agentId];
+  const title=`${ag?(ag.emoji+' '+ag.name):'智能体'} · 新对话`;
+  const r=await api('POST','/api/chat/sessions',{agentId,title});
+  if(r.status===200 && r.data && r.data.sessionId){
+    sessionId=r.data.sessionId;
+    currentSessionAgentId=agentId;
+    $('chatBody').innerHTML='';
+    addMsg('bot','已为你创建新会话，开始对话吧。');
+    loadSessionList(agentId);
+  }
+  toast('已开启新对话');
+}
+
+// ====================== Provider 池管理（admin） ======================
+let currentProvCache={};
+async function loadProviders(){
+  const {status,data}=await api('GET','/api/admin/providers');
+  const body=$('provBody'); if(!body)return;
+  if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
+  const list=data.providers||[];
+  currentProvCache={}; list.forEach(p=>currentProvCache[p.id]=p);
+  if(!list.length){body.innerHTML='<tr><td colspan="8" class="empty">暂无 Provider，点击右上角「新建 Provider」</td></tr>';return;}
+  body.innerHTML=list.map(p=>`<tr>
+    <td style="text-align:center;">${p.hasKey?'🔑':'🔓'}</td>
+    <td><b>${esc(p.name)}</b></td>
+    <td><span class="tag">${esc(p.type)}</span></td>
+    <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
+    <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc((p.baseUrl||'').slice(0,40))}</td>
+    <td>${p.hasKey?'<span class="tag ok">已配置</span>':'<span class="tag warn">未配置</span>'}</td>
+    <td class="muted">${esc((p.updatedAt||'').slice(0,10))}</td>
+    <td class="ops">
+      <button class="btn ghost sm" data-pedit="${esc(p.id)}">编辑</button>
+      <button class="btn ghost sm danger" data-pdel="${esc(p.id)}">删除</button>
+    </td>
+  </tr>`).join('');
+}
+function provFormHTML(p){
+  p=p||{};
+  return `<div class="form">
+    <div class="row"><label>名称<input id="pName" value="${esc(p.name||'')}" placeholder="如：组织默认 OpenAI"/></label>
+    <label style="width:96px;">图标<input id="pEmoji" value="${esc(p.emoji||'🧩')}" maxlength="4"/></label></div>
+    <div class="row">
+      <label>类型<select id="pType"><option value="openai" ${p.type==='openai'?'selected':''}>openai</option><option value="anthropic" ${p.type==='anthropic'?'selected':''}>anthropic</option><option value="ollama" ${p.type==='ollama'?'selected':''}>ollama</option><option value="custom" ${p.type==='custom'?'selected':''}>custom</option><option value="acplugin" ${p.type==='acplugin'?'selected':''}>acplugin</option></select></label>
+      <label>Base URL<input id="pBaseUrl" value="${esc(p.baseUrl||'')}" placeholder="https://api.openai.com/v1"/></label>
+    </div>
+    <label>模型列表（每行一个，首项作为默认）<textarea id="pModels" rows="4" placeholder="gpt-4o-mini&#10;gpt-5.5-sol">${esc((p.models||[]).join('\n'))}</textarea></label>
+    <label>API Key${p.hasKey?'（已配置，留空保留）':''}<input id="pApiKey" type="password" value="" placeholder="密钥仅保存在服务端（AES-256-GCM 加密），留空不修改"/></label>
+  </div>`;
+}
+let provEditingId=null;
+function openProvModal(id){
+  provEditingId=id||null;
+  $('provModalTitle').textContent=id?'编辑 Provider':'新建 Provider';
+  $('provModalBody').innerHTML=provFormHTML(id?currentProvCache[id]:null);
+  $('provMask').classList.add('show');
+}
+function closeProvModal(){$('provMask').classList.remove('show');provEditingId=null;}
+async function saveProvModal(){
+  const payload={
+    name:$('pName').value.trim()||'未命名 Provider',
+    emoji:$('pEmoji').value.trim()||'🧩',
+    type:$('pType').value,
+    baseUrl:$('pBaseUrl').value.trim(),
+    models:$('pModels').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    apiKey:$('pApiKey').value||null,
+  };
+  const sb=$('provModalSave');sb.disabled=true;sb.textContent='保存中…';
+  const {status}=await api(provEditingId?'PUT':'POST',provEditingId?`/api/admin/providers/${encodeURIComponent(provEditingId)}`:'/api/admin/providers',payload);
+  sb.disabled=false;sb.textContent='保存';
+  if(status===200){toast('已保存');closeProvModal();await loadProviders();}
+  else toast('保存失败（'+status+'）');
+}
+$('provNewBtn').onclick=()=>openProvModal(null);
+$('provModalClose').onclick=closeProvModal;
+$('provModalCancel').onclick=closeProvModal;
+$('provModalSave').onclick=saveProvModal;
+$('provBody').addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;
+  if(t.dataset.pedit){openProvModal(t.dataset.pedit);}
+  else if(t.dataset.pdel){
+    const id=t.dataset.pdel;
+    if(confirm('确定删除该 Provider？已选此池的智能体将回退到自有配置。')){
+      api('DELETE',`/api/admin/providers/${encodeURIComponent(id)}`).then(r=>{if(r.status===200){toast('已删除');loadProviders();}else toast('删除失败');});
+    }
   }
 });
 
@@ -1631,7 +1986,18 @@ $('autoModalSave').onclick=async()=>{
     await loadAutomation();
     await loadStats();
     await loadAgents();
+    await loadProviders();
   }
+  // 智能体 select 变化 → 清空当前会话 + 重载该智能体的会话列表
+  $('agentSelect').onchange=()=>{
+    sessionId=null;
+    currentSessionAgentId=$('agentSelect').value||null;
+    $('chatBody').innerHTML='';
+    addMsg('bot','已切换智能体，开始新对话吧。');
+    loadSessionList($('agentSelect').value||null);
+  };
+  $('csbNewBtn').onclick=createNewChatSession;
+  await loadSessionList($('agentSelect').value||null);
 })();
 </script>
 </body>

@@ -42,6 +42,7 @@ import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } f
 import { initRunner } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
 import { createFeishuApp, enableBotCapability } from '../feishu/appMgmt.js';
+import { listProviders, getProvider, saveProvider, deleteProvider, getProviderApiKey } from '../config/providerPoolStore.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
 const tools = [
@@ -130,6 +131,11 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
   // 会话持久化 + 多轮记忆（best-effort，失败不影响主流程）
   let sid = sessionId;
   let hist = history || [];
+  // 若客户端提供了 sessionId 但没有传 history，则从 store 拉取
+  if (sid && (!hist || hist.length === 0)) {
+    const fromStore = await getHistory(openId, sid, 24);
+    if (fromStore) hist = fromStore;
+  }
 
   // 构造用户消息内容：有图片则走多模态（文本 + image_url），否则纯文本
   let userContent;
@@ -181,9 +187,17 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
     if (ag) {
       agentPersona = buildAgentSystemPrompt(ag);
       agentModel = ag.model || null;
-      if (ag.provider) {
-        agentCfg = { id: ag.id, name: ag.name, provider: ag.provider, model: ag.model, baseUrl: ag.baseUrl, displayName: ag.name };
-        agentApiKey = getAgentApiKey(ag.id);
+      if (ag.provider || ag.providerPoolId) {
+        agentCfg = {
+          id: ag.id,
+          name: ag.name,
+          provider: ag.provider,
+          model: ag.model,
+          baseUrl: ag.baseUrl,
+          displayName: ag.name,
+          providerPoolId: ag.providerPoolId || null,
+        };
+        agentApiKey = ag.providerPoolId ? null : getAgentApiKey(ag.id);
       }
     }
   }
@@ -619,6 +633,48 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 405, { error: '方法不允许' });
     }
 
+    // ---- Provider 池（用户可读列表，供智能体表单选择；管理员可 CRUD） ----
+    // 用户视角：GET /api/providers 返回所有池条目（不含 apiKey 明文）
+    if (method === 'GET' && pathname === '/api/providers') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      return sendJson(res, 200, { providers: listProviders() });
+    }
+    // 管理视角：CRUD
+    if (pathname === '/api/admin/providers' || pathname.startsWith('/api/admin/providers/')) {
+      const admin = requireAdminApi(req, res);
+      if (!admin) return;
+      const m = pathname.match(/^\/api\/admin\/providers\/([^/]+)$/);
+      if (m) {
+        const id = decodeURIComponent(m[1]);
+        if (method === 'GET') {
+          const p = getProvider(id);
+          return p ? sendJson(res, 200, { provider: p }) : sendJson(res, 404, { error: 'Provider 不存在' });
+        }
+        if (method === 'PUT') {
+          const body = await readBody(req);
+          const p = saveProvider(body, id);
+          await record({ actor: admin.openId, action: 'provider.update', target: id, meta: { name: p.name, type: p.type } });
+          return sendJson(res, 200, { provider: p });
+        }
+        if (method === 'DELETE') {
+          const ok = deleteProvider(id);
+          await record({ actor: admin.openId, action: 'provider.delete', target: id });
+          return sendJson(res, ok ? 200 : 404, { ok });
+        }
+        return sendJson(res, 405, { error: '方法不允许' });
+      }
+      if (method === 'GET') return sendJson(res, 200, { providers: listProviders() });
+      if (method === 'POST') {
+        const body = await readBody(req);
+        if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
+        const p = saveProvider(body);
+        await record({ actor: admin.openId, action: 'provider.create', target: p.id, meta: { name: p.name, type: p.type } });
+        return sendJson(res, 200, { provider: p });
+      }
+      return sendJson(res, 405, { error: '方法不允许' });
+    }
+
     // 个人配置（自服务，open_id 取自会话，绝不信任请求体）
     if (method === 'GET' && pathname === '/api/config/me') {
       const s = requireSessionApi(req, res);
@@ -775,6 +831,57 @@ const server = createServer(async (req, res) => {
       const results = await retriever.retrieve(query, { topK: topK || 5 });
       await record({ actor: s.openId, action: 'kb.query', target: 'knowledge', meta: { query, hits: results.length } });
       return sendJson(res, 200, { query, results, context: retriever.buildContext(results) });
+    }
+
+    // ---- 会话管理（按 open_id 租户隔离，agentId 作为 tag） ----
+    if (method === 'GET' && pathname === '/api/chat/sessions') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const agentId = url.searchParams.get('agentId') || null;
+      return sendJson(res, 200, { sessions: await listSessions(s.openId, agentId) });
+    }
+    const sessM = pathname.match(/^\/api\/chat\/sessions\/([^/]+)$/);
+    if (sessM && (method === 'GET' || method === 'PATCH' || method === 'DELETE')) {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const sid = decodeURIComponent(sessM[1]);
+      // 验证所有权
+      const existing = (await listSessions(s.openId)).find((x) => x.id === sid);
+      if (!existing) return sendJson(res, 404, { error: '会话不存在或无权限' });
+      if (method === 'GET') {
+        return sendJson(res, 200, { session: existing, history: await getHistory(s.openId, sid, 500) });
+      }
+      if (method === 'DELETE') {
+        const fs = await import('node:fs/promises');
+        const dbPath = process.env.ACAILY_CONV_STORE || '/tmp/acaily-conversations.json';
+        const db = JSON.parse(await fs.readFile(dbPath, 'utf8').catch(() => '{"sessions":{},"messages":{}}'));
+        delete db.sessions[sid];
+        delete db.messages[sid];
+        await fs.writeFile(dbPath, JSON.stringify(db, null, 2));
+        return sendJson(res, 200, { ok: true });
+      }
+      // PATCH
+      const body = await readBody(req);
+      if (body && body.title) {
+        const fs = await import('node:fs/promises');
+        const dbPath = process.env.ACAILY_CONV_STORE || '/tmp/acaily-conversations.json';
+        const db = JSON.parse(await fs.readFile(dbPath, 'utf8').catch(() => '{"sessions":{},"messages":{}}'));
+        if (db.sessions[sid]) {
+          db.sessions[sid].title = String(body.title).slice(0, 60);
+          db.sessions[sid].updatedAt = new Date().toISOString();
+          await fs.writeFile(dbPath, JSON.stringify(db, null, 2));
+        }
+      }
+      return sendJson(res, 200, { session: { ...existing, title: body?.title || existing.title } });
+    }
+    if (method === 'POST' && pathname === '/api/chat/sessions') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const body = await readBody(req).catch(() => ({}));
+      const agentId = body?.agentId || null;
+      const title = (body?.title || '新对话').slice(0, 60);
+      const sid = await createSession(s.openId, title, agentId);
+      return sendJson(res, 200, { sessionId: sid, agentId });
     }
 
     // ---- 管理后台 API（需管理员） ----

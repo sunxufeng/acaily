@@ -78,6 +78,8 @@ export function saveAgent(input, id) {
     // 智能体自有模型配置（回复时使用，不依赖终端用户个人配置）
     provider: input.provider ? clamp(input.provider, 40) : (existing.provider || null),
     baseUrl: input.baseUrl ? clamp(input.baseUrl, 400) : (existing.baseUrl || null),
+    // 可选：引用 Provider 池条目（管理员维护的可复用 provider/model 组合）
+    providerPoolId: input.providerPoolId !== undefined ? (input.providerPoolId || null) : (existing.providerPoolId || null),
     // 飞书绑定信息保留（除非显式改）
     feishuAppId: input.feishuAppId !== undefined ? input.feishuAppId : existing.feishuAppId,
     feishuAppBound: existing.feishuAppBound || false,

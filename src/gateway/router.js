@@ -2,6 +2,7 @@ import { getConfig, decryptApiKey } from '../config/userConfigStore.js';
 import { getProvider, ProviderError } from '../providers/index.js';
 import { TokenBucket, RateLimitError } from './rateLimiter.js';
 import { track } from '../admin/stats.js';
+import { getProvider as getPoolProvider, getProviderApiKey as getPoolApiKey } from '../config/providerPoolStore.js';
 
 const limiter = new TokenBucket({
   capacity: Number(process.env.ACAILY_RATE_CAPACITY || 20),
@@ -30,12 +31,26 @@ export async function routeChat(openId, messages, opts = {}) {
 
 // 以显式配置（而非 open_id 查找）路由：供「智能体」等场景复用同一套限流/重试/统计逻辑。
 // cfg 需含 { provider, model, baseUrl, displayName, retries? }；apiKey 为明文（已解密）。
+// 可选 cfg.providerPoolId：若指定，则从 Provider 池解析 type/baseUrl/apiKey，覆盖 cfg 中对应字段。
 export async function routeChatConfig(cfg, apiKey, messages, opts = {}) {
   if (!cfg || !cfg.provider) {
     throw new ProviderError('智能体未配置模型（请在智能体配置页填写 Provider / API Key / Model）', {
       provider: 'gateway',
       status: 404,
     });
+  }
+  // Provider 池解析：若指定 providerPoolId，从池里取出 (type, baseUrl, apiKey) 覆盖 cfg
+  if (cfg.providerPoolId) {
+    const pool = getPoolProvider(cfg.providerPoolId);
+    if (pool) {
+      cfg = {
+        ...cfg,
+        type: pool.type || cfg.provider,
+        baseUrl: pool.baseUrl || cfg.baseUrl,
+        models: pool.models || [],
+      };
+      apiKey = getPoolApiKey(cfg.providerPoolId) || apiKey;
+    }
   }
   const displayName = cfg.displayName || cfg.name || '智能体';
   const openId = `agent:${cfg.id || 'unknown'}`; // 仅用于统计标识
