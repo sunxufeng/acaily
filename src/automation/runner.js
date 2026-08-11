@@ -9,7 +9,7 @@ import { routeChat, routeChatConfig } from '../gateway/router.js';
 import { sendMarkdown, sendText } from '../feishu/client.js';
 import { record as auditRecord } from '../audit/auditLog.js';
 import { appendRun, updateRun } from './store.js';
-import { getAgent, getAgentApiKey } from '../config/agentStore.js';
+import { getAgent, getAgentApiKey, getAgentFeishuSecret } from '../config/agentStore.js';
 
 // 由 app.js 在启动时注入依赖，避免循环引用
 let deps = null;
@@ -66,6 +66,9 @@ export async function runAutomation(auto, { manual = false } = {}) {
   let agentCfg = null;
   let agentApiKey = null;
   let agentPersona = null;
+  // 智能体绑定的飞书应用凭据（appId + appSecret）：用于让回复以该智能体的机器人身份发送
+  // 没绑定飞书应用时为 null，回退到主应用（process.env）身份
+  let agentFeishuCreds = null;
   if (linkedAgent && (linkedAgent.provider || linkedAgent.providerPoolId)) {
     useAgentModel = true;
     agentCfg = {
@@ -80,12 +83,18 @@ export async function runAutomation(auto, { manual = false } = {}) {
     agentApiKey = linkedAgent.providerPoolId ? null : getAgentApiKey(linkedAgent.id);
     agentPersona = buildAgentPersona(linkedAgent);
   }
+  if (linkedAgent && linkedAgent.feishuAppId) {
+    const secret = getAgentFeishuSecret(linkedAgent.id);
+    if (secret) {
+      agentFeishuCreds = { appId: linkedAgent.feishuAppId, appSecret: secret };
+    }
+  }
 
   if (!useAgentModel && !getConfig(caller)) {
     // 既没绑定智能体模型，主叫用户也未配置模型 → 推一条错误回所有收件人
     const errText = `⚠️ 自动化「${auto.title}」无法执行：未关联有效智能体，且收件人 ${caller} 尚未配置模型。请在个人设置页先填写 Provider / API Key / Model，或在自动化里关联一个智能体。`;
     for (const uid of auto.pushTo) {
-      try { await sendText(uid, errText); } catch {}
+      try { await sendText(uid, errText, agentFeishuCreds); } catch {}
     }
     await appendRun(auto.id, { durationMs: 0, status: 'err', error: 'caller 未配置模型且未关联智能体' });
     return { status: 'err', error: 'caller 未配置模型且未关联智能体' };
@@ -121,13 +130,13 @@ export async function runAutomation(auto, { manual = false } = {}) {
   const preview = (answer || errMsg).slice(0, 160);
 
   if (answer) {
-    // 推送到所有收件人（失败的单条不影响其它）
+    // 推送到所有收件人（失败的单条不影响其它）；使用关联智能体绑定的飞书应用身份发送
     const pushText = buildPushText(auto, answer);
     for (const uid of auto.pushTo) {
       try {
-        await sendMarkdown(uid, pushText);
+        await sendMarkdown(uid, pushText, agentFeishuCreds);
       } catch (e) {
-        try { await sendText(uid, pushText); } catch {}
+        try { await sendText(uid, pushText, agentFeishuCreds); } catch {}
         console.error(`[automation] 推送给 ${uid} 失败:`, e.message);
       }
     }

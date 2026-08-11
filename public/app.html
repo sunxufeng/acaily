@@ -1829,7 +1829,7 @@ function renderAuditTable(targetBodyId, targetFootId, opts){
   foot.innerHTML=`<tr><td colspan="${colspan}">
     <div class="pager-bar">
       <button class="btn sm ghost" data-aud-prev ${auditPage===0?'disabled':''}>‹ 上一页</button>
-      <span class="muted pager-info">第 ${auditPage+1} / ${totalPages} 页 · 共 ${auditEventsAll.length} 条</span>
+      <span class="muted" style="margin:0 10px;">第 ${auditPage+1} / ${totalPages} 页 · 共 ${auditEventsAll.length} 条</span>
       <button class="btn sm ghost" data-aud-next ${auditPage>=totalPages-1?'disabled':''}>下一页 ›</button>
     </div>
   </td></tr>`;
