@@ -49,9 +49,9 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".7" fill="currentColor"/><circle cx="3.5" cy="12" r=".7" fill="currentColor"/><circle cx="3.5" cy="18" r=".7" fill="currentColor"/></svg></span>
         <span class="lbl">审计日志</span>
       </a>
-      <a class="nav-item admin-only" href="/admin" data-view="automation" data-tip="自动化">
+      <a class="nav-item admin-only" href="/admin" data-view="automation" data-tip="自动化任务">
         <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
-        <span class="lbl">自动化</span>
+        <span class="lbl">自动化任务</span>
       </a>
       <a class="nav-item admin-only" href="/admin" data-view="stats" data-tip="使用统计">
         <span class="ic"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/><line x1="3" y1="20" x2="21" y2="20"/></svg></span>
@@ -322,7 +322,7 @@
             <li>· <a href="#" data-jump="config">我的配置</a>：维护个人的 Provider / 模型 / API Key</li>
             <li>· <a href="#" data-jump="push">组织默认配置（管理员）</a>：一键下发基础配置给所有成员</li>
             <li>· <a href="#" data-jump="users">成员管理（管理员）</a>：查看 / 编辑 / 删除成员配置</li>
-            <li>· <a href="#" data-jump="automation">自动化（管理员）</a>：定时任务调度与飞书推送</li>
+            <li>· <a href="#" data-jump="automation">自动化任务（管理员）</a>：定时任务调度与飞书推送</li>
             <li>· <a href="#" data-jump="stats">使用统计（管理员）</a>：基于全量事件日志的 Token / 模型 / 用户聚合</li>
             <li>· <a href="#" data-jump="agents">智能体配置（管理员）</a>：创建智能体并绑定飞书应用</li>
           </ul>
@@ -379,8 +379,8 @@
         <div class="card">
           <div class="card-h">
             <div>
-              <h2>自动化</h2>
-              <div class="desc">按计划调用 Acaily 助手并把结果推送给指定飞书用户（参考 aily 工作台·自动化）</div>
+              <h2>自动化任务</h2>
+              <div class="desc">按计划调用关联智能体并把结果推送给指定飞书用户（参考 aily 工作台·自动化）</div>
             </div>
             <button class="btn" id="autoNewBtn">+ 新建自动化</button>
           </div>
@@ -458,6 +458,18 @@
         </div>
       </section>
 
+      <!-- 视图：Provider 编辑（admin，框架内页面，非弹窗） -->
+      <section class="view" id="view-provider-edit">
+        <div class="card">
+          <div class="card-h agent-edit-bar">
+            <button class="btn ghost sm" id="provEditBack" title="返回 Provider 池">← 返回</button>
+            <h2 id="provEditTitle" style="flex:1;text-align:center;margin:0;">新建 Provider</h2>
+            <button class="btn" id="provEditSave">保存</button>
+          </div>
+          <div id="provEditBody"></div>
+        </div>
+      </section>
+
       <!-- 视图：Provider 池（admin） -->
       <section class="view" id="view-providers">
         <div class="card">
@@ -476,19 +488,18 @@
           </div>
         </div>
       </section>
-    </div>
-  </div>
-</div>
 
-<!-- Provider 池编辑弹窗（admin） -->
-<div class="mask" id="provMask">
-  <div class="modal" style="width:560px;">
-    <button class="close" id="provModalClose" title="关闭">×</button>
-    <h2 id="provModalTitle">新建 Provider</h2>
-    <div id="provModalBody"></div>
-    <div class="actions">
-      <button class="btn ghost" id="provModalCancel">取消</button>
-      <button class="btn" id="provModalSave">保存</button>
+      <!-- 视图：自动化编辑（admin，框架内页面，非弹窗） -->
+      <section class="view" id="view-automation-edit">
+        <div class="card">
+          <div class="card-h agent-edit-bar">
+            <button class="btn ghost sm" id="autoEditBack" title="返回自动化任务列表">← 返回</button>
+            <h2 id="autoEditTitle" style="flex:1;text-align:center;margin:0;">新建自动化任务</h2>
+            <button class="btn" id="autoEditSave">保存</button>
+          </div>
+          <div id="autoEditBody"></div>
+        </div>
+      </section>
     </div>
   </div>
 </div>
@@ -502,19 +513,6 @@
     <div class="actions">
       <button class="btn ghost" id="modalCancel">取消</button>
       <button class="btn" id="modalSave">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- 自动化弹窗（admin） -->
-<div class="mask" id="autoMask">
-  <div class="modal" style="width:640px;">
-    <button class="close" id="autoModalClose" title="关闭">×</button>
-    <h2 id="autoModalTitle">新建自动化</h2>
-    <div id="autoModalBody"></div>
-    <div class="actions">
-      <button class="btn ghost" id="autoModalCancel">取消</button>
-      <button class="btn" id="autoModalSave">保存</button>
     </div>
   </div>
 </div>
@@ -717,8 +715,8 @@ async function api(method,path,body,opts){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats','agents','providers','agent-edit']);
-const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats','agents','providers','agent-edit']);
+const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit']);
+const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   config:['我的配置','为你的飞书账号配置专属大模型'],
@@ -727,11 +725,12 @@ const VIEW_TITLES={
   users:['成员管理','查看与编辑成员模型配置'],
   push:['组织默认配置','一键下发基础模型配置到全员'],
   audit:['审计日志','安全合规操作留痕'],
-  automation:['自动化','定时任务调度与飞书推送'],
+  automation:['自动化任务','定时调用关联智能体并把结果推送到飞书'],
   stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
   agents:['智能体配置','创建 / 编辑智能体并绑定飞书应用'],
   'agent-edit':['智能体编辑','在框架内维护智能体（多 Tab 编辑 Markdown 人设 / 导入 .md 文件）'],
   providers:['Provider 池','管理员维护的可复用 Provider/Model 组合，智能体和用户都可从这里选择'],
+  'provider-edit':['编辑 Provider','在框架内维护 Provider（类型 / Base URL / 模型列表 / API Key），保存后点「返回」回到清单'],
 };
 function switchView(v,navItem){
   if(!ALL_VIEWS.has(v))return false;
@@ -1668,7 +1667,13 @@ function provFormHTML(p){
       <label>Base URL<input id="pBaseUrl" value="${esc(p.baseUrl||'')}" placeholder="https://api.openai.com/v1"/></label>
     </div>
     <label>模型列表（每行一个，首项作为默认）<textarea id="pModels" rows="4" placeholder="gpt-4o-mini&#10;gpt-5.5-sol">${esc((p.models||[]).join('\n'))}</textarea></label>
-    <label>API Key${p.hasKey?'（已配置，留空保留）':''}<input id="pApiKey" type="password" value="" placeholder="密钥仅保存在服务端（AES-256-GCM 加密），留空不修改"/></label>
+    <label>API Key${p.hasKey?'（已配置，留空保留）':''}
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input id="pApiKey" type="password" value="${p.hasKey&&p.keyMask?esc(p.keyMask):''}" placeholder="密钥仅保存在服务端（AES-256-GCM 加密），留空不修改" ${p.hasKey&&p.keyMask?'data-masked="1"':''} style="flex:1;" />
+        <button type="button" id="pKeyToggle" title="显示 / 隐藏" style="flex:0 0 auto;padding:8px 10px;border:1px solid var(--border,#ddd);background:var(--bg-2,#f4f4f5);border-radius:8px;cursor:pointer;">👁</button>
+      </div>
+    </label>
+    <div id="pKeyStatus" class="muted small" style="margin-top:-4px;"></div>
     <div class="row" style="margin-top:10px;align-items:center;">
       <button class="btn ghost" type="button" id="pTestBtn">🔌 测试连通</button>
       <span id="pTestStatus" class="muted small" style="margin-left:8px;word-break:break-all;"></span>
@@ -1676,10 +1681,11 @@ function provFormHTML(p){
   </div>`;
 }
 let provEditingId=null;
-function openProvModal(id){
+function openProviderEdit(id){
   provEditingId=id||null;
-  $('provModalTitle').textContent=id?'编辑 Provider':'新建 Provider';
-  $('provModalBody').innerHTML=provFormHTML(id?currentProvCache[id]:null);
+  const p=id?currentProvCache[id]:null;
+  $('provEditTitle').textContent=id?'编辑 Provider':'新建 Provider';
+  $('provEditBody').innerHTML=provFormHTML(p);
   // 「复用来源」联动：选中后自动填类型/BaseURL/模型
   const reuseSel=$('pReuse');
   if(reuseSel){
@@ -1717,7 +1723,7 @@ function openProvModal(id){
       const body={
         provider:$('pType').value,
         baseUrl:$('pBaseUrl').value.trim(),
-        apiKey:$('pApiKey').value||null,
+        apiKey:provApiKeyVal(),
         // 「测试连通」仅用来验证 baseUrl + apiKey 是否能跑通，模型可用第一行
         model:$('pModels').value.split('\n').map(s=>s.trim()).filter(Boolean)[0] || '',
         providerId: provEditingId || null,
@@ -1734,31 +1740,62 @@ function openProvModal(id){
       }
     };
   }
-  $('provMask').classList.add('show');
+  // API Key 显示/隐藏：点「👁」明文显示（已存则显示掩码），再点「🙈」恢复密文
+  const kt=$('pKeyToggle');
+  const ke=$('pApiKey');
+  const updateProvKeyStatus=()=>{
+    const s=$('pKeyStatus'); if(!s||!ke)return;
+    if(ke.dataset.masked==='1'){ s.textContent='🔑 已显示已存密钥掩码（'+esc(ke.value)+'），不会覆盖；如需更换请直接覆盖输入'; s.style.color='var(--muted)'; return; }
+    if(ke.value){ s.textContent='✏️ 当前输入将作为新 Key 保存（覆盖旧值）'; s.style.color='var(--muted)'; return; }
+    if(p&&p.hasKey){ s.textContent='🔑 已保存密钥（明文不返回前端，点 👁 查看掩码）'; s.style.color='var(--muted)'; return; }
+    s.textContent='🔓 尚未配置密钥（留空则不写入）'; s.style.color='var(--warn,#c08a00)';
+  };
+  if(kt&&ke){
+    kt.onclick=()=>{
+      const showing=ke.type==='password';
+      if(showing){ ke.type='text'; kt.textContent='🙈'; }
+      else{
+        if(ke.dataset.masked==='1'){ ke.value=''; ke.dataset.masked='0'; }
+        ke.type='password'; kt.textContent='👁';
+      }
+      updateProvKeyStatus();
+    };
+    ke.addEventListener('input',()=>{
+      if(ke.dataset.masked==='1'){ ke.value=''; ke.dataset.masked='0'; updateProvKeyStatus(); }
+    });
+  }
+  updateProvKeyStatus();
+  switchView('provider-edit');
 }
-function closeProvModal(){$('provMask').classList.remove('show');provEditingId=null;}
-async function saveProvModal(){
+// 取 API Key 输入框值：已存密钥的掩码（data-masked=1）不当作新 Key 发送
+function provApiKeyVal(){
+  const el=$('pApiKey');
+  if(!el)return null;
+  if(el.dataset.masked==='1')return null;
+  return el.value||null;
+}
+function closeProviderEdit(){switchView('providers');provEditingId=null;}
+async function saveProviderEdit(){
   const payload={
     name:$('pName').value.trim()||'未命名 Provider',
     emoji:$('pEmoji').value.trim()||'🧩',
     type:$('pType').value,
     baseUrl:$('pBaseUrl').value.trim(),
     models:$('pModels').value.split('\n').map(s=>s.trim()).filter(Boolean),
-    apiKey:$('pApiKey').value||null,
+    apiKey:provApiKeyVal(),
   };
-  const sb=$('provModalSave');sb.disabled=true;sb.textContent='保存中…';
+  const sb=$('provEditSave');sb.disabled=true;sb.textContent='保存中…';
   const {status}=await api(provEditingId?'PUT':'POST',provEditingId?`/api/admin/providers/${encodeURIComponent(provEditingId)}`:'/api/admin/providers',payload);
   sb.disabled=false;sb.textContent='保存';
-  if(status===200){toast('已保存');closeProvModal();await loadProviders();}
+  if(status===200){toast('已保存');switchView('providers');await loadProviders();}
   else toast('保存失败（'+status+'）');
 }
-$('provNewBtn').onclick=()=>openProvModal(null);
-$('provModalClose').onclick=closeProvModal;
-$('provModalCancel').onclick=closeProvModal;
-$('provModalSave').onclick=saveProvModal;
+$('provNewBtn').onclick=()=>openProviderEdit(null);
+$('provEditBack').onclick=()=>switchView('providers');
+$('provEditSave').onclick=saveProviderEdit;
 $('provBody').addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
-  if(t.dataset.pedit){openProvModal(t.dataset.pedit);}
+  if(t.dataset.pedit){openProviderEdit(t.dataset.pedit);}
   else if(t.dataset.pdel){
     const id=t.dataset.pdel;
     if(confirm('确定删除该 Provider？已选此池的智能体将回退到自有配置。')){
@@ -2038,6 +2075,9 @@ $('pushBtn').onclick=async()=>{
 let AUTO_LIST=[];
 let AUTO_EDITING=null;
 let AUTO_USERS=[];
+let AUTO_AGENTS=[];
+const AUTO_RUN_PAGE_SIZE=5;
+let AUTO_RUN_PAGE={};   // 每个自动化独立记录「执行记录」翻页位置
 
 function describeCron(cron){
   if(!cron)return '';
@@ -2055,6 +2095,27 @@ function statusPill(s){
   if(s==='running')return '<span class="pill warn">执行中</span>';
   return '<span class="pill">未运行</span>';
 }
+function autoRunsHTML(a){
+  const runs=(a.runs||[]).slice().reverse(); // 最新在前
+  if(!runs.length)return '<div class="muted" style="font-size:12px;margin-top:6px;">暂无执行记录</div>';
+  const totalPages=Math.max(1,Math.ceil(runs.length/AUTO_RUN_PAGE_SIZE));
+  let page=AUTO_RUN_PAGE[a.id]||0;
+  if(page>=totalPages)page=totalPages-1;
+  if(page<0)page=0;
+  AUTO_RUN_PAGE[a.id]=page;
+  const start=page*AUTO_RUN_PAGE_SIZE;
+  const slice=runs.slice(start,start+AUTO_RUN_PAGE_SIZE);
+  const rows=slice.map(r=>{
+    const t=(new Date(r.ts).toISOString().slice(0,16).replace('T',' '));
+    return `<div class="run-row"><span class="muted">${t}</span> ${statusPill(r.status)} <span class="muted">${r.durationMs||0}ms</span>${r.error?` <span class="muted">${esc(String(r.error).slice(0,60))}</span>`:''}</div>`;
+  }).join('');
+  const pager=`<div class="runs-pager">
+    <button class="btn sm ghost" data-run-prev="${esc(a.id)}" ${page===0?'disabled':''}>‹ 上一页</button>
+    <span class="muted" style="margin:0 8px;">执行记录 第 ${page+1}/${totalPages} 页 · 共 ${runs.length} 条</span>
+    <button class="btn sm ghost" data-run-next="${esc(a.id)}" ${page>=totalPages-1?'disabled':''}>下一页 ›</button>
+  </div>`;
+  return rows+pager;
+}
 function autoRow(a){
   const desc=describeCron(a.cron)+(a.idleOnly?' · 闲时执行':'')+` · 最长 ${Number.isFinite(a.maxSteps)?a.maxSteps:10} 步`;
   const lastRun=a.lastRunAt?`<span class="muted">最近 ${esc((new Date(a.lastRunAt).toISOString().slice(0,16).replace('T',' ')))}</span> ${statusPill(a.lastRunStatus||'')}`:'<span class="muted">尚未运行</span>';
@@ -2062,11 +2123,8 @@ function autoRow(a){
     const u=AUTO_USERS.find(x=>x.openId===uid);
     return u?`${esc(u.displayName||uid)}`:esc(uid);
   }).join('、 ')||'<span class="muted">未设置</span>';
+  const agentText=(a.agentId&&AUTO_AGENTS.find(x=>x.id===a.agentId))?esc((AUTO_AGENTS.find(x=>x.id===a.agentId).emoji||'🤖')+' '+(AUTO_AGENTS.find(x=>x.id===a.agentId).name||a.agentId)):'<span class="muted">（未关联，用收件人模型）</span>';
   const enabled=a.enabled!==false;
-  const runs=(a.runs||[]).slice().reverse().slice(0,5).map(r=>{
-    const t=(new Date(r.ts).toISOString().slice(0,16).replace('T',' '));
-    return `<div class="run-row"><span class="muted">${t}</span> ${statusPill(r.status)} <span class="muted">${r.durationMs||0}ms</span>${r.error?` <span class="muted">${esc(String(r.error).slice(0,60))}</span>`:''}</div>`;
-  }).join('')||'<div class="muted" style="font-size:12px;margin-top:6px;">暂无执行记录</div>';
   return `
   <div class="auto-item" data-id="${esc(a.id)}">
     <div class="auto-main">
@@ -2074,9 +2132,10 @@ function autoRow(a){
       <div class="auto-meta">
         <span class="pill brand">${esc(desc)}</span>
         <span class="muted">→ ${pushToText}</span>
+        <span class="pill neutral">智能体：${agentText}</span>
       </div>
       ${lastRun}
-      <div class="runs">${runs}</div>
+      <div class="runs">${autoRunsHTML(a)}</div>
     </div>
     <div class="auto-actions">
       <label class="switch" title="${enabled?'点击关闭':'点击启用'}">
@@ -2090,13 +2149,9 @@ function autoRow(a){
   </div>`;
 }
 
-async function loadAutomation(){
-  const [u,res]=await Promise.all([api('GET','/api/admin/users'),api('GET','/api/admin/automations')]);
-  if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
-  AUTO_USERS=(u.data&&u.data.users)||[];
-  const list=res.data.automations||[];
-  AUTO_LIST=list;
-  if(!list.length){$('autoList').innerHTML='<div class="empty">暂无自动化。点击右上角「+ 新建自动化」创建第一条定时任务。</div>';return;}
+function renderAutoList(){
+  const list=AUTO_LIST;
+  if(!list.length){$('autoList').innerHTML='<div class="empty">暂无自动化任务。点击右上角「+ 新建自动化任务」创建第一条定时任务。</div>';return;}
   $('autoList').innerHTML=list.map(autoRow).join('');
   $('autoList').querySelectorAll('.auto-item').forEach(el=>{
     const id=el.dataset.id;
@@ -2104,7 +2159,23 @@ async function loadAutomation(){
     el.querySelector('[data-action="run"]').onclick=()=>runAuto(id);
     el.querySelector('[data-action="edit"]').onclick=()=>editAuto(id);
     el.querySelector('[data-action="del"]').onclick=()=>deleteAuto(id);
+    const prev=el.querySelector('[data-run-prev]'); if(prev)prev.onclick=()=>{AUTO_RUN_PAGE[id]=Math.max(0,(AUTO_RUN_PAGE[id]||0)-1);renderAutoList();};
+    const next=el.querySelector('[data-run-next]'); if(next)next.onclick=()=>{AUTO_RUN_PAGE[id]=(AUTO_RUN_PAGE[id]||0)+1;renderAutoList();};
   });
+}
+
+async function loadAutomation(){
+  const [u,res,ag]=await Promise.all([
+    api('GET','/api/admin/users'),
+    api('GET','/api/admin/automations'),
+    api('GET','/api/admin/agents').catch(()=>({data:{agents:[]}})),
+  ]);
+  if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
+  AUTO_USERS=(u.data&&u.data.users)||[];
+  AUTO_AGENTS=(ag.data&&ag.data.agents)||[];
+  const list=res.data.automations||[];
+  AUTO_LIST=list;
+  renderAutoList();
 }
 
 async function toggleAuto(id,enabled){
@@ -2118,20 +2189,20 @@ async function runAuto(id){
   else toast('触发失败：'+(res.data.error||res.status));
 }
 async function deleteAuto(id){
-  if(!confirm('确认删除该自动化？'))return;
+  if(!confirm('确认删除该自动化任务？'))return;
   const res=await api('DELETE','/api/admin/automations/'+encodeURIComponent(id));
   if(res.status===200){toast('已删除');loadAutomation();}
   else toast('删除失败：'+(res.data.error||res.status));
 }
 
-function newAuto(){openAutoModal(null);}
+function newAuto(){openAutomationEdit(null);}
 async function editAuto(id){
   const a=AUTO_LIST.find(x=>x.id===id);if(!a)return;
-  openAutoModal(a);
+  openAutomationEdit(a);
 }
-function openAutoModal(a){
+function openAutomationEdit(a){
   AUTO_EDITING=a?a.id:null;
-  $('autoModalTitle').textContent=a?'编辑自动化：'+a.title:'新建自动化';
+  $('autoEditTitle').textContent=a?'编辑自动化任务：'+a.title:'新建自动化任务';
   let freq='daily',hour=9,minute=35,weeklyDay=1,monthlyDay=1;
   if(a&&a.cron){const p=a.cron.trim().split(/\s+/);if(p.length===5){
     minute=Number(p[0])||0;hour=Number(p[1])||0;
@@ -2142,9 +2213,14 @@ function openAutoModal(a){
     const checked=a&&(a.pushTo||[]).includes(u.openId);
     return `<label class="user-pick"><input type="checkbox" value="${esc(u.openId)}" ${checked?'checked':''}/> <span>${esc(u.displayName||u.openId)}</span> <span class="muted" style="font-size:11px;">${esc(u.openId)}</span></label>`;
   }).join('')||'<div class="muted">还没有任何配置过模型的用户；请先在「用户管理」让他们完成配置。</div>';
-  $('autoModalBody').innerHTML=`
+  const agentOptions=(AUTO_AGENTS||[]).map(ag=>`<option value="${esc(ag.id)}" ${a&&a.agentId===ag.id?'selected':''}>${esc((ag.emoji||'🤖')+' '+(ag.name||ag.id))}</option>`).join('');
+  const agentSelect=`<select id="a_agent"><option value="">（不关联，结果用收件人模型生成）</option>${agentOptions}</select>`;
+  $('autoEditBody').innerHTML=`
     <label>标题 <span class="req">*</span></label>
     <input id="a_title" value="${esc((a&&a.title)||'')}" maxlength="80" placeholder="例如：每日工作简报"/>
+    <label>关联智能体</label>
+    <div class="hint" style="margin-top:-4px;margin-bottom:6px;">运行该任务时，将以此智能体的人设 + 自有模型生成内容（结果会推送到下方飞书用户）。不选则退回用收件人个人模型。</div>
+    ${agentSelect}
     <label>描述 / 提示词 <span class="req">*</span></label>
     <textarea id="a_desc" maxlength="8000" placeholder="例如：综合上一个工作日的飞书消息/日程/纪要/待办，梳理完成或推进的事项，特别标注未处理的待回复事项…">${esc((a&&a.description)||'')}</textarea>
     <div class="row">
@@ -2171,11 +2247,11 @@ function openAutoModal(a){
       <input type="checkbox" id="a_idle" ${a&&a.idleOnly?'checked':''} style="width:auto;margin-right:6px;"/>
       闲时执行（00:00-06:00）：开启后任务在空闲窗口执行，结果照常推送
     </label>
-    <label>推送给 <span class="req">*</span> <span class="muted" style="font-weight:400;">（首个用于调模型，其余收推送）</span></label>
+    <label>推送给 <span class="req">*</span> <span class="muted" style="font-weight:400;">（运行结果将推送到以下飞书用户）</span></label>
     <div class="user-pick-list">${userOptions}</div>
     <div class="hint">预览 cron：<code id="a_cron_prev"></code></div>
-    <div id="autoModalStatus" class="status"></div>`;
-  $('autoMask').classList.add('show');
+    <div id="autoEditStatus" class="status"></div>`;
+  switchView('automation-edit');
   const refreshCron=()=>{
     const f=$('a_freq').value;
     $('a_weekday_wrap').style.display=f==='weekly'?'block':'none';
@@ -2192,10 +2268,49 @@ function openAutoModal(a){
 }
 
 $('autoNewBtn').onclick=()=>newAuto();
-$('autoModalClose').onclick=()=>$('autoMask').classList.remove('show');
-$('autoModalCancel').onclick=()=>$('autoMask').classList.remove('show');
-$('autoMask').onclick=(e)=>{if(e.target===$('autoMask'))$('autoMask').classList.remove('show');};
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('autoMask').classList.contains('show'))$('autoMask').classList.remove('show');});
+$('autoEditBack').onclick=()=>switchView('automation');
+$('autoEditSave').onclick=async()=>{
+  const title=$('a_title').value.trim();
+  const agentId=$('a_agent').value||null;
+  const desc=$('a_desc').value;
+  const freq=$('a_freq').value;
+  const hour=Number($('a_hour').value)||0, minute=Number($('a_minute').value)||0;
+  let cron;
+  if(freq==='weekly')cron=`${minute} ${hour} * * ${$('a_weekday').value}`;
+  else if(freq==='monthly')cron=`${minute} ${hour} ${Number($('a_monthday').value)||1} * *`;
+  else cron=`${minute} ${hour} * * *`;
+  const idleOnly=$('a_idle').checked;
+  const pushTo=Array.from($('autoEditBody').querySelectorAll('.user-pick input:checked')).map(i=>i.value);
+  const maxStepsRaw=Number($('a_maxSteps').value);
+  const maxSteps=Number.isFinite(maxStepsRaw)&&maxStepsRaw>0?Math.min(50,Math.floor(maxStepsRaw)):10;
+  const st=$('autoEditStatus');
+  if(!title){st.className='status err';st.textContent='请填写标题';toast('请填写标题');return;}
+  if(!desc.trim()){st.className='status err';st.textContent='请填写描述/提示词';toast('请填写描述/提示词');return;}
+  if(!pushTo.length){st.className='status err';st.textContent='请至少选择一个推送目标';toast('请至少选择一个推送目标');return;}
+  const body={title,description:desc,cron,idleOnly,pushTo,maxSteps,agentId};
+  const url=AUTO_EDITING?('/api/admin/automations/'+encodeURIComponent(AUTO_EDITING)):'/api/admin/automations';
+  const method=AUTO_EDITING?'PATCH':'POST';
+  const saveBtn=$('autoEditSave');
+  saveBtn.disabled=true;saveBtn.textContent='保存中…';
+  try{
+    const res=await api(method,url,body);
+    if(res.status===200){
+      st.className='status ok';st.textContent='✅ 已保存';
+      toast('已保存');
+      setTimeout(()=>{switchView('automation');loadAutomation();},600);
+    }else{
+      const err=res.data&&res.data.error?res.data.error:('HTTP '+res.status);
+      st.className='status err';st.textContent='❌ '+esc(err);
+      toast('保存失败：'+err);
+    }
+  }catch(e){
+    st.className='status err';st.textContent='❌ '+esc(e&&e.message||String(e));
+    toast('保存异常：'+(e&&e.message||e));
+    console.error('[autoSave] error',e);
+  }finally{
+    saveBtn.disabled=false;saveBtn.textContent='保存';
+  }
+};
 
 // ====================== 使用统计 ======================
 const STATS_TREND_PAGE_SIZE=5;
@@ -2291,47 +2406,6 @@ async function loadStats(){
 }
 $('statsRefreshBtn').onclick=()=>loadStats();
 $('statsRange').onchange=()=>loadStats();
-$('autoModalSave').onclick=async()=>{
-  const title=$('a_title').value.trim();
-  const desc=$('a_desc').value;
-  const freq=$('a_freq').value;
-  const hour=Number($('a_hour').value)||0, minute=Number($('a_minute').value)||0;
-  let cron;
-  if(freq==='weekly')cron=`${minute} ${hour} * * ${$('a_weekday').value}`;
-  else if(freq==='monthly')cron=`${minute} ${hour} ${Number($('a_monthday').value)||1} * *`;
-  else cron=`${minute} ${hour} * * *`;
-  const idleOnly=$('a_idle').checked;
-  const pushTo=Array.from($('autoModalBody').querySelectorAll('.user-pick input:checked')).map(i=>i.value);
-  const maxStepsRaw=Number($('a_maxSteps').value);
-  const maxSteps=Number.isFinite(maxStepsRaw)&&maxStepsRaw>0?Math.min(50,Math.floor(maxStepsRaw)):10;
-  const st=$('autoModalStatus');
-  if(!title){st.className='status err';st.textContent='请填写标题';toast('请填写标题');return;}
-  if(!desc.trim()){st.className='status err';st.textContent='请填写描述/提示词';toast('请填写描述/提示词');return;}
-  if(!pushTo.length){st.className='status err';st.textContent='请至少选择一个推送目标';toast('请至少选择一个推送目标');return;}
-  const body={title,description:desc,cron,idleOnly,pushTo,maxSteps};
-  const url=AUTO_EDITING?('/api/admin/automations/'+encodeURIComponent(AUTO_EDITING)):'/api/admin/automations';
-  const method=AUTO_EDITING?'PATCH':'POST';
-  const saveBtn=$('autoModalSave');
-  saveBtn.disabled=true;saveBtn.textContent='保存中…';
-  try{
-    const res=await api(method,url,body);
-    if(res.status===200){
-      st.className='status ok';st.textContent='✅ 已保存';
-      toast('已保存');
-      setTimeout(()=>{$('autoMask').classList.remove('show');loadAutomation();},600);
-    }else{
-      const err=res.data&&res.data.error?res.data.error:('HTTP '+res.status);
-      st.className='status err';st.textContent='❌ '+esc(err);
-      toast('保存失败：'+err);
-    }
-  }catch(e){
-    st.className='status err';st.textContent='❌ '+esc(e&&e.message||String(e));
-    toast('保存异常：'+(e&&e.message||e));
-    console.error('[autoSave] error',e);
-  }finally{
-    saveBtn.disabled=false;saveBtn.textContent='保存';
-  }
-};
 
 // ====================== 启动 ======================
 (async()=>{

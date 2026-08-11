@@ -60,19 +60,19 @@ test('store: 字段校验 — pushTo 必填；cron 必须 5 字段', async () =>
   );
 });
 
-test('store: appendRun 仅保留最近 20 条 + 写回 lastRunAt', async () => {
+test('store: appendRun 仅保留最近 200 条 + 写回 lastRunAt', async () => {
   const a = await createAutomation({
     title: 'runs',
     description: 'd',
     cron: '0 9 * * *',
     pushTo: ['ou_a'],
   });
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 205; i++) {
     await appendRun(a.id, { durationMs: 10 + i, status: i % 2 ? 'ok' : 'err', error: i % 2 ? undefined : 'e' });
   }
   const list = await listAutomations();
   const cur = list.find((x) => x.id === a.id);
-  assert.equal(cur.runs.length, 20, '应裁剪到 20 条');
+  assert.equal(cur.runs.length, 200, '应裁剪到 200 条');
   assert.ok(cur.lastRunAt, '应写回 lastRunAt');
   assert.equal(cur.lastRunStatus, 'err', '应记录最后一次状态');
   await deleteAutomation(a.id);

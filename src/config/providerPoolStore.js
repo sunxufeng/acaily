@@ -55,6 +55,14 @@ export function getProviderRaw(id) {
 
 const clamp = (s, n) => (s == null ? '' : String(s).slice(0, n));
 
+// 仅暴露掩码预览（前 4 + … + 后 4），绝不返回明文。用于前端「显示」已存密钥的概况。
+function maskKey(k) {
+  if (!k) return '';
+  k = String(k);
+  if (k.length <= 8) return k.length ? '•'.repeat(Math.min(k.length, 6)) : '';
+  return k.slice(0, 4) + '…' + k.slice(-4);
+}
+
 export function saveProvider(input, id) {
   const db = load();
   const now = new Date().toISOString();
@@ -70,10 +78,13 @@ export function saveProvider(input, id) {
   };
   if (input.apiKey) {
     p.apiKeyEnc = encryptSecret(String(input.apiKey));
+    p.keyMask = maskKey(input.apiKey);
   } else if (input.clearApiKey) {
     delete p.apiKeyEnc;
+    delete p.keyMask;
   } else if (existing.apiKeyEnc) {
     p.apiKeyEnc = existing.apiKeyEnc;
+    p.keyMask = existing.keyMask;
   }
   db.providers[p.id] = p;
   persist();

@@ -14,15 +14,22 @@ const WMO = {
   95: '雷阵雨', 96: '雷阵雨伴冰雹', 99: '强雷阵雨伴冰雹',
 };
 
-async function fetchJson(url, timeoutMs = 10000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    return await res.json();
-  } finally {
-    clearTimeout(t);
+async function fetchJson(url, timeoutMs = 10000, retries = 2) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) await new Promise((r) => setTimeout(r, 1000));
+    } finally {
+      clearTimeout(t);
+    }
   }
+  throw lastErr;
 }
 
 // 查询城市天气与未来几天预报

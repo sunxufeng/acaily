@@ -50,6 +50,101 @@ export function stripToolLines(text) {
     .trim();
 }
 
+// 把用户输入（可能是纯文本，也可能是多模态内容数组）压成一段纯文本，用于意图识别。
+function toPlainText(userInput) {
+  if (typeof userInput === 'string') return userInput;
+  if (Array.isArray(userInput)) {
+    return userInput
+      .map((p) => (p && p.type === 'text' ? p.text : ''))
+      .join(' ');
+  }
+  return '';
+}
+
+// 从用户语句里抽取城市名。很多模型（尤其是自定义代理模型）不会按 TOOL: 协议自行调用工具，
+// 因此这里在服务端直接识别「天气/气温类意图 + 城市」，提前把真实数据取回并注入上下文。
+// 做法：先剥离时间词、疑问词、天气类关键词与常见口语前缀，剩下的 2~10 字地理片段即城市。
+const CITY_STOP = /(今天|明天|后天|大后天|昨天|前天|周[一二三四五六日天]|星期[一二三四五六日天]|这周|下周|本周|未来\d+天|接下来\d+天|什么|怎么|怎样|如何|为什么|会[不没]?|是否|有没有|是不是|吗|呢|啊|呀|吧|哦|额|帮我|请|请问|我想|我要|我要看|查一下|查查|查询|看看|看一下|告诉[我您]|能不能|可以吗|麻烦|的天气|天气|气温|温度|下雨|降雨|下雪|气象|气候|穿衣|出行|情况|怎么样|是多少|多少度|适不适合|适合|注意|预报|预报吗|有雨|有雪|热不热|冷不冷|湿度)/g;
+function extractCity(text) {
+  if (!text) return null;
+  let s = text.replace(CITY_STOP, ' ');
+  // 进一步去掉残留的口语前缀（这些不是地名）
+  s = s.replace(/(我想知道|我想看|我想|我知道|知道|了解|了解下|话说|那个|那个叫|就是|关于|那个|这个)/g, ' ');
+  const m = s.match(/[一-龥A-Za-z·]{2,10}/);
+  if (!m) return null;
+  // 去掉首尾语气/结构助词，避免把「东京的」当成城市
+  return m[0].replace(/^[的了啊呀吧哦呢]+|[的了啊呀吧哦呢]+$/g, '').trim() || null;
+}
+
+// 实时信息意图的「服务端预取」：模型不肯/不会调用工具时，由服务端直接执行对应工具，
+// 把真实数据注入上下文，模型基于数据作答即可。返回拼接后的观测文本（可空）。
+async function preExecRealtimeTools(tools, userInput, context, history) {
+  const text = toPlainText(userInput);
+  if (!text) return '';
+  const obs = [];
+
+  // 1) 天气
+  const w = tools.get('get_weather');
+  if (w) {
+    // 收集候选城市：优先当前轮提取到的，其次从历史消息里出现过的（支持「那明天会下雨吗」追问）。
+    // extractCity 可能误提非城市片段，因此用地理编码是否解析成功来最终裁决。
+    const candidates = [];
+    const cur = extractCity(text);
+    if (cur) candidates.push(cur);
+    if (Array.isArray(history)) {
+      for (const h of history) {
+        const c = extractCity(typeof h.content === 'string' ? h.content : '');
+        if (c) { candidates.push(c); break; }
+      }
+    }
+    let days = 2;
+    const dm = text.match(/(\d+)\s*天/);
+    if (dm) days = Math.min(7, Math.max(1, Number(dm[1]) || 2));
+    let resolved = false;
+    let lastObs = '';
+    for (const c of candidates) {
+      try {
+        lastObs = await w.run({ city: c, days }, context);
+      } catch (e) {
+        lastObs = `天气查询失败：${e.message}`;
+      }
+      // 地理编码命中即采用；否则尝试下一个候选（如历史里的城市）
+      if (!/未找到城市/.test(lastObs)) {
+        obs.push(lastObs);
+        resolved = true;
+        break;
+      }
+    }
+    if (!resolved && lastObs) obs.push(lastObs);
+  }
+
+  // 2) 网页链接读取（用户发了链接）
+  const wr = tools.get('web_read');
+  if (wr) {
+    const urlm = text.match(/https?:\/\/[^\s，。？！）)、]+/);
+    if (urlm) {
+      try {
+        obs.push(await wr.run({ url: urlm[0] }, context));
+      } catch (e) {
+        obs.push(`网页读取失败：${e.message}`);
+      }
+    }
+  }
+
+  // 3) 联网搜索（新闻/股价/赛事/最新等实时意图）
+  const ws = tools.get('web_search');
+  if (ws && /新闻|搜索|搜一下|搜搜|查一下最新|最新(消息|情况|进展)|股价|股票|券商|赛事|排行榜|今日|今天|最近|发生了什么|热搜|热点/.test(text)) {
+    const q = text.replace(/[？?。.，,！!；;]/g, ' ').replace(/\s+/g, ' ').trim();
+    try {
+      obs.push(await ws.run({ query: q, top: 5 }, context));
+    } catch (e) {
+      obs.push(`联网搜索失败：${e.message}`);
+    }
+  }
+
+  return obs.join('\n\n');
+}
+
 function parseToolCall(text) {
   // 匹配任意位置的 TOOL: 声明（不要求必须在结尾）
   const m = text.match(/TOOL:\s*([A-Za-z0-9_]+)\s*\(([\s\S]*?)\)/);
@@ -105,8 +200,21 @@ export class AgentRuntime {
   async run(userInput, { chat, history = [], systemPrompt, maxSteps, context = {} } = {}) {
     const sys = systemPrompt || this.systemPrompt;
     const stepLimit = Number.isFinite(maxSteps) && maxSteps > 0 ? Math.floor(maxSteps) : this.maxSteps;
+    // 实时信息「服务端预取」：先尝试识别天气/联网/网页意图并直接取数，
+    // 再注入上下文，确保即使模型不调用工具也能基于真实数据作答。
+    const realtimeObs = await preExecRealtimeTools(this.tools, userInput, context, history);
     const messages = [
       { role: 'system', content: `${sys}\n\n可用工具:\n${this.toolListText()}` },
+      ...(realtimeObs
+        ? [
+            {
+              role: 'system',
+              content:
+                '【已为用户查询到的实时数据，请直接基于以下真实数据回答用户的问题，不要声称你无法查询；数据若已足够就直接作答】\n' +
+                realtimeObs,
+            },
+          ]
+        : []),
       ...history,
       { role: 'user', content: userInput },
     ];

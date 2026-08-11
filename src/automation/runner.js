@@ -5,15 +5,26 @@
 //   3. 落 run 日志到 store + 审计
 
 import { getConfig } from '../config/userConfigStore.js';
-import { routeChat } from '../gateway/router.js';
+import { routeChat, routeChatConfig } from '../gateway/router.js';
 import { sendMarkdown, sendText } from '../feishu/client.js';
 import { record as auditRecord } from '../audit/auditLog.js';
 import { appendRun, updateRun } from './store.js';
+import { getAgent, getAgentApiKey } from '../config/agentStore.js';
 
 // 由 app.js 在启动时注入依赖，避免循环引用
 let deps = null;
 export function initRunner(d) {
   deps = d;
+}
+
+// 由智能体对象拼出人设系统提示（与 app.js buildAgentSystemPrompt 同口径，但放在 runner 内避免循环依赖）
+function buildAgentPersona(agent) {
+  const parts = [`你正在以智能体「${agent.name}」${agent.emoji || ''} 的身份执行自动化任务。`];
+  if (agent.description) parts.push(`简介：${agent.description}`);
+  if (agent.identity) parts.push(`【身份 IDENTITY】\n${agent.identity}`);
+  if (agent.user) parts.push(`【用户 USER】\n${agent.user}`);
+  if (agent.soul) parts.push(`【灵魂 SOUL】\n${agent.soul}`);
+  return parts.join('\n\n');
 }
 
 // 把「当前用户身份锁定」拼到系统提示里：与 app.js injectIdentityPrompt 行为一致，
@@ -47,15 +58,37 @@ export async function runAutomation(auto, { manual = false } = {}) {
   if (!Array.isArray(auto.pushTo) || auto.pushTo.length === 0) {
     throw new Error('自动化未配置推送目标 pushTo');
   }
-  const caller = auto.pushTo[0]; // 用第一个 open_id 作为调用方（决定模型、身份、系统提示）
-  if (!getConfig(caller)) {
-    // 该用户还没配置模型 → 推一条错误回所有收件人
-    const errText = `⚠️ 自动化「${auto.title}」无法执行：收件人 ${caller} 尚未配置模型。请在个人设置页先填写 Provider / API Key / Model。`;
+  const caller = auto.pushTo[0]; // 推送收件人（首个也用于飞书会话类工具的身份上下文）
+
+  // 关联智能体：优先用其自有模型 + 人设；智能体没配模型时回退到 caller 的个人配置
+  const linkedAgent = auto.agentId ? getAgent(auto.agentId) : null;
+  let useAgentModel = false;
+  let agentCfg = null;
+  let agentApiKey = null;
+  let agentPersona = null;
+  if (linkedAgent && (linkedAgent.provider || linkedAgent.providerPoolId)) {
+    useAgentModel = true;
+    agentCfg = {
+      id: linkedAgent.id,
+      name: linkedAgent.name,
+      provider: linkedAgent.provider,
+      model: linkedAgent.model,
+      baseUrl: linkedAgent.baseUrl,
+      displayName: linkedAgent.name,
+      providerPoolId: linkedAgent.providerPoolId || null,
+    };
+    agentApiKey = linkedAgent.providerPoolId ? null : getAgentApiKey(linkedAgent.id);
+    agentPersona = buildAgentPersona(linkedAgent);
+  }
+
+  if (!useAgentModel && !getConfig(caller)) {
+    // 既没绑定智能体模型，主叫用户也未配置模型 → 推一条错误回所有收件人
+    const errText = `⚠️ 自动化「${auto.title}」无法执行：未关联有效智能体，且收件人 ${caller} 尚未配置模型。请在个人设置页先填写 Provider / API Key / Model，或在自动化里关联一个智能体。`;
     for (const uid of auto.pushTo) {
       try { await sendText(uid, errText); } catch {}
     }
-    await appendRun(auto.id, { durationMs: 0, status: 'err', error: 'caller 未配置模型' });
-    return { status: 'err', error: 'caller 未配置模型' };
+    await appendRun(auto.id, { durationMs: 0, status: 'err', error: 'caller 未配置模型且未关联智能体' });
+    return { status: 'err', error: 'caller 未配置模型且未关联智能体' };
   }
 
   const t0 = Date.now();
@@ -69,11 +102,14 @@ export async function runAutomation(auto, { manual = false } = {}) {
     // 自动化默认给更多轮工具调用（10 步），也允许在自动化配置里单独覆盖
     const autoMaxSteps = Number.isFinite(auto.maxSteps) && auto.maxSteps > 0 ? auto.maxSteps : 10;
     const r = await agent.run(auto.description, {
-      chat: (messages) => routeChat(caller, messages),
+      chat: (messages) =>
+        useAgentModel
+          ? routeChatConfig(agentCfg, agentApiKey, messages, { model: linkedAgent.model || null })
+          : routeChat(caller, messages),
       history: [],
-      systemPrompt: buildSystemPrompt(caller, agent),
+      systemPrompt: useAgentModel ? agentPersona : buildSystemPrompt(caller, agent),
       maxSteps: autoMaxSteps,
-      context: { openId: caller, automationId: auto.id, automationTitle: auto.title },
+      context: { openId: caller, automationId: auto.id, automationTitle: auto.title, agentId: linkedAgent ? linkedAgent.id : null },
     });
     answer = r.answer || '';
   } catch (e) {

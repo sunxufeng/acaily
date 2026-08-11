@@ -7,10 +7,11 @@
 //     cron: string,          // 5 字段标准 cron，例如 "35 9 * * *"
 //     enabled: boolean,
 //     idleOnly: boolean,     // 闲时执行（00:00-06:00）开关，对齐 aily 工作台
-//     pushTo: string[],      // 飞书 open_id 列表（首个用于调模型，其余收推送）
+//     pushTo: string[],      // 飞书 open_id 列表（收推送；若绑定了智能体则模型/人设来自智能体）
+//     agentId: string|null,  // 关联智能体：运行其自有模型+人设，结果发到 pushTo
 //     createdAt: number,
 //     updatedAt: number,
-//     runs: Array<{          // 最近 20 次执行记录
+//     runs: Array<{          // 最近 200 次执行记录（前端按页展示）
 //       ts: number, durationMs: number, status: 'ok'|'err'|'running',
 //       error?: string, preview?: string
 //     }>
@@ -45,8 +46,8 @@ async function save(db) {
 }
 
 function trimRuns(runs) {
-  // 始终只保留最近 20 条，避免文件无限增长
-  return (runs || []).slice(-20);
+  // 始终只保留最近 200 条，避免文件无限增长（前端按页展示执行记录）
+  return (runs || []).slice(-200);
 }
 
 export async function listAutomations() {
@@ -71,6 +72,7 @@ function normalizeCreateInput(input = {}) {
     cron: String(input.cron || '0 9 * * *').trim(),
     enabled: input.enabled !== false,
     idleOnly: !!input.idleOnly,
+    agentId: input.agentId ? String(input.agentId) : null,
     pushTo: Array.isArray(input.pushTo) ? input.pushTo.filter(Boolean).slice(0, 32) : [],
     maxSteps: Number.isFinite(+input.maxSteps) && +input.maxSteps > 0 ? Math.min(50, Math.floor(+input.maxSteps)) : 10,
     createdAt: now,
@@ -86,6 +88,7 @@ function normalizeUpdateInput(input = {}) {
   if (typeof input.cron === 'string') patch.cron = input.cron.trim();
   if (typeof input.enabled === 'boolean') patch.enabled = input.enabled;
   if (typeof input.idleOnly === 'boolean') patch.idleOnly = input.idleOnly;
+  if ('agentId' in input) patch.agentId = input.agentId ? String(input.agentId) : null;
   if (Array.isArray(input.pushTo)) patch.pushTo = input.pushTo.filter(Boolean).slice(0, 32);
   if (Number.isFinite(+input.maxSteps) && +input.maxSteps > 0) patch.maxSteps = Math.min(50, Math.floor(+input.maxSteps));
   return patch;

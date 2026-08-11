@@ -437,10 +437,13 @@ function requireAdminApi(req, res) {
   if (s.role !== 'admin') { sendJson(res, 403, { error: '需要管理员权限' }); return null; }
   return s;
 }
+// 禁用浏览器缓存：UI/静态资源每次都从服务端取最新，避免「部署了修复但用户浏览器仍跑旧版」的陷阱。
+const NO_CACHE = { 'cache-control': 'no-store, no-cache, must-revalidate, max-age=0', pragma: 'no-cache' };
+
 async function serveHtml(res, file) {
   try {
     const html = await readFile(join(PUBLIC_DIR, file));
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', ...NO_CACHE });
     return res.end(html);
   } catch {
     return sendJson(res, 404, { error: 'not found' });
@@ -514,7 +517,7 @@ const server = createServer(async (req, res) => {
       if (rel.includes('..')) return sendJson(res, 400, { error: '非法路径' });
       try {
         const buf = await readFile(join(PUBLIC_DIR, rel));
-        return res.writeHead(200, { 'content-type': STATIC_TYPES[extname(rel)] || 'application/octet-stream' }), res.end(buf);
+        return res.writeHead(200, { 'content-type': STATIC_TYPES[extname(rel)] || 'application/octet-stream', ...NO_CACHE }), res.end(buf);
       } catch { return sendJson(res, 404, { error: 'not found' }); }
     }
 
@@ -682,8 +685,7 @@ const server = createServer(async (req, res) => {
         // 若未在表单里填 apiKey 但 id 指定了已存在条目，且该条目存有密钥，则沿用
         if (!inline.apiKey && b.providerId) {
           try {
-            const stored = getProvider(b.providerId);
-            if (stored) inline.apiKey = getProviderApiKey(stored) || null;
+            inline.apiKey = getProviderApiKey(b.providerId) || null;
           } catch (_) {}
         }
         const r = await testInlineProvider(inline);
