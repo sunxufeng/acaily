@@ -263,7 +263,8 @@ td .oid{font-size:11px;color:var(--muted);}
 
 /* ---------- 对话 ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 48px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);}
-.chat-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.chat-head{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.chat-head .grow{flex:1;}
 .chat-head .avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#7aa2ff);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;}
 .chat-head .t{font-weight:700;}
 .chat-head .s{font-size:12px;color:var(--muted);}
@@ -459,10 +460,11 @@ td .oid{font-size:11px;color:var(--muted);}
 tfoot td.pager{padding:10px 8px;text-align:center;border-top:1px dashed var(--border);}
 tfoot td.pager button[disabled]{opacity:.4;cursor:not-allowed;}
 
-/* 对话页：模型 / 智能体 下拉 */
-.chat-selectors{display:flex;gap:14px;padding:10px 14px 2px;flex-wrap:wrap;}
-.chat-selectors .sel{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:150px;}
-.chat-selectors select{height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;}
+/* 对话页：模型 / 智能体 下拉（位于头部右上角，紧凑布局） */
+.chat-selectors{display:flex;gap:10px;align-items:center;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;}
+.chat-selectors .sel{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);min-width:0;}
+.chat-selectors .sel-lbl{white-space:nowrap;}
+.chat-selectors select{height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;max-width:160px;}
 .chat-selectors select:focus{outline:none;border-color:var(--brand);}
 
 /* 操作区标签 / 按钮 */
