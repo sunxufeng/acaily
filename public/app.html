@@ -555,6 +555,7 @@
       <p class="small muted" style="margin:0 0 12px;">
         在飞书组织内自动创建一个自建应用并绑定。需要主应用具备 <code>application:application:create</code> 权限；若主应用未通过企业开发者认证，此处通常会失败，请改用「手动绑定」。
       </p>
+      <div class="form-row" id="bindAutoErr" style="min-height:18px;"></div>
       <div class="actions">
         <button class="btn ghost" id="bindFeishuCancel2">取消</button>
         <button class="btn" id="bindAutoBtn" onclick="bindAgentFeishuAuto()">直接创建并绑定</button>
@@ -689,10 +690,30 @@ function setupMdToggles(scope){
   });
 }
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
-async function api(method,path,body){
+// API 调用统一封装：默认 90s 超时（可通过第三个参数覆盖），
+// 超时后将抛 AbortError，前端 try/finally 仍能正常重置按钮态，不会无限转。
+async function api(method,path,body,opts){
+  const { timeoutMs = 90_000 } = opts || {};
   const opt={method,headers:{}};
   if(body){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body);}
-  const r=await fetch(path,opt);const data=await r.json().catch(()=>({}));return {status:r.status,data};
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('客户端超时（>90s），请检查网络或服务端')), timeoutMs);
+  opt.signal = controller.signal;
+  try{
+    const r=await fetch(path,opt);
+    const text=await r.text().catch(()=>'');
+    let data={};
+    try{ data=text?JSON.parse(text):{};}catch{/* 非 JSON 响应 */}
+    return {status:r.status,data};
+  } catch(err){
+    // 将 AbortError 转成「有意义」的错误对象，调用方按 data.error 显示即可
+    if(err && err.name === 'AbortError'){
+      return {status:0,data:{error: err.message || '请求被中止（超时）'}, timedOut:true};
+    }
+    return {status:0,data:{error:'网络异常：'+(err && err.message || err)}, networkError:true};
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
@@ -1083,19 +1104,24 @@ async function send(){
     // 记住本次选择，下次进入自动恢复
     try{ if(model)localStorage.setItem('acaily_model',model); else localStorage.removeItem('acaily_model'); }catch(e){}
     try{ if(agentId)localStorage.setItem('acaily_agent',agentId); else localStorage.removeItem('acaily_agent'); }catch(e){}
-    const {status,data}=await api('POST','/agent/chat',{
+    const {status,data,timedOut,networkError}=await api('POST','/agent/chat',{
       text,
       sessionId,
       image: imageAtt ? imageAtt.dataUrl : null,
       file: fileAtt ? fileAtt.file : null,
       model: model || null,
       agentId: agentId || null,
-    });
-    finishBot(data&&data.answer);
+    },{ timeoutMs: 120_000 });
     if(data&&data.sessionId)sessionId=data.sessionId;
-    if(status!==200)finishBot('⚠️ '+(data&&data.error||status));
+    if(status===200 && data&&data.answer){
+      finishBot(data.answer);
+    } else {
+      const err = data&&data.error || `HTTP ${status}`;
+      const prefix = timedOut ? '⏱️ ' : networkError ? '🔌 ' : '⚠️ ';
+      finishBot(prefix + err + (data&&data.attemptedUrl?`\n（尝试：${data.attemptedUrl}）`:''));
+    }
   }catch(e){
-    finishBot('⚠️ 请求失败：'+e.message);
+    finishBot('⚠️ 请求失败：'+(e&&e.message||e));
   }finally{
     clearAttachments();
     sendBtn.disabled=false;sendBtn.textContent='发送';
@@ -1510,13 +1536,21 @@ function switchBindMode(mode){
 async function bindAgentFeishuAuto(){
   const id = _bindAgentCtx && _bindAgentCtx.id;
   if(!id) return;
+  const errEl = $('bindAutoErr'); if(errEl) errEl.textContent='';
+  $('bindAutoBtn').disabled = true; $('bindAutoBtn').textContent = '请求中…';
   const {status,data}=await api('POST',`/api/admin/agents/${encodeURIComponent(id)}/bind-feishu`);
+  $('bindAutoBtn').disabled = false; $('bindAutoBtn').textContent = '直接创建并绑定';
   if(status===200){
     $('bindFeishuMask').classList.remove('show');
     toast(`已绑定飞书应用：${data.appId}${data.botNote||''}`);
     await loadAgents();
   } else {
-    alert('绑定失败：'+((data&&data.error)||status));
+    const msg = (data&&data.error) || `HTTP ${status}`;
+    if(errEl){
+      errEl.innerHTML = `<span class="error">⚠️ ${esc(msg)}</span><br>`+
+        ((data&&data.code===99991672) ? '<span class="small muted">主应用未开通 <code>application:application:create</code>，请点击下方按钮切到「手动绑定」继续。</span><br><button class="btn small" onclick="switchBindMode(\'manual\')" style="margin-top:6px;">切到手动绑定</button>'
+          : '<span class="small muted">可参考「手动绑定」流程自行到飞书开放后台创建企业自建应用。</span>');
+    }
   }
 }
 async function bindAgentFeishuManual(){

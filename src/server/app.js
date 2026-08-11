@@ -667,27 +667,8 @@ const server = createServer(async (req, res) => {
     if (pathname === '/api/admin/providers' || pathname.startsWith('/api/admin/providers/')) {
       const admin = requireAdminApi(req, res);
       if (!admin) return;
-      const m = pathname.match(/^\/api\/admin\/providers\/([^/]+)$/);
-      if (m) {
-        const id = decodeURIComponent(m[1]);
-        if (method === 'GET') {
-          const p = getProvider(id);
-          return p ? sendJson(res, 200, { provider: p }) : sendJson(res, 404, { error: 'Provider 不存在' });
-        }
-        if (method === 'PUT') {
-          const body = await readBody(req);
-          const p = saveProvider(body, id);
-          await record({ actor: admin.openId, action: 'provider.update', target: id, meta: { name: p.name, type: p.type } });
-          return sendJson(res, 200, { provider: p });
-        }
-        if (method === 'DELETE') {
-          const ok = deleteProvider(id);
-          await record({ actor: admin.openId, action: 'provider.delete', target: id });
-          return sendJson(res, ok ? 200 : 404, { ok });
-        }
-        return sendJson(res, 405, { error: '方法不允许' });
-      }
       // POST /api/admin/providers/test —— 池表单里点「测试连通」用，纯 inline 配置（不读个人密钥）
+      // 必须放在正则前，否则 "test" 会被当 provider id 截走 → 405
       if (pathname === '/api/admin/providers/test' && method === 'POST') {
         const b = await readBody(req);
         const inline = {
@@ -708,6 +689,26 @@ const server = createServer(async (req, res) => {
         const r = await testInlineProvider(inline);
         await record({ actor: admin.openId, action: 'provider.test', target: b.providerId || inline.provider, meta: { ok: r.ok, model: inline.model } });
         return sendJson(res, 200, r);
+      }
+      const m = pathname.match(/^\/api\/admin\/providers\/([^/]+)$/);
+      if (m) {
+        const id = decodeURIComponent(m[1]);
+        if (method === 'GET') {
+          const p = getProvider(id);
+          return p ? sendJson(res, 200, { provider: p }) : sendJson(res, 404, { error: 'Provider 不存在' });
+        }
+        if (method === 'PUT') {
+          const body = await readBody(req);
+          const p = saveProvider(body, id);
+          await record({ actor: admin.openId, action: 'provider.update', target: id, meta: { name: p.name, type: p.type } });
+          return sendJson(res, 200, { provider: p });
+        }
+        if (method === 'DELETE') {
+          const ok = deleteProvider(id);
+          await record({ actor: admin.openId, action: 'provider.delete', target: id });
+          return sendJson(res, ok ? 200 : 404, { ok });
+        }
+        return sendJson(res, 405, { error: '方法不允许' });
       }
       if (method === 'GET') return sendJson(res, 200, { providers: listProviders() });
       if (method === 'POST') {
