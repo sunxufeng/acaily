@@ -366,7 +366,10 @@
             <h2>审计日志</h2><span class="desc">配置变更、对话调用、密钥解密等敏感操作留痕</span>
           </div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th><th>详情</th></tr></thead>
+            <table class="audit-table"><colgroup>
+              <col style="width:170px;"><col style="width:200px;"><col style="width:200px;">
+              <col style="width:240px;"><col style="width:84px;"><col>
+            </colgroup><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>目标</th><th>级别</th><th>详情</th></tr></thead>
             <tbody id="auditBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
             <tfoot id="auditPagerFoot"><tr><td colspan="6" class="empty">加载中…</td></tr></tfoot>
             </table>
@@ -747,6 +750,9 @@ function switchView(v,navItem){
     const match=document.querySelector(`.nav-item[data-view="${v}"]`);
     if(match)match.classList.add('active');
   }
+  // 视图刚激活：此时若干表格（如审计）之前在 display:none 下，trunc-cell 的 scrollWidth
+  // 测量为 0，_refreshTruncStates 无法识别是否溢出。在下一帧重新测量一次，让「…」按钮正确显示。
+  requestAnimationFrame(()=>{ _refreshTruncStates(view); });
   return true;
 }
 
@@ -1824,6 +1830,8 @@ function renderAuditTable(targetBodyId, targetFootId, opts){
   const slice=auditEventsAll.slice(start,start+AUDIT_PAGE_SIZE);
   $(targetBodyId).innerHTML = slice.map(r=>auditRow(r,!!full)).join('');
   _refreshTruncStates($(targetBodyId));
+  // 若表格当前在 display:none 隐藏视图内，再下一帧重测一次（兜底：switchView 也会再触发一次）
+  requestAnimationFrame(()=>{ _refreshTruncStates($(targetBodyId)); });
   const foot=$(targetFootId);
   const colspan = full ? 6 : 5;
   foot.innerHTML=`<tr><td colspan="${colspan}" style="text-align:center;">

@@ -222,6 +222,14 @@ tbody tr:hover{background:var(--surface-2);}
 td .nm{font-weight:600;color:var(--text);}
 td .oid{font-size:11px;color:var(--muted);}
 .actions{display:flex;gap:6px;}
+
+/* 审计日志页专用：固定布局 + 「详情」列强制包内字符折行（JSON 不再把表格挤出页面） */
+#view-audit table.audit-table{table-layout:fixed;width:100%;}
+#view-audit table.audit-table colgroup col:nth-child(6){min-width:160px;}
+#view-audit table.audit-table tbody td{overflow:hidden;}
+#view-audit table.audit-table tbody td:nth-child(6){word-break:break-all;overflow-wrap:anywhere;vertical-align:top;}
+#view-audit table.audit-table tbody td:nth-child(6) .trunc-cell{display:flex;max-width:100%;}
+#view-audit table.audit-table tbody td:nth-child(6) .trunc-text{max-width:100%;flex:1 1 auto;}
 .empty{padding:40px;text-align:center;color:var(--muted);}
 
 /* 表格单元截断（审计/活动等长内容列） */
