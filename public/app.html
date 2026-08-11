@@ -1510,19 +1510,14 @@ let currentProvCache={};
 let currentProvCacheList=[]; // 复用下拉顺序敏感
 let currentMyCfg=null;       // /api/config/me
 async function loadProviders(){
-  const {status,data}=await api('GET','/api/admin/providers');
-  const body=$('provBody'); if(!body) return;
-  if(status!==200){body.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>';return;}
-  const list=data.providers||[];
-  currentProvCache={}; list.forEach(p=>currentProvCache[p.id]=p);
-  currentProvCacheList=list;
-  // 拉取个人配置（best-effort）
+  const body=$('provBody'); if(!body)return;
+  // 拉取个人配置（best-effort，先于列表以便「复用我的配置」下拉可用）
   try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
   const {status,data}=await api('GET','/api/admin/providers');
-  const body=$('provBody'); if(!body)return;
   if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
   const list=data.providers||[];
   currentProvCache={}; list.forEach(p=>currentProvCache[p.id]=p);
+  currentProvCacheList=list;
   if(!list.length){body.innerHTML='<tr><td colspan="8" class="empty">暂无 Provider，点击右上角「新建 Provider」</td></tr>';return;}
   body.innerHTML=list.map(p=>`<tr>
     <td style="text-align:center;">${p.hasKey?'🔑':'🔓'}</td>
