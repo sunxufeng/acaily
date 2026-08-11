@@ -22,13 +22,14 @@ async function save(db, path = DEFAULT_PATH) {
   await writeFile(path, JSON.stringify(db, null, 2), 'utf8');
 }
 
-/** 创建新会话；返回 sessionId */
-export async function createSession(openId, title = '新对话') {
+/** 创建新会话；返回 sessionId。tag 用于把会话分组（如智能体 id），便于按场景隔离复用 */
+export async function createSession(openId, title = '新对话', tag = null) {
   const db = await load();
   const sessionId = randomUUID();
   db.sessions[sessionId] = {
     openId,
     title,
+    tag: tag || null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -57,11 +58,11 @@ export async function getHistory(openId, sessionId, limit = 50) {
   return all.slice(-limit).map(({ role, content }) => ({ role, content }));
 }
 
-/** 列出某用户的所有会话 */
-export async function listSessions(openId) {
+/** 列出某用户的所有会话；可选按 tag 过滤（如智能体 id） */
+export async function listSessions(openId, tag = null) {
   const db = await load();
   return Object.entries(db.sessions)
-    .filter(([, s]) => s.openId === openId)
+    .filter(([, s]) => s.openId === openId && (tag == null || s.tag === tag))
     .map(([id, s]) => ({ id, ...s }))
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }

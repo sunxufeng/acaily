@@ -3,15 +3,24 @@
 
 const FEISHU_HOST = 'https://open.feishu.cn';
 
-let _tokenCache = { token: null, expAt: 0 };
+// 多 App 支持：每个飞书应用（主应用 + 各智能体绑定的应用）缓存各自的 tenant_access_token。
+// 默认（creds 为空）使用主应用的环境变量凭据。
+const _tokenCache = new Map(); // appId -> { token, expAt }
 
-export async function getTenantToken() {
-  const appId = process.env.FEISHU_APP_ID;
-  const appSecret = process.env.FEISHU_APP_SECRET;
+/**
+ * 获取 tenant_access_token。
+ * @param {{appId?:string, appSecret?:string}} [creds] 不传则用主应用环境变量凭据
+ * @returns {Promise<string|null>}
+ */
+export async function getTenantToken(creds) {
+  const appId = creds?.appId || process.env.FEISHU_APP_ID;
+  const appSecret = creds?.appSecret || process.env.FEISHU_APP_SECRET;
   if (!appId || !appSecret) return null;
 
+  const cacheKey = appId;
   const now = Date.now();
-  if (_tokenCache.token && now < _tokenCache.expAt) return _tokenCache.token;
+  const hit = _tokenCache.get(cacheKey);
+  if (hit && hit.token && now < hit.expAt) return hit.token;
 
   const res = await fetch(`${FEISHU_HOST}/open-apis/auth/v3/tenant_access_token/internal`, {
     method: 'POST',
@@ -20,13 +29,14 @@ export async function getTenantToken() {
   });
   const data = await res.json();
   if (data.code !== 0) throw new Error(`获取 tenant_access_token 失败: ${data.msg}`);
-  _tokenCache = { token: data.tenant_access_token, expAt: now + (data.expire - 60) * 1000 };
-  return _tokenCache.token;
+  _tokenCache.set(cacheKey, { token: data.tenant_access_token, expAt: now + (data.expire - 60) * 1000 });
+  return data.tenant_access_token;
 }
 
 // 以机器人身份给指定 open_id 发送文本消息（receive_id_type=open_id）
-export async function sendText(openId, text) {
-  const token = await getTenantToken();
+// creds：可选，指定用哪个飞书应用（智能体绑定的应用）的身份发送
+export async function sendText(openId, text, creds) {
+  const token = await getTenantToken(creds);
   if (!token) return { skipped: true, reason: '未配置飞书凭据' };
 
   const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/messages?receive_id_type=open_id`, {
@@ -51,9 +61,10 @@ export async function sendText(openId, text) {
 // 要下载用户发来的图片/文件，必须用「消息资源」接口：
 //   im/v1/messages/{message_id}/resources/{image_key}?type=image
 // 因此需要传入 messageId（即消息里的 message_id）。
+// creds：可选，指定下载所用的飞书应用（智能体应用的图片需由其自身 token 下载）。
 const IMG_MAX_BYTES = 8 * 1024 * 1024; // 8MB 上限，超过拒绝（避免巨型 base64 撑爆请求/上下文）
-export async function downloadImage(messageId, imageKey) {
-  const token = await getTenantToken();
+export async function downloadImage(messageId, imageKey, creds) {
+  const token = await getTenantToken(creds);
   if (!token) return null;
   const res = await fetch(
     `${FEISHU_HOST}/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=image`,
@@ -77,8 +88,8 @@ export async function downloadImage(messageId, imageKey) {
 // 而不能用 im/v1/files/{file_key}（那只支持机器人自己上传的文件）。
 // 注意：飞书云文档（doc/sheet/bitable 等在线文档）走该接口也下载不到正文，调用方应先按 file_type 区分。
 const FILE_MAX_BYTES = 25 * 1024 * 1024; // 25MB 上限
-export async function downloadFile(messageId, fileKey) {
-  const token = await getTenantToken();
+export async function downloadFile(messageId, fileKey, creds) {
+  const token = await getTenantToken(creds);
   if (!token) return null;
   const res = await fetch(
     `${FEISHU_HOST}/open-apis/im/v1/messages/${messageId}/resources/${fileKey}?type=file`,
@@ -103,8 +114,8 @@ export async function downloadFile(messageId, fileKey) {
 
 // 列出机器人所在的群聊（需要 im:chat 权限）。p2p 私聊不在此列表，
 // 私聊历史需用消息事件里的 chat_id 直接读取。
-export async function listBotChats({ pageSize = 100 } = {}) {
-  const token = await getTenantToken();
+export async function listBotChats({ pageSize = 100, creds } = {}) {
+  const token = await getTenantToken(creds);
   if (!token) return { error: '未配置飞书凭据' };
   const url = `${FEISHU_HOST}/open-apis/im/v1/chats?user_id_type=open_id&page_size=${Math.min(100, pageSize)}`;
   const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
@@ -171,8 +182,8 @@ function extractMessageText(msg) {
 // container_id_type 合法值为 chat（群聊）或 p2p（私聊），注意不是 chat_id！
 // 同时解析 text 与 post（富文本）类型；并带回类型分布，便于区分
 // 「API 真的没返回消息」还是「返回了但被类型过滤掉」。
-export async function getChatMessages({ chatId, pageSize = 50, days, containerType = 'chat' } = {}) {
-  const token = await getTenantToken();
+export async function getChatMessages({ chatId, pageSize = 50, days, containerType = 'chat', creds } = {}) {
+  const token = await getTenantToken(creds);
   if (!token) return { error: '未配置飞书凭据' };
   if (!chatId) return { error: '缺少 chat_id' };
   // 防御：合法值只允许 chat / p2p，避免再次踩 invalid container_id_type 的坑
@@ -219,7 +230,8 @@ export async function getChatMessages({ chatId, pageSize = 50, days, containerTy
 
 let _nameCache = new Map();
 // 批量把 open_id 解析成姓名（contact:user.base:readonly，best-effort；失败则回退 open_id）。
-export async function resolveUserNames(openIds) {
+// creds：可选，指定用哪个飞书应用的 token 解析（智能体应用读自己会话时的成员姓名）。
+export async function resolveUserNames(openIds, creds) {
   const unique = [...new Set(openIds.filter(Boolean))];
   const out = {};
   const todo = [];
@@ -228,7 +240,7 @@ export async function resolveUserNames(openIds) {
     else todo.push(id);
   }
   if (!todo.length) return out;
-  const token = await getTenantToken();
+  const token = await getTenantToken(creds);
   if (!token) {
     for (const id of todo) out[id] = id;
     return out;
@@ -313,14 +325,14 @@ export function cardMarkdown(md = '') {
   return out.join('\n');
 }
 
-export async function sendMarkdown(openId, md) {
-  const token = await getTenantToken();
+export async function sendMarkdown(openId, md, creds) {
+  const token = await getTenantToken(creds);
   if (!token) return { skipped: true, reason: '未配置飞书凭据' };
 
   let content = (md || '').trim();
   // 超长：直接回退纯文本，避免卡片超限
   if (content.length > CARD_MD_LIMIT) {
-    return sendText(openId, stripMarkdown(content));
+    return sendText(openId, stripMarkdown(content), creds);
   }
 
   // 卡片 markdown 不支持 # 标题，先转成加粗
@@ -351,7 +363,7 @@ export async function sendMarkdown(openId, md) {
   if (data.code !== 0) {
     // 卡片失败（权限/格式）→ 回退纯文本
     console.warn('[feishu] 卡片发送失败，回退文本:', data.msg);
-    return sendText(openId, stripMarkdown(content));
+    return sendText(openId, stripMarkdown(content), creds);
   }
   return { ok: true, messageId: data.data?.message_id, card: true };
 }

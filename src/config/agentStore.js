@@ -33,11 +33,15 @@ function persist() {
   writeFileSync(STORE, JSON.stringify(cache, null, 2));
 }
 
-// 对外返回时剔除密文，仅暴露「是否已绑定」
+// 对外返回时剔除密文，仅暴露「是否已绑定 / 是否已配置模型」
 function strip(a) {
   if (!a) return a;
-  const { feishuAppSecretEnc, ...rest } = a;
-  return { ...rest, feishuAppBound: !!a.feishuAppId };
+  const { feishuAppSecretEnc, apiKeyEnc, ...rest } = a;
+  return {
+    ...rest,
+    feishuAppBound: !!a.feishuAppId,
+    hasApiKey: !!a.apiKeyEnc,
+  };
 }
 
 export function listAgents() {
@@ -71,6 +75,9 @@ export function saveAgent(input, id) {
     user: clamp(input.user, 4000),
     soul: clamp(input.soul, 4000),
     model: input.model ? clamp(input.model, 80) : (existing.model || null),
+    // 智能体自有模型配置（回复时使用，不依赖终端用户个人配置）
+    provider: input.provider ? clamp(input.provider, 40) : (existing.provider || null),
+    baseUrl: input.baseUrl ? clamp(input.baseUrl, 400) : (existing.baseUrl || null),
     // 飞书绑定信息保留（除非显式改）
     feishuAppId: input.feishuAppId !== undefined ? input.feishuAppId : existing.feishuAppId,
     feishuAppBound: existing.feishuAppBound || false,
@@ -84,6 +91,14 @@ export function saveAgent(input, id) {
     delete a.feishuAppSecretEnc;
   } else if (existing.feishuAppSecretEnc) {
     a.feishuAppSecretEnc = existing.feishuAppSecretEnc;
+  }
+  // apiKey 同样以信封加密落库；clearApiKey 用于清空
+  if (input.apiKey) {
+    a.apiKeyEnc = encryptSecret(String(input.apiKey));
+  } else if (input.clearApiKey) {
+    delete a.apiKeyEnc;
+  } else if (existing.apiKeyEnc) {
+    a.apiKeyEnc = existing.apiKeyEnc;
   }
   db.agents[a.id] = a;
   persist();
@@ -121,4 +136,29 @@ export function getAgentFeishuSecret(id) {
   } catch {
     return null;
   }
+}
+
+// 解密智能体自有模型 API Key（供网关以智能体身份调用模型）
+export function getAgentApiKey(id) {
+  const a = getAgentRaw(id);
+  if (!a || !a.apiKeyEnc) return null;
+  try {
+    return decryptSecret(a.apiKeyEnc);
+  } catch {
+    return null;
+  }
+}
+
+// 列出已绑定飞书应用、且持有 app_secret 的智能体（供启动各应用的 WS 长连接）。
+// 返回 { id, name, appId, appSecret }（appSecret 为明文，仅服务端内存使用）。
+export function listBoundAgents() {
+  const db = load();
+  const out = [];
+  for (const a of Object.values(db.agents)) {
+    if (a.feishuAppId && a.feishuAppSecretEnc) {
+      const secret = getAgentFeishuSecret(a.id);
+      if (secret) out.push({ id: a.id, name: a.name, appId: a.feishuAppId, appSecret: secret });
+    }
+  }
+  return out;
 }

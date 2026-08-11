@@ -24,7 +24,26 @@ export async function routeChat(openId, messages, opts = {}) {
       { provider: 'gateway', status: 404 }
     );
   }
+  const apiKey = decryptApiKey(openId); // ollama 为 null
+  return doRoute({ cfg, apiKey, openId, displayName: cfg.displayName || '', messages, opts });
+}
 
+// 以显式配置（而非 open_id 查找）路由：供「智能体」等场景复用同一套限流/重试/统计逻辑。
+// cfg 需含 { provider, model, baseUrl, displayName, retries? }；apiKey 为明文（已解密）。
+export async function routeChatConfig(cfg, apiKey, messages, opts = {}) {
+  if (!cfg || !cfg.provider) {
+    throw new ProviderError('智能体未配置模型（请在智能体配置页填写 Provider / API Key / Model）', {
+      provider: 'gateway',
+      status: 404,
+    });
+  }
+  const displayName = cfg.displayName || cfg.name || '智能体';
+  const openId = `agent:${cfg.id || 'unknown'}`; // 仅用于统计标识
+  return doRoute({ cfg, apiKey, openId, displayName, messages, opts });
+}
+
+// 核心路由：限流 → 选适配器 → 重试 → 降级 → 统计
+async function doRoute({ cfg, apiKey, openId, displayName, messages, opts = {} }) {
   // 限流（令牌桶）
   try {
     limiter.take(openId, 1);
@@ -33,10 +52,14 @@ export async function routeChat(openId, messages, opts = {}) {
     throw err;
   }
 
-  const apiKey = decryptApiKey(openId); // ollama 为 null
   // 用户配置字段名为 provider，适配器注册表按 type 索引，这里做一次映射
-  // opts.model：调用方可临时覆盖本次请求的模型（如浏览器插件切换模型）
-  const provider = getProvider({ ...cfg, type: cfg.provider, apiKey, model: opts.model || cfg.model });
+  // opts.model：调用方可临时覆盖本次请求的模型（如浏览器插件切换模型 / 智能体指定模型）
+  const provider = getProvider({
+    ...cfg,
+    type: cfg.provider,
+    apiKey,
+    model: opts.model || cfg.model,
+  });
 
   // 单用户可单独配置重试次数；缺失则走系统默认（环境变量或 2）
   const maxRetries = Number.isInteger(cfg.retries) ? cfg.retries : DEFAULT_MAX_RETRIES;
@@ -50,7 +73,7 @@ export async function routeChat(openId, messages, opts = {}) {
       try {
         await track({
           openId,
-          name: cfg.displayName || '',
+          name: displayName,
           provider: cfg.provider,
           model: cfg.model,
           promptTokens: res.usage?.promptTokens || 0,
@@ -62,7 +85,7 @@ export async function routeChat(openId, messages, opts = {}) {
         usage: res.usage,
         provider: cfg.provider,
         model: cfg.model,
-        userName: cfg.displayName || '',
+        userName: displayName,
         attempt: attempt + 1,
       };
     } catch (err) {

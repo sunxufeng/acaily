@@ -20,11 +20,11 @@ import {
   fetchFeishuUserInfo,
 } from '../auth/session.js';
 import { selfAssess } from '../compliance/checklist.js';
-import { routeChat, testConnection, rateLimitRemaining } from '../gateway/router.js';
+import { routeChat, routeChatConfig, testConnection, rateLimitRemaining } from '../gateway/router.js';
 import { AgentRuntime } from '../agent/runtime.js';
 import { parseEvent, verifySignature, extractMessage } from '../feishu/event.js';
 import { sendText, sendMarkdown } from '../feishu/client.js';
-import { startFeishuConnection, getFeishuWsStatus } from '../feishu/connection.js';
+import { startFeishuConnection, startAgentConnections, startOneAgentConnection, getFeishuWsStatus } from '../feishu/connection.js';
 import { extractFeishuDocLinks, isReadableCloudDoc, fetchFeishuDoc, fetchFeishuWiki } from '../feishu/docRead.js';
 import { extractText, truncateExtracted } from '../feishu/fileExtract.js';
 import { readRawBody, parseMultipart } from './multipart.js';
@@ -40,7 +40,7 @@ import {
 } from '../automation/store.js';
 import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } from '../automation/scheduler.js';
 import { initRunner } from '../automation/runner.js';
-import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding } from '../config/agentStore.js';
+import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
 import { createFeishuApp, enableBotCapability } from '../feishu/appMgmt.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
@@ -148,12 +148,23 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
 
   try {
     if (!sid) {
-      const sessions = await listSessions(openId);
-      if (sessions && sessions.length) {
-        sid = sessions[0].id; // 复用最近一次会话，形成连续上下文
-        hist = (await getHistory(openId, sid, 12)) || [];
+      if (context?.agentId) {
+        // 智能体对话：按 用户+智能体 维度复用会话，避免与用户主对话历史串味
+        const sessions = await listSessions(openId, context.agentId);
+        if (sessions && sessions.length) {
+          sid = sessions[0].id;
+          hist = (await getHistory(openId, sid, 12)) || [];
+        } else {
+          sid = await createSession(openId, `智能体·${(text || '图片消息').slice(0, 12)}`, context.agentId);
+        }
       } else {
-        sid = await createSession(openId, (text || '图片消息').slice(0, 20));
+        const sessions = await listSessions(openId);
+        if (sessions && sessions.length) {
+          sid = sessions[0].id; // 复用最近一次会话，形成连续上下文
+          hist = (await getHistory(openId, sid, 12)) || [];
+        } else {
+          sid = await createSession(openId, (text || '图片消息').slice(0, 20));
+        }
       }
     }
     // 图片消息把多模态内容（含 data URL）一并落库，保证后续多轮仍带视觉上下文
@@ -163,16 +174,28 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
   // 智能体人设解析（chat 传 agentId 时，以其人设 + 模型为准）
   let agentPersona = null;
   let agentModel = null;
+  let agentCfg = null;       // 智能体自有模型配置（provider/baseUrl/model）
+  let agentApiKey = null;    // 智能体自有 API Key（明文，已解密）
   if (context?.agentId) {
     const ag = getAgent(context.agentId);
     if (ag) {
       agentPersona = buildAgentSystemPrompt(ag);
       agentModel = ag.model || null;
+      if (ag.provider) {
+        agentCfg = { id: ag.id, name: ag.name, provider: ag.provider, model: ag.model, baseUrl: ag.baseUrl, displayName: ag.name };
+        agentApiKey = getAgentApiKey(ag.id);
+      }
     }
   }
 
   const result = await agent.run(userContent, {
-    chat: (messages) => routeChat(openId, messages, { model: context?.model || (agentModel || null) }),
+    // 智能体配置了自有模型 → 用其配置路由；否则回退到终端用户的个人配置（model 可被显式覆盖）
+    chat: (messages) => {
+      if (agentCfg) {
+        return routeChatConfig(agentCfg, agentApiKey, messages, { model: context?.model || agentModel || null });
+      }
+      return routeChat(openId, messages, { model: context?.model || (agentModel || null) });
+    },
     history: hist,
     // 注入用户专属助手人设（botName + 自定义指令），实现「每个人配置自己的机器人」
     // 并锁定「当前用户身份」，防止群任务总结把别人的任务错算成本人。
@@ -180,7 +203,7 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
     systemPrompt: context?.systemPrompt
       ? context.systemPrompt
       : (agentPersona || injectIdentityPrompt(openId, buildUserSystemPromptFor(openId))),
-    // 透传运行时上下文（openId / chatId），供飞书会话读取类工具使用
+    // 透传运行时上下文（openId / chatId / agentId / feishuCreds），供飞书会话读取类工具使用
     context,
   });
 
@@ -188,27 +211,85 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
   return { ...result, sessionId: sid };
 }
 
-// 统一消息处理入口：未配置用户回显 open_id，已配置则走 Agent 回复。
-// Webhook 与长连接两种事件接收方式共用此函数。
+// 统一消息处理入口：Webhook 与长连接两种事件接收方式共用此函数。
 // image: 飞书图片下载后的 data URL（可为 null）
-// file:  飞书文件下载并提取后的结构化对象 { name, type, text, truncated }（可为 null）
-async function processFeishuMessage(openId, text, image, file, chatId) {
-  const ctx = { openId, chatId };
-  try {
-    if (!getConfig(openId)) {
-      await sendText(
-        openId,
-        `👋 你还没有配置个人模型，暂时无法对话。\n\n` +
-          `请用浏览器打开 https://acaily.areteailab.com/ ，点击「飞书登录」，` +
-          `登录后在「个人设置」页填写你的模型（Provider / Base URL / Model / API Key），保存后即可在飞书里直接对话。`
-      );
-      return;
+// file:  飞书文件下载并提取后的结构化对象（{ name, type, text, truncated } 或带 unsupported/cloudDoc 标记）
+// agentId: 归属的智能体（主应用为 null）
+// creds:  该消息所属飞书应用的 { appId, appSecret }（主应用为 null → 用环境变量身份回复）
+async function processFeishuMessage(openId, text, image, file, chatId, agentId, creds) {
+  const isAgent = !!agentId;
+  const ctx = { openId, chatId, agentId: agentId || null, feishuCreds: creds || null };
+  let agent = null;
+  if (isAgent) {
+    agent = getAgent(agentId);
+    if (agent) {
+      ctx.systemPrompt = buildAgentSystemPrompt(agent);
+      ctx.model = agent.model || null;
     }
-    // 文件：把提取出的正文拼进 prompt，让模型基于文档作答
-    if (file && file.text) {
+  }
+
+  // —— 可回复性检查 ——
+  const userCfg = getConfig(openId);
+  if (isAgent && !agent) {
+    await sendText(openId, '⚠️ 该智能体不存在或已被删除。', creds);
+    return;
+  }
+  if (isAgent && !agent.provider && !userCfg) {
+    await sendText(
+      openId,
+      `⚠️ 智能体「${agent.name || ''}」尚未配置模型，且你个人也未配置模型，暂时无法回复。\n\n` +
+        `请在后台「智能体配置」为该智能体填写 Provider / Base URL / API Key / Model。`,
+      creds
+    );
+    return;
+  }
+  if (!isAgent && !userCfg) {
+    await sendText(
+      openId,
+      `👋 你还没有配置个人模型，暂时无法对话。\n\n` +
+        `请用浏览器打开 https://acaily.areteailab.com/ ，点击「飞书登录」，` +
+        `登录后在「个人设置」页填写你的模型（Provider / Base URL / Model / API Key），保存后即可在飞书里直接对话。`
+    );
+    return;
+  }
+
+  try {
+    // 文件类（含不支持 / 云文档 / 读取失败等标记）
+    if (file) {
+      if (file.cloudDoc) {
+        await sendText(
+          openId,
+          `📄《${file.name || '云文档'}》是飞书在线文档，我暂时无法直接读取在线文档内容。\n\n` +
+            `请任选一种方式发给我：\n` +
+            `1）把文档导出为 Word / PDF 后作为文件发送；\n` +
+            `2）直接把正文粘贴到对话框。`,
+          creds
+        );
+        return;
+      }
+      if (file.unsupported) {
+        if (file.downloadSkipped) { await sendText(openId, '⚠️ 未配置飞书凭据，无法下载文件。', creds); return; }
+        if (file.lowYield) {
+          await sendText(
+            openId,
+            `⚠️ 这份 PDF 没能提取出足够的正文（可能是扫描件或特殊编码）。\n\n` +
+              `请尝试：把 PDF 另存为 Word/文本后发送，或直接把正文粘贴给我，我可以照样帮你整理。`,
+            creds
+          );
+          return;
+        }
+        if (file.error) { await sendText(openId, `⚠️ 文件读取失败：${file.error}`, creds); return; }
+        await sendText(
+          openId,
+          `⚠️ 暂不支持读取该文件类型（${file.type || '未知'}）。\n\n` +
+            `请发送以下可解析的格式：PDF / Word(.docx) / Excel(.xlsx) / PPT(.pptx) / TXT / Markdown，或直接粘贴正文。`,
+          creds
+        );
+        return;
+      }
       const prompt = buildFilePrompt(file, text);
       const r = await handleAgent(openId, prompt, null, null, null, ctx);
-      await sendMarkdown(openId, r.answer);
+      await sendMarkdown(openId, r.answer, creds);
       return;
     }
 
@@ -222,10 +303,11 @@ async function processFeishuMessage(openId, text, image, file, chatId) {
       }
     }
 
-    const r = await handleAgent(openId, text ? text.trim() : '', null, null, image, ctx);
-    await sendMarkdown(openId, r.answer);
+    const r = await handleAgent(openId, rawText, null, null, image, ctx);
+    await sendMarkdown(openId, r.answer, creds);
   } catch (e) {
     console.error('[feishu] 处理消息失败:', e.message);
+    try { await sendText(openId, `⚠️ 处理失败：${e.message}`, creds); } catch {}
   }
 }
 
@@ -233,6 +315,7 @@ async function processFeishuMessage(openId, text, image, file, chatId) {
 // 暂不支持的类型（sheets / base / slides 等）给出友好提示。
 async function handleFeishuDocLink(openId, links, userText, context) {
   // 优先取第一个「可自动读取」的链接；其余类型给提示
+  const feishuCreds = context?.feishuCreds; // 智能体场景：用其绑定应用的身份回复
   const readable = links.find(isReadableCloudDoc);
   if (!readable) {
     const url = links[0].url;
@@ -241,7 +324,8 @@ async function handleFeishuDocLink(openId, links, userText, context) {
       `📄 你发来的飞书链接（${url}）属于在线表格 / 多维表格 / 幻灯片等类型，我暂时无法直接读取。\n\n` +
         `请任选一种方式发给我：\n` +
         `1）把内容导出为 Word / PDF 后作为文件发送；\n` +
-        `2）直接把正文粘贴到对话框。`
+        `2）直接把正文粘贴到对话框。`,
+      feishuCreds
     );
     return;
   }
@@ -253,17 +337,18 @@ async function handleFeishuDocLink(openId, links, userText, context) {
     if (!doc.ok) {
       await sendText(
         openId,
-        `⚠️ 无法读取该飞书文档：${doc.error}\n\n${doc.hint || ''}`
+        `⚠️ 无法读取该飞书文档：${doc.error}\n\n${doc.hint || ''}`,
+        feishuCreds
       );
       return;
     }
     const trunc = truncateExtracted(doc.text);
     const prompt = buildDocLinkPrompt(readable.url, trunc.text, userText, trunc.truncated);
     const r = await handleAgent(openId, prompt, null, null, null, context || {});
-    await sendMarkdown(openId, r.answer);
+    await sendMarkdown(openId, r.answer, feishuCreds);
   } catch (e) {
     console.error('[feishu] 读取云文档失败:', e.message);
-    await sendText(openId, `⚠️ 读取云文档时出错：${e.message}`);
+    await sendText(openId, `⚠️ 读取云文档时出错：${e.message}`, feishuCreds);
   }
 }
 
@@ -309,7 +394,8 @@ async function handleFeishuEvent(rawBody, headers) {
   const msg = extractMessage(parsed);
   if (msg && msg.text) {
     // 快速返回 200，消息异步处理（Webhook 模式要求即时响应）
-    processFeishuMessage(openId, msg.text.trim(), null, null, msg.chatId);
+    // Webhook 路径属于主应用，agentId / creds 均为 null（使用主应用环境变量身份）
+    processFeishuMessage(msg.openId, msg.text.trim(), null, null, msg.chatId, null, null);
   }
   return { status: 200, json: { code: 0, msg: 'ok' } };
 }
@@ -485,14 +571,18 @@ const server = createServer(async (req, res) => {
             if (!created.ok) {
               return sendJson(res, 502, { error: '创建飞书应用失败：' + (created.msg || '未知错误'), code: created.code });
             }
-            // 落库绑定（appId），secret 仅本次回显一次
-            const updated = setFeishuBinding(id, { appId: created.appId, bound: true });
+            // 落库绑定（appId + appSecret，secret 以信封加密存储，供后续 WS 长连接与回复使用）
+            const updated = saveAgent({ feishuAppId: created.appId, feishuAppSecret: created.appSecret }, id);
             let botNote = '';
             try {
               const bot = await enableBotCapability(created.appId);
               botNote = bot.ok ? '（机器人能力已启用）' : `（启用机器人能力提示：${bot.msg || ''}）`;
             } catch (e) { botNote = `（启用机器人能力失败：${e.message}）`; }
             await record({ actor: admin.openId, action: 'agent.bind_feishu', target: id, meta: { appId: created.appId } });
+            // 绑定成功后热启动该智能体飞书应用的长连接（无需重启服务即可开始接收消息）
+            try {
+              startOneAgentConnection({ id, name: ag.name, appId: created.appId, appSecret: created.appSecret }, processFeishuMessage);
+            } catch (e) { console.warn('[agent] 热启动长连接失败:', e.message); }
             return sendJson(res, 200, { ok: true, agent: updated, appId: created.appId, appSecret: created.appSecret, botNote });
           } catch (e) {
             return sendJson(res, 502, { error: '绑定飞书应用异常：' + e.message });
@@ -881,6 +971,8 @@ server.listen(PORT, () => {
   console.log(`[acaily] 服务已启动 http://localhost:${PORT}`);
   // 飞书事件接收：长连接（WebSocket）主通道；Webhook 回调 /feishu/event 仍保留作兼容。
   startFeishuConnection(processFeishuMessage);
+  // 为每个「已绑定飞书应用」的智能体启动独立的长连接，实现多机器人消息路由。
+  startAgentConnections(processFeishuMessage);
   // 自动化（T7.2）启动调度：加载持久化的全部自动化并挂上 cron。
   scheduleAll()
     .then((r) => console.log(`[automation] 已加载 ${r.total} 条，调度 ${r.scheduled} 条`))

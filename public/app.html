@@ -945,6 +945,7 @@ async function loadAgents(){
 }
 function agentFormHTML(a){
   a=a||{};
+  const providerOpts=['openai','anthropic','ollama','custom','acplugin'].map(p=>`<option value="${p}" ${a.provider===p?'selected':''}>${p}</option>`).join('');
   return `<div class="form">
     <div class="row"><label>名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
     <label style="width:96px;">图标<input id="aEmoji" value="${esc(a.emoji||'🤖')}" maxlength="4"/></label></div>
@@ -952,7 +953,13 @@ function agentFormHTML(a){
     <label>身份 IDENTITY<textarea id="aIdentity" rows="4" placeholder="这个智能体是谁 / 背景 / 角色定位">${esc(a.identity||'')}</textarea></label>
     <label>用户 USER<textarea id="aUser" rows="3" placeholder="面对的用户是谁 / 用户诉求">${esc(a.user||'')}</textarea></label>
     <label>灵魂 SOUL<textarea id="aSoul" rows="3" placeholder="语气 / 价值观 / 禁忌">${esc(a.soul||'')}</textarea></label>
-    <label>绑定模型（可选）<input id="aModel" value="${esc(a.model||'')}" placeholder="留空则用你的个人默认模型"/></label>
+    <div class="card-h" style="margin-top:8px;"><h3>模型配置（可选）</h3><span class="desc">为该智能体指定独立模型；留空则回退到「对话者的个人默认模型」</span></div>
+    <div class="row">
+      <label>Provider<select id="aProvider">${providerOpts}</select></label>
+      <label>Model<input id="aModel" value="${esc(a.model||'')}" placeholder="如 gpt-4o"/></label>
+    </div>
+    <label>Base URL<input id="aBaseUrl" value="${esc(a.baseUrl||'')}" placeholder="https://api.openai.com/v1（ollama 可留空）"/></label>
+    <label>API Key${a.hasApiKey?'（已配置，留空则保留）':''}<input id="aApiKey" type="password" value="" placeholder="密钥仅保存在服务端（AES-256-GCM 加密），留空不修改"/></label>
   </div>`;
 }
 let agentEditingId=null;
@@ -971,7 +978,10 @@ async function saveAgentModal(){
     identity:$('aIdentity').value,
     user:$('aUser').value,
     soul:$('aSoul').value,
+    provider:$('aProvider').value||null,
     model:$('aModel').value.trim()||null,
+    baseUrl:$('aBaseUrl').value.trim()||null,
+    apiKey:$('aApiKey').value||null, // 空字符串 → 服务端保留既有密钥
   };
   const saveBtn=$('agentModalSave');saveBtn.disabled=true;saveBtn.textContent='保存中…';
   const {status}=await api(agentEditingId?'PUT':'POST',agentEditingId?`/api/admin/agents/${encodeURIComponent(agentEditingId)}`:'/api/admin/agents',payload);

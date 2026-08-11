@@ -4,8 +4,9 @@
 import { listBotChats, getChatMessages, resolveUserNames } from '../feishu/client.js';
 
 // 列出机器人所在的群聊
-async function fmtChats() {
-  const r = await listBotChats();
+async function fmtChats(context = {}) {
+  const creds = context?.feishuCreds; // 智能体场景：用其绑定应用的身份读取会话
+  const r = await listBotChats({ creds });
   if (r.error) return `⚠️ ${r.error}（需要应用具备 im:chat 权限并已发布版本）`;
   if (!r.chats.length) {
     return '当前机器人还没有加入任何群聊。如需总结群里的任务，请先把机器人拉进相关群聊（在群里 @它 即可）。';
@@ -23,7 +24,8 @@ async function fmtHistory(args = {}, context = {}) {
   if (!chatId) {
     return '⚠️ 缺少 chat_id：可先调用 feishu_my_chats 获取，或在群聊中直接 @我 时由我自动使用当前会话。';
   }
-  const r = await getChatMessages({ chatId, pageSize: args.limit || 50, days: args.days });
+  const creds = context?.feishuCreds;
+  const r = await getChatMessages({ chatId, pageSize: args.limit || 50, days: args.days, creds });
   if (r.error) return `⚠️ ${r.error}（需要应用具备 im:message:readonly 权限并已发布版本）`;
   const d = r.diagnostics || { total: 0, readable: 0, typeCount: {} };
   // 诊断分支：先说清「是否真的读到了消息」，再决定如何总结
@@ -51,7 +53,7 @@ async function fmtHistory(args = {}, context = {}) {
   const curOpenId = (context && context.openId) || '';
   const openIds = r.messages.map((m) => m.sender_open_id);
   if (curOpenId) openIds.push(curOpenId);
-  const names = await resolveUserNames(openIds);
+  const names = await resolveUserNames(openIds, creds);
   const curName = curOpenId ? names[curOpenId] || curOpenId : '';
   const identityLine = curName
     ? `【身份锚定】当前飞书用户 = ${curName}（open_id: ${curOpenId}）。\n` +
@@ -81,7 +83,7 @@ export const feishuChatTools = [
     name: 'feishu_my_chats',
     description:
       '列出飞书机器人所在的所有群聊（名称、成员数、chat_id）。用于定位要总结的群。参数 {}。注：机器人无法列出与用户的私聊，也无法读取未加入的群。',
-    run: async () => fmtChats(),
+    run: async (_args, context) => fmtChats(context || {}),
   },
   {
     name: 'feishu_chat_history',
