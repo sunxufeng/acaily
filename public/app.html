@@ -531,6 +531,50 @@
   </div>
 </div>
 
+<!-- 绑定飞书应用弹窗（admin） -->
+<div class="mask" id="bindFeishuMask">
+  <div class="modal" style="width:560px;">
+    <button class="close" id="bindFeishuClose" title="关闭">×</button>
+    <h2>绑定飞书应用</h2>
+    <p class="muted small" style="margin-top:-4px;">
+      把这个智能体绑定到一个飞书自建应用；绑定后成员 @ 该应用即可与该智能体对话。
+    </p>
+    <div class="tab-bar" role="tablist" style="margin:10px 0 14px;">
+      <button class="tab-btn" id="bindModeManual" role="tab" aria-selected="true" onclick="switchBindMode('manual')">手动绑定（推荐）</button>
+      <button class="tab-btn" id="bindModeAuto" role="tab" aria-selected="false" onclick="switchBindMode('auto')">自动创建</button>
+    </div>
+
+    <div id="bindManualPane">
+      <p class="small muted" style="margin:0 0 8px;">
+        步骤：① 在 <a href="https://open.feishu.cn/app" target="_blank" rel="noopener">飞书开放平台 → 创建企业自建应用</a>，添加「机器人」能力并发布版本；② 把下面要的两个值复制进来。
+      </p>
+      <div class="form-row">
+        <label>App ID <span class="muted">（cli_…）</span></label>
+        <input id="bindAppId" placeholder="cli_xxxxxxxxxxxxxxxx" />
+      </div>
+      <div class="form-row">
+        <label>App Secret <span class="muted">（应用页面→凭证与基础信息）</span></label>
+        <input id="bindAppSecret" type="password" placeholder="在「凭证与基础信息」页可查看" />
+      </div>
+      <div id="bindManualErr" class="error small" style="min-height:18px;margin-top:4px;"></div>
+      <div class="actions">
+        <button class="btn ghost" id="bindFeishuCancel">取消</button>
+        <button class="btn" id="bindManualBtn" onclick="bindAgentFeishuManual()">校验并绑定</button>
+      </div>
+    </div>
+
+    <div id="bindAutoPane" style="display:none;">
+      <p class="small muted" style="margin:0 0 12px;">
+        在飞书组织内自动创建一个自建应用并绑定。需要主应用具备 <code>application:application:create</code> 权限；若主应用未通过企业开发者认证，此处通常会失败，请改用「手动绑定」。
+      </p>
+      <div class="actions">
+        <button class="btn ghost" id="bindFeishuCancel2">取消</button>
+        <button class="btn" id="bindAutoBtn" onclick="bindAgentFeishuAuto()">直接创建并绑定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="/static/js/markdown.js"></script>
@@ -1371,16 +1415,63 @@ async function saveAgentEdit(){
   if(status===200){toast('已保存');await loadAgents();await loadChatAgents();switchView('agents');}
   else toast('保存失败（'+status+'）');
 }
-async function bindAgentFeishu(id){
-  if(!confirm('将在飞书组织内为该智能体创建一个自建应用（含机器人能力）并绑定。确定继续？'))return;
+let _bindAgentCtx = null; // { id }
+function openBindFeishuModal(id){
+  _bindAgentCtx = { id };
+  // 切到「手动绑定」tab 为默认（被 99991672 限制时它能直接绕过）
+  switchBindMode('manual');
+  $('bindAppId').value='';
+  $('bindAppSecret').value='';
+  $('bindManualErr').textContent='';
+  $('bindFeishuMask').classList.add('show');
+}
+function switchBindMode(mode){
+  _bindAgentCtx = _bindAgentCtx || {};
+  _bindAgentCtx.mode = mode;
+  const isManual = mode === 'manual';
+  $('bindModeAuto').classList.toggle('active', !isManual);
+  $('bindModeAuto').setAttribute('aria-selected', !isManual);
+  $('bindModeManual').classList.toggle('active', isManual);
+  $('bindModeManual').setAttribute('aria-selected', isManual);
+  $('bindAutoPane').style.display = isManual ? 'none' : '';
+  $('bindManualPane').style.display = isManual ? '' : 'none';
+}
+async function bindAgentFeishuAuto(){
+  const id = _bindAgentCtx && _bindAgentCtx.id;
+  if(!id) return;
   const {status,data}=await api('POST',`/api/admin/agents/${encodeURIComponent(id)}/bind-feishu`);
   if(status===200){
-    alert(`已创建飞书应用：\napp_id = ${data.appId}\napp_secret = ${data.appSecret}\n（secret 仅显示这一次，请妥善保存）${data.botNote||''}`);
+    $('bindFeishuMask').classList.remove('show');
+    toast(`已绑定飞书应用：${data.appId}${data.botNote||''}`);
     await loadAgents();
   } else {
     alert('绑定失败：'+((data&&data.error)||status));
   }
 }
+async function bindAgentFeishuManual(){
+  const id = _bindAgentCtx && _bindAgentCtx.id;
+  if(!id) return;
+  const appId = $('bindAppId').value.trim();
+  const appSecret = $('bindAppSecret').value.trim();
+  const errEl = $('bindManualErr');
+  errEl.textContent='';
+  if(!appId || !appSecret){ errEl.textContent='请填写 app_id 和 app_secret'; return; }
+  $('bindManualBtn').disabled=true; $('bindManualBtn').textContent='校验中…';
+  const {status,data}=await api('POST',`/api/admin/agents/${encodeURIComponent(id)}/bind-feishu-manual`,{appId,appSecret});
+  $('bindManualBtn').disabled=false; $('bindManualBtn').textContent='校验并绑定';
+  if(status===200){
+    $('bindFeishuMask').classList.remove('show');
+    toast(`已绑定飞书应用：${data.appId}${data.botNote||''}`);
+    await loadAgents();
+  } else {
+    errEl.textContent = '绑定失败：'+((data&&data.error)||status);
+  }
+}
+// 「绑定飞书」弹窗的关闭按钮
+if($('bindFeishuClose'))$('bindFeishuClose').onclick=()=>$('bindFeishuMask').classList.remove('show');
+if($('bindFeishuCancel'))$('bindFeishuCancel').onclick=()=>$('bindFeishuMask').classList.remove('show');
+if($('bindFeishuCancel2'))$('bindFeishuCancel2').onclick=()=>$('bindFeishuMask').classList.remove('show');
+$('bindFeishuMask').onclick=(e)=>{if(e.target===$('bindFeishuMask'))$('bindFeishuMask').classList.remove('show');};
 $('agentNewBtn').onclick=()=>openAgentEdit(null);
 $('agentEditBack').onclick=()=>switchView('agents');
 $('agentEditSave').onclick=saveAgentEdit;
@@ -1388,7 +1479,7 @@ $('agentBody').addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.dataset.chat){startAgentChat(t.dataset.chat);}
   else if(t.dataset.edit){openAgentEdit(t.dataset.edit);}
-  else if(t.dataset.bind){bindAgentFeishu(t.dataset.bind);}
+  else if(t.dataset.bind){openBindFeishuModal(t.dataset.bind);}
   else if(t.dataset.del){
     const id=t.dataset.del;
     if(confirm('确定删除该智能体？')){api('DELETE',`/api/admin/agents/${encodeURIComponent(id)}`).then(r=>{if(r.status===200){toast('已删除');loadAgents();loadChatAgents();}else toast('删除失败');});}

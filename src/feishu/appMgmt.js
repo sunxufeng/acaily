@@ -65,3 +65,27 @@ export async function enableBotCapability(appId) {
   const j = await res.json().catch(() => ({ code: -1 }));
   return { ok: j.code === 0, code: j.code, msg: j.msg };
 }
+
+/**
+ * 校验用户提供的 app_id / app_secret 是否合法（通过尝试获取 tenant_access_token）。
+ * 用于「手动绑定已有飞书应用」场景：用户自己去 open.feishu.cn/app 创建应用后，
+ * 把 app_id + app_secret 填进 Acaily，本函数先验证凭据是否有效，再保存。
+ *
+ * @param {{appId:string, appSecret:string}} creds
+ * @returns {Promise<{ok:boolean, code?:number, msg?:string}>}
+ */
+export async function validateFeishuCredentials({ appId, appSecret }) {
+  if (!appId || !appSecret) return { ok: false, msg: '请填写 app_id 和 app_secret' };
+  try {
+    const res = await fetch(`${FEISHU_HOST}/open-apis/auth/v3/tenant_access_token/internal`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ app_id: String(appId).trim(), app_secret: String(appSecret).trim() }),
+    });
+    const j = await res.json().catch(() => ({ code: -1, msg: '飞书返回非 JSON' }));
+    if (j.code === 0) return { ok: true };
+    return { ok: false, code: j.code, msg: j.msg || '凭据无效' };
+  } catch (e) {
+    return { ok: false, msg: '网络错误：' + e.message };
+  }
+}

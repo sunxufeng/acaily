@@ -41,7 +41,7 @@ import {
 import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } from '../automation/scheduler.js';
 import { initRunner } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
-import { createFeishuApp, enableBotCapability } from '../feishu/appMgmt.js';
+import { createFeishuApp, enableBotCapability, validateFeishuCredentials } from '../feishu/appMgmt.js';
 import { listProviders, getProvider, saveProvider, deleteProvider, getProviderApiKey } from '../config/providerPoolStore.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
@@ -572,32 +572,55 @@ const server = createServer(async (req, res) => {
       const admin = requireAdminApi(req, res);
       if (!admin) return;
       // 详情 / 更新 / 删除 / 绑定：/api/admin/agents/:id(/bind-feishu)
-      const m = pathname.match(/^\/api\/admin\/agents\/([^/]+)(\/bind-feishu)?$/);
+      const m = pathname.match(/^\/api\/admin\/agents\/([^/]+)(\/bind-feishu(?:-manual)?)?$/);
       if (m) {
         const id = decodeURIComponent(m[1]);
         const isBind = !!m[2];
+        const isManualBind = m[2] === '/bind-feishu-manual';
         if (isBind) {
           if (method !== 'POST') return sendJson(res, 405, { error: '方法不允许' });
           const ag = getAgent(id);
           if (!ag) return sendJson(res, 404, { error: '智能体不存在' });
           try {
-            const created = await createFeishuApp({ name: ag.name, description: ag.description });
-            if (!created.ok) {
-              return sendJson(res, 502, { error: '创建飞书应用失败：' + (created.msg || '未知错误'), code: created.code });
+            let boundAppId, boundAppSecret;
+            if (isManualBind) {
+              // 「手动绑定已有飞书应用」：用户自己去开放平台后台创建的自建应用，
+              // 然后把 app_id + app_secret 填进来；先校验凭据有效再落库。
+              // 适用于主应用没有 application:application:create 权限的场景。
+              const body = await readBody(req);
+              const appId = (body && body.appId ? String(body.appId) : '').trim();
+              const appSecret = (body && body.appSecret ? String(body.appSecret) : '').trim();
+              if (!appId || !appSecret) {
+                return sendJson(res, 400, { error: '请填写 app_id 和 app_secret' });
+              }
+              const v = await validateFeishuCredentials({ appId, appSecret });
+              if (!v.ok) {
+                return sendJson(res, 400, { error: '凭据无效：' + (v.msg || '未知错误'), code: v.code });
+              }
+              boundAppId = appId;
+              boundAppSecret = appSecret;
+            } else {
+              // 「自动创建飞书应用」：调用飞书 v6 接口创建自建应用（需要 application:application:create 权限）
+              const created = await createFeishuApp({ name: ag.name, description: ag.description });
+              if (!created.ok) {
+                return sendJson(res, 502, { error: '创建飞书应用失败：' + (created.msg || '未知错误'), code: created.code });
+              }
+              boundAppId = created.appId;
+              boundAppSecret = created.appSecret;
             }
-            // 落库绑定（appId + appSecret，secret 以信封加密存储，供后续 WS 长连接与回复使用）
-            const updated = saveAgent({ feishuAppId: created.appId, feishuAppSecret: created.appSecret }, id);
+            // 落库绑定（appId + appSecret，secret 以信封加密存储）
+            const updated = saveAgent({ feishuAppId: boundAppId, feishuAppSecret: boundAppSecret }, id);
             let botNote = '';
             try {
-              const bot = await enableBotCapability(created.appId);
+              const bot = await enableBotCapability(boundAppId);
               botNote = bot.ok ? '（机器人能力已启用）' : `（启用机器人能力提示：${bot.msg || ''}）`;
             } catch (e) { botNote = `（启用机器人能力失败：${e.message}）`; }
-            await record({ actor: admin.openId, action: 'agent.bind_feishu', target: id, meta: { appId: created.appId } });
-            // 绑定成功后热启动该智能体飞书应用的长连接（无需重启服务即可开始接收消息）
+            await record({ actor: admin.openId, action: 'agent.bind_feishu', target: id, meta: { appId: boundAppId, mode: isManualBind ? 'manual' : 'auto' } });
+            // 绑定成功后热启动该智能体飞书应用的长连接
             try {
-              startOneAgentConnection({ id, name: ag.name, appId: created.appId, appSecret: created.appSecret }, processFeishuMessage);
+              startOneAgentConnection({ id, name: ag.name, appId: boundAppId, appSecret: boundAppSecret }, processFeishuMessage);
             } catch (e) { console.warn('[agent] 热启动长连接失败:', e.message); }
-            return sendJson(res, 200, { ok: true, agent: updated, appId: created.appId, appSecret: created.appSecret, botNote });
+            return sendJson(res, 200, { ok: true, agent: updated, appId: boundAppId, mode: isManualBind ? 'manual' : 'auto', botNote });
           } catch (e) {
             return sendJson(res, 502, { error: '绑定飞书应用异常：' + e.message });
           }
