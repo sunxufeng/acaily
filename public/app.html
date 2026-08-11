@@ -1826,12 +1826,10 @@ function renderAuditTable(targetBodyId, targetFootId, opts){
   _refreshTruncStates($(targetBodyId));
   const foot=$(targetFootId);
   const colspan = full ? 6 : 5;
-  foot.innerHTML=`<tr><td colspan="${colspan}">
-    <div class="pager-bar">
-      <button class="btn sm ghost" data-aud-prev ${auditPage===0?'disabled':''}>‹ 上一页</button>
-      <span class="muted" style="margin:0 10px;">第 ${auditPage+1} / ${totalPages} 页 · 共 ${auditEventsAll.length} 条</span>
-      <button class="btn sm ghost" data-aud-next ${auditPage>=totalPages-1?'disabled':''}>下一页 ›</button>
-    </div>
+  foot.innerHTML=`<tr><td colspan="${colspan}" style="text-align:center;">
+    <button class="btn sm ghost" data-aud-prev ${auditPage===0?'disabled':''}>‹ 上一页</button>
+    <span class="muted" style="margin:0 10px;">第 ${auditPage+1} / ${totalPages} 页 · 共 ${auditEventsAll.length} 条</span>
+    <button class="btn sm ghost" data-aud-next ${auditPage>=totalPages-1?'disabled':''}>下一页 ›</button>
   </td></tr>`;
   foot.querySelector('[data-aud-prev]').onclick = () => { auditPage--; renderAuditTable(targetBodyId, targetFootId, opts); };
   foot.querySelector('[data-aud-next]').onclick = () => { auditPage++; renderAuditTable(targetBodyId, targetFootId, opts); };
@@ -2158,6 +2156,7 @@ function autoRow(a){
         <input type="checkbox" ${enabled?'checked':''} data-action="toggle"/>
         <span class="slider"></span>
       </label>
+      <button class="btn sm ghost" data-action="refresh" title="刷新此任务状态、运行记录、最近一次结果">↻ 刷新</button>
       <button class="btn sm" data-action="run">运行</button>
       <button class="btn sm ghost" data-action="edit">编辑</button>
       <button class="btn sm danger" data-action="del">删除</button>
@@ -2172,6 +2171,7 @@ function renderAutoList(){
   $('autoList').querySelectorAll('.auto-item').forEach(el=>{
     const id=el.dataset.id;
     el.querySelector('[data-action="toggle"]').onchange=(e)=>toggleAuto(id,e.target.checked);
+    el.querySelector('[data-action="refresh"]').onclick=()=>refreshAuto(id);
     el.querySelector('[data-action="run"]').onclick=()=>runAuto(id);
     el.querySelector('[data-action="edit"]').onclick=()=>editAuto(id);
     el.querySelector('[data-action="del"]').onclick=()=>deleteAuto(id);
@@ -2203,6 +2203,15 @@ async function runAuto(id){
   const res=await api('POST','/api/admin/automations/'+encodeURIComponent(id)+'/run',{});
   if(res.status===200){toast('已触发；执行日志稍后刷新可见');setTimeout(loadAutomation,2500);}
   else toast('触发失败：'+(res.data.error||res.status));
+}
+// 局部刷新单个自动化任务：只取该任务的当前状态、运行记录、最近结果；保留其它任务的本地状态不动
+async function refreshAuto(id){
+  const res=await api('GET','/api/admin/automations');
+  if(res.status!==200){toast('刷新失败：'+(res.data.error||res.status));return;}
+  const fresh=res.data.automations||[];
+  AUTO_LIST=fresh;
+  renderAutoList();
+  toast('已刷新');
 }
 async function deleteAuto(id){
   if(!confirm('确认删除该自动化任务？'))return;

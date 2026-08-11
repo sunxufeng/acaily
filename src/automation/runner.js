@@ -52,6 +52,45 @@ function buildPushText(auto, answer) {
   return `${head}\n\n${clean}`;
 }
 
+// 飞书「open_id cross app / not in same app」检测
+function isCrossAppError(msg) {
+  if (!msg) return false;
+  return /cross app|not in same app|230020|230001|invalid receive_id/i.test(String(msg));
+}
+
+// 推送一条：优先智能体应用；遇跨应用限制退到主应用
+async function pushOneWithFallback(uid, pushText) {
+  // 1) 有智能体应用 → 试 Markdown / 文本
+  if (agentFeishuCreds) {
+    try {
+      await sendMarkdown(uid, pushText, agentFeishuCreds);
+      return { uid, sentVia: 'agentApp' };
+    } catch (e) {
+      if (!isCrossAppError(e.message)) {
+        // 非跨应用错误：试一下纯文本再退到主应用
+        try { await sendText(uid, pushText, agentFeishuCreds); return { uid, sentVia: 'agentApp' }; }
+        catch {}
+      }
+    }
+    // 跨应用限制 → 退到主应用
+    try {
+      await sendMarkdown(uid, pushText);
+      return { uid, sentVia: 'mainApp', note: 'cross-app' };
+    } catch (e2) {
+      try { await sendText(uid, pushText); return { uid, sentVia: 'mainApp', note: 'cross-app' }; }
+      catch (e3) { return { uid, error: e3.message || String(e3), sentVia: 'mainApp' }; }
+    }
+  }
+  // 2) 没智能体应用 → 直接用主应用
+  try {
+    await sendMarkdown(uid, pushText);
+    return { uid, sentVia: 'mainApp' };
+  } catch (e) {
+    try { await sendText(uid, pushText); return { uid, sentVia: 'mainApp' }; }
+    catch (e2) { return { uid, error: e2.message || String(e2) }; }
+  }
+}
+
 export async function runAutomation(auto, { manual = false } = {}) {
   if (!deps || !deps.agent) throw new Error('runner 未初始化（initRunner 未调用）');
   const { agent } = deps;
@@ -130,16 +169,34 @@ export async function runAutomation(auto, { manual = false } = {}) {
   const preview = (answer || errMsg).slice(0, 160);
 
   if (answer) {
-    // 推送到所有收件人（失败的单条不影响其它）；使用关联智能体绑定的飞书应用身份发送
+    // 推送到所有收件人（失败的单条不影响其它）；优先用智能体绑定的飞书应用身份发送，
+    // 但飞书要求接收方 open_id 必须先在对应应用里建立过会话，否则返回 `open_id cross app`。
+    // 这种情况下退到主应用身份（creds=null）发送，可送达但飞书端呈现为 Acaily 主机器人。
     const pushText = buildPushText(auto, answer);
+    const pushResults = [];
     for (const uid of auto.pushTo) {
-      try {
-        await sendMarkdown(uid, pushText, agentFeishuCreds);
-      } catch (e) {
-        try { await sendText(uid, pushText, agentFeishuCreds); } catch {}
-        console.error(`[automation] 推送给 ${uid} 失败:`, e.message);
+      const r = await pushOneWithFallback(uid, pushText);
+      pushResults.push(r);
+      if (r.error && !r.error.includes('cross app')) {
+        console.error(`[automation] 推送给 ${uid} 失败:`, r.error);
       }
     }
+    // 把「是否回退到主应用」写到 run 记录的预览上方，便于 UI 展示
+    const fallbackCount = pushResults.filter((r) => r.sentVia === 'mainApp').length;
+    const agentAppCount = pushResults.filter((r) => r.sentVia === 'agentApp').length;
+    const failCount = pushResults.filter((r) => r.error).length;
+    let runNote = '';
+    if (agentAppCount && fallbackCount === 0 && failCount === 0) {
+      runNote = `via 智能体应用（${linkedAgent ? linkedAgent.name : ''}）`;
+    } else if (fallbackCount && agentAppCount === 0 && failCount === 0) {
+      runNote = `⚠️ 智能体应用的接收方尚未建立会话，本次已通过主应用 Acaily 发送。` +
+        `请先给「${linkedAgent ? linkedAgent.name : ''}」飞书机器人发一条消息建立会话，之后就能以该机器人身份送达。`;
+    } else if (fallbackCount && agentAppCount) {
+      runNote = `部分用户走主应用、部分走智能体应用（飞书 open_id 跨应用限制）。`;
+    }
+    if (failCount) runNote += ` 推送失败 ${failCount}/${pushResults.length}。`;
+    if (runNote && preview) preview = `${runNote}\n\n${preview}`.trim();
+    else if (runNote) preview = runNote;
   }
 
   const finalStatus = errMsg ? 'err' : 'ok';
