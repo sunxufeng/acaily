@@ -157,13 +157,7 @@
             </div>
             <div style="flex:1;">
               <label>类型 <span class="req">*</span></label>
-              <select id="provider">
-                <option value="openai">OpenAI 兼容</option>
-                <option value="anthropic">Anthropic (Claude)</option>
-                <option value="ollama">Ollama（本地）</option>
-                <option value="custom">其他兼容网关</option>
-                <option value="acplugin">Acplugin（端口自 acplugin 项目）</option>
-              </select>
+              <select id="provider"><!-- 由 injectProviderPresets() 注入常见大模型预置 --></select>
             </div>
           </div>
 
@@ -354,13 +348,7 @@
           <div class="card-h"><h2>组织默认配置 · 一键下发</h2><span class="desc">把一份基础模型配置应用到全员（移植自 acplugin 的组织下发）；API Key 留空则保留各人现有密钥</span></div>
           <div class="row" style="align-items:flex-end;">
             <div><label>Provider</label>
-              <select id="pushProvider">
-                <option value="openai">OpenAI 兼容</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="ollama">Ollama</option>
-                <option value="custom">自建网关</option>
-                <option value="acplugin">Acplugin</option>
-              </select>
+              <select id="pushProvider"><!-- 由 injectProviderPresets() 注入 --></select>
             </div>
             <div style="flex:1;min-width:240px;"><label>Base URL <span class="req">*</span></label><input id="pushBaseUrl" placeholder="https://api.openai.com/v1"/></div>
             <div><label>Model <span class="req">*</span></label><input id="pushModel" placeholder="gpt-4o-mini"/></div>
@@ -583,6 +571,67 @@
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
+// ====================== Provider 预置清单（常用大模型） ======================
+// 选完 label 自动填入 Base URL；API Key 仍由用户手填。
+// 与服务端 src/providers/presets.js 同步；服务端协议键：openai/anthropic/ollama/custom。
+// 选项 value = 协议 type（保持服务端 schema 不变），显示文本 = 厂商 label。
+// 多预设共享同一 type 时按当前 Base URL 二次定位。
+const PROVIDER_PRESETS = [
+  { type:'openai',    label:'OpenAI（官方）',                          baseUrl:'https://api.openai.com/v1',                                sampleModels:'gpt-4o-mini\ngpt-4o\no1-mini\no3-mini' },
+  { type:'openai',    label:'DeepSeek（深度求索）',                       baseUrl:'https://api.deepseek.com',                                  sampleModels:'deepseek-chat\ndeepseek-reasoner' },
+  { type:'openai',    label:'通义千问 Qwen（DashScope 兼容模式）',         baseUrl:'https://dashscope.aliyuncs.com/compatible-mode/v1',         sampleModels:'qwen-plus\nqwen-turbo\nqwen-max' },
+  { type:'openai',    label:'月之暗面 Kimi',                             baseUrl:'https://api.moonshot.cn/v1',                                sampleModels:'moonshot-v1-8k\nmoonshot-v1-32k\nmoonshot-v1-128k' },
+  { type:'openai',    label:'智谱 GLM（BigModel）',                      baseUrl:'https://open.bigmodel.cn/api/paas/v4',                      sampleModels:'glm-4-plus\nglm-4-flash\nglm-4-air' },
+  { type:'openai',    label:'字节豆包 Doubao（火山方舟 Ark）',              baseUrl:'https://ark.cn-beijing.volces.com/api/v3',                  sampleModels:'doubao-pro-32k\ndoubao-lite-32k' },
+  { type:'openai',    label:'百度千帆（文心一言）',                       baseUrl:'https://qianfan.baidubce.com/v2',                            sampleModels:'ernie-4.0-8k\nernie-3.5-8k\nernie-speed-8k' },
+  { type:'anthropic', label:'Anthropic Claude（官方）',                  baseUrl:'https://api.anthropic.com',                                  sampleModels:'claude-3-5-sonnet-latest\nclaude-3-5-haiku-latest\nclaude-3-opus-latest' },
+  { type:'ollama',    label:'Ollama（本地推理）',                         baseUrl:'http://localhost:11434',                                    sampleModels:'llama3.1\nqwen2.5\ndeepseek-r1' },
+  { type:'custom',    label:'自定义（自建网关 / 其它）',                  baseUrl:'',                                                           sampleModels:'' },
+];
+// 按 (type, baseUrl) 找最匹配的预设置；找不到则返回该 type 的第一条（用于「重置/兜底」）。
+function matchPreset(type, baseUrl){
+  if(!type) return null;
+  const list = PROVIDER_PRESETS.filter(p=>p.type===type);
+  if(!list.length) return null;
+  if(baseUrl){ const e = list.find(p=>p.defaultBaseUrl===baseUrl); if(e) return e; }
+  return list[0];
+}
+// 渲染 <option>：value 为协议 type，文本为厂商 label，并附 data-base / data-models 供 auto-fill 用。
+function providerTypeOptionsHTML(selectedType, selectedBaseUrl){
+  const sel = matchPreset(selectedType, selectedBaseUrl);
+  const current = sel ? sel.label : '';
+  return PROVIDER_PRESETS.map(p=>`<option value="${esc(p.type)}" data-base="${esc(p.defaultBaseUrl||'')}" data-models="${esc(p.sampleModels||'')}" data-label="${esc(p.label)}" ${p.label===current?'selected':''}>${esc(p.label)}</option>`).join('');
+}
+// 给「已有的」下拉（value=type）回填正确的 selected 项（按 (type, baseUrl) 二次定位）。
+function setProviderSelectByCfg(selectId, type, baseUrl){
+  const sel = $(selectId);
+  if(!sel) return null;
+  const preset = matchPreset(type, baseUrl);
+  if(!preset) return null;
+  // 用 data-label 二次定位，避免 value 相同导致 selected 错乱
+  const opt = sel.querySelector(`option[data-label="${CSS.escape(preset.label)}"]`);
+  if(opt) sel.value = opt.value;
+  return preset;
+}
+// 把下拉选项里 data-base / data-models 同步到对应输入框（onchange 触发）。
+function setupProviderPresetSelect(selectId, baseUrlId, modelsId){
+  const sel = $(selectId);
+  if(!sel || sel.__presetBound) return;
+  sel.__presetBound = true;
+  sel.onchange=()=>{
+    const opt = sel.options[sel.selectedIndex];
+    if(!opt) return;
+    if(baseUrlId && opt.getAttribute('data-base')!=null){
+      const baseEl = $(baseUrlId);
+      if(baseEl) baseEl.value = opt.getAttribute('data-base')||'';
+    }
+    if(modelsId && opt.getAttribute('data-models')){
+      const modelsEl = $(modelsId);
+      if(modelsEl) modelsEl.value = opt.getAttribute('data-models').split('\n').join('\n');
+    }
+  };
+}
+
 // ====================== Markdown 渲染（轻量本地实现） ======================
 // 支持：# / ## / ### 标题，- 列表，1. 有序列表，**粗体**，*斜体*，`code`，```代码块```，[link](url)，
 //      > 引用，--- 分隔线。自动转义 HTML；输出已 sanitize。
@@ -737,7 +786,22 @@ $('collapseBtn').onclick=()=>{
 };
 try{applyCollapsed(localStorage.getItem(SB_KEY)==='1');}catch{}
 
-// ====================== 身份 & 初始化 ======================
+
+// 把静态 HTML 里的空 <select id="provider|..."> / <select id="pushProvider"> / <select id="aProvider"> 等渲染为预置清单
+// agentEdit 表单的 aModel 是手填默认模型，避免被覆盖，所以不传 modelsId
+function injectProviderPresets(){
+  const pairs = [
+    ['provider', 'baseUrl', 'models'],
+    ['pushProvider', null, null],
+    ['aProvider', 'aBaseUrl', null],
+  ];
+  pairs.forEach(([id, baseId, modelId])=>{
+    const el = $(id);
+    if(!el) return;
+    el.innerHTML = providerTypeOptionsHTML('', '');
+    setupProviderPresetSelect(id, baseId, modelId);
+  });
+}
 let BOT_NAME='Acaily';
 let me_name='我';
 let HAS_API_KEY=false;
@@ -745,7 +809,7 @@ async function loadConfig(){
   const res=await api('GET','/api/config/me');
   if(res.status===200&&res.data.config){
     const c=res.data.config;
-    $('provider').value=c.provider||'openai';
+    setProviderSelectByCfg('provider', c.provider||'openai', c.baseUrl||'');
     $('configName').value=c.configName||'';
     $('baseUrl').value=c.baseUrl||'';
     $('model').value=c.model||'';
@@ -1288,7 +1352,7 @@ function agentEditHTML(a,isNew){
     <div class="card-h" style="margin-top:8px;"><h3>模型配置（可选）</h3><span class="desc">优先从「Provider 池」选择；选池条目后会自动填入类型 / Base URL / API Key，再自定义 Model。池为空时退化为下方手填字段。</span></div>
     <label>Provider 池<select id="aProviderPool"><option value="">（不选池，下方手填）</option></select></label>
     <div class="row">
-      <label>类型（来自池或手填）<select id="aProvider"><option value="openai">openai</option><option value="anthropic">anthropic</option><option value="ollama">ollama</option><option value="custom">custom</option><option value="acplugin">acplugin</option></select></label>
+      <label>类型（来自池或手填）<select id="aProvider"><!-- 由 injectProviderPresets() 注入常见大模型 --></select></label>
       <label>Model<select id="aModelSel" style="display:none;"></select><input id="aModel" value="${esc(a.model||'')}" placeholder="如 gpt-4o"/></label>
     </div>
     <label>Base URL<input id="aBaseUrl" value="${esc(a.baseUrl||'')}" placeholder="https://api.openai.com/v1（ollama 可留空）"/></label>
@@ -1300,6 +1364,13 @@ function openAgentEdit(id){
   agentEditingId=id||null;
   $('agentEditTitle').textContent=id?'编辑智能体':'新建智能体';
   $('agentEditBody').innerHTML=agentEditHTML(id?currentAgentCache[id]:null, !id);
+  // 注入常见大模型预置到「类型」下拉；若已选池条目则按池的 (type, baseUrl) 二次定位。
+  const aProv=$('aProvider');
+  if(aProv){
+    const a = currentAgentCache[agentEditingId] || {};
+    aProv.innerHTML = providerTypeOptionsHTML(a.type||'', a.baseUrl||'');
+    setupProviderPresetSelect('aProvider', 'aBaseUrl', null);
+  }
   loadProviderPoolIntoAgentForm();
   setupMdToggles($('agentEditBody'));
   setupMdImport($('agentEditBody'));
@@ -1535,7 +1606,6 @@ async function loadProviders(){
 }
 function provFormHTML(p){
   p=p||{};
-  const opts=['openai','anthropic','ollama','custom','acplugin'];
   // 复用来源下拉：空白 / 我的个人配置 / 组织默认 / 每个已有 Provider 池条目
   const reuseOptions=['<option value="">（空白/手填）</option>'];
   if(currentMyCfg){
@@ -1549,9 +1619,8 @@ function provFormHTML(p){
       reuseOptions.push(`<option value="pool:${esc(pp.id)}" data-type="${esc(pp.type||'')}" data-base="${esc(pp.baseUrl||'')}" data-models="${esc((pp.models||[]).join(','))}">🧩 ${esc(pp.name||'')} (${esc(pp.type||'')}${ml?' · '+esc(ml):''})</option>`);
     });
   }
-  // 默认 type = 已存或 openai（取消原来硬编码 acplugin 默认）
-  const fallbackType = (p.type && opts.includes(p.type)) ? p.type : 'openai';
-  const typeOpts = opts.map(o=>`<option value="${o}" ${fallbackType===o?'selected':''}>${o}</option>`).join('');
+  // 用预设清单生成类型下拉（value=协议 type）；按已存的 (type, baseUrl) 自动选回预设
+  const typeOpts = providerTypeOptionsHTML(p.type||'openai', p.baseUrl||'');
   return `<div class="form">
     <div class="card-h" style="margin-top:0;">
       <h3>复用现有配置 <span class="muted" style="font-size:12px;font-weight:normal;">（推荐：从你已有的个人/组织/池配置一键复用，不用重填）</span></h3>
@@ -1566,6 +1635,10 @@ function provFormHTML(p){
     </div>
     <label>模型列表（每行一个，首项作为默认）<textarea id="pModels" rows="4" placeholder="gpt-4o-mini&#10;gpt-5.5-sol">${esc((p.models||[]).join('\n'))}</textarea></label>
     <label>API Key${p.hasKey?'（已配置，留空保留）':''}<input id="pApiKey" type="password" value="" placeholder="密钥仅保存在服务端（AES-256-GCM 加密），留空不修改"/></label>
+    <div class="row" style="margin-top:10px;align-items:center;">
+      <button class="btn ghost" type="button" id="pTestBtn">🔌 测试连通</button>
+      <span id="pTestStatus" class="muted small" style="margin-left:8px;word-break:break-all;"></span>
+    </div>
   </div>`;
 }
 let provEditingId=null;
@@ -1595,6 +1668,35 @@ function openProvModal(id){
         const pid=reuseSel.value.slice(5);
         const pp=currentProvCache[pid];
         if(pp && !$('pName').value.trim()) $('pName').value=pp.name+' (副本)';
+      }
+    };
+  }
+  // 「类型」下拉自动填 Base URL 与「模型列表」
+  setupProviderPresetSelect('pType', 'pBaseUrl', 'pModels');
+  // 「测试连通」按钮
+  const tb=$('pTestBtn');
+  if(tb){
+    tb.onclick=async ()=>{
+      const st=$('pTestStatus');
+      st.textContent='测试中…';
+      st.className='muted small';
+      const body={
+        provider:$('pType').value,
+        baseUrl:$('pBaseUrl').value.trim(),
+        apiKey:$('pApiKey').value||null,
+        // 「测试连通」仅用来验证 baseUrl + apiKey 是否能跑通，模型可用第一行
+        model:$('pModels').value.split('\n').map(s=>s.trim()).filter(Boolean)[0] || '',
+        providerId: provEditingId || null,
+      };
+      tb.disabled=true; tb.textContent='测试中…';
+      const r=await api('POST','/api/admin/providers/test',body);
+      tb.disabled=false; tb.textContent='🔌 测试连通';
+      if(r.status===200 && r.data && r.data.ok){
+        st.className='small'; st.style.color='#0a7d2e';
+        st.textContent=`✅ 连通成功 (${r.data.provider}${r.data.model?' · '+r.data.model:''})`;
+      }else{
+        st.className='error small';
+        st.textContent='❌ '+((r.data&&r.data.error)||('HTTP '+r.status));
       }
     };
   }
@@ -1806,8 +1908,7 @@ window.editUser=async function(openId){
   const res=await api('GET','/api/admin/config/'+encodeURIComponent(openId));
   if(res.status!==200){toast('加载失败：'+(res.data.error||res.status));return;}
   const c=res.data.config||{};
-  const opts=['openai','anthropic','ollama','custom','acplugin'];
-  const providerChoices=opts.map(p=>`<option value="${p}" ${c.provider===p?'selected':''}>${p}</option>`).join('');
+  const providerChoices=providerTypeOptionsHTML(c.provider||'', c.baseUrl||'');
   const modelsText=Array.isArray(c.models)?c.models.join('\n'):'';
   const chJson=c.customHeaders?JSON.stringify(c.customHeaders):'';
   $('modalTitle').textContent='编辑：'+(c.displayName||openId);
@@ -2213,6 +2314,8 @@ $('autoModalSave').onclick=async()=>{
       history.replaceState(null,'',location.pathname+location.hash);
     }
   }catch(e){}
+  // 启动前先注入 Provider 预置清单（让静态 HTML 里的下拉也带着常用大模型）
+  injectProviderPresets();
   const me=await api('GET','/api/me');
   if(me.status!==200){location.href='/login';return;}
   const d=me.data;

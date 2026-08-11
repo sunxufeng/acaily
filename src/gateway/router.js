@@ -118,7 +118,34 @@ async function doRoute({ cfg, apiKey, openId, displayName, messages, opts = {} }
   throw lastErr ?? new ProviderError('模型调用失败', { provider: 'gateway' });
 }
 
-// 连通性测试：配置保存前/后一键验证
+// 连通性测试：纯 inline 配置（不读个人/池里的密钥），用于「管理员在池表单里试一下能不能通」等场景。
+export async function testInlineProvider(inlineCfg) {
+  if (!inlineCfg || !inlineCfg.provider) return { ok: false, error: '未配置 provider' };
+  if (!inlineCfg.baseUrl) return { ok: false, error: '请填写 Base URL' };
+  if (!inlineCfg.model) return { ok: false, error: '请填写模型（默认按所选 Base URL 自动取列表中第一项；当前为空）' };
+  const cfg = {
+    type: inlineCfg.provider,
+    baseUrl: inlineCfg.baseUrl,
+    apiKey: inlineCfg.apiKey || '',
+    model: inlineCfg.model,
+    chatCompletionsPath: inlineCfg.chatCompletionsPath || '',
+    timeout: inlineCfg.timeout || 30,
+  };
+  const provider = getProvider(cfg);
+  try {
+    await provider.test();
+    return { ok: true, provider: cfg.type, model: cfg.model, baseUrl: cfg.baseUrl };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err.message,
+      attemptedUrl: err.attemptedUrl,
+      provider: cfg.type,
+    };
+  }
+}
+
+// 连通性测试：配置保存前/后一键验证（个人用户侧）
 export async function testConnection(openId, inlineCfg) {
   let cfg = getConfig(openId);
   if (inlineCfg && inlineCfg.provider) {

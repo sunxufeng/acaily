@@ -20,7 +20,7 @@ import {
   fetchFeishuUserInfo,
 } from '../auth/session.js';
 import { selfAssess } from '../compliance/checklist.js';
-import { routeChat, routeChatConfig, testConnection, rateLimitRemaining } from '../gateway/router.js';
+import { routeChat, routeChatConfig, testConnection, testInlineProvider, rateLimitRemaining } from '../gateway/router.js';
 import { AgentRuntime } from '../agent/runtime.js';
 import { parseEvent, verifySignature, extractMessage } from '../feishu/event.js';
 import { sendText, sendMarkdown } from '../feishu/client.js';
@@ -686,6 +686,28 @@ const server = createServer(async (req, res) => {
           return sendJson(res, ok ? 200 : 404, { ok });
         }
         return sendJson(res, 405, { error: '方法不允许' });
+      }
+      // POST /api/admin/providers/test —— 池表单里点「测试连通」用，纯 inline 配置（不读个人密钥）
+      if (pathname === '/api/admin/providers/test' && method === 'POST') {
+        const b = await readBody(req);
+        const inline = {
+          provider: b.provider || '',
+          baseUrl: b.baseUrl || '',
+          apiKey: b.apiKey || null,
+          model: b.model || '',
+          chatCompletionsPath: b.chatCompletionsPath || '',
+          timeout: b.timeout || 30,
+        };
+        // 若未在表单里填 apiKey 但 id 指定了已存在条目，且该条目存有密钥，则沿用
+        if (!inline.apiKey && b.providerId) {
+          try {
+            const stored = getProvider(b.providerId);
+            if (stored) inline.apiKey = getProviderApiKey(stored) || null;
+          } catch (_) {}
+        }
+        const r = await testInlineProvider(inline);
+        await record({ actor: admin.openId, action: 'provider.test', target: b.providerId || inline.provider, meta: { ok: r.ok, model: inline.model } });
+        return sendJson(res, 200, r);
       }
       if (method === 'GET') return sendJson(res, 200, { providers: listProviders() });
       if (method === 'POST') {
