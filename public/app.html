@@ -1416,7 +1416,17 @@ async function startAgentChat(agentId){
 
 // ====================== Provider 池管理（admin） ======================
 let currentProvCache={};
+let currentProvCacheList=[]; // 复用下拉顺序敏感
+let currentMyCfg=null;       // /api/config/me
 async function loadProviders(){
+  const {status,data}=await api('GET','/api/admin/providers');
+  const body=$('provBody'); if(!body) return;
+  if(status!==200){body.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>';return;}
+  const list=data.providers||[];
+  currentProvCache={}; list.forEach(p=>currentProvCache[p.id]=p);
+  currentProvCacheList=list;
+  // 拉取个人配置（best-effort）
+  try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
   const {status,data}=await api('GET','/api/admin/providers');
   const body=$('provBody'); if(!body)return;
   if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
@@ -1439,11 +1449,33 @@ async function loadProviders(){
 }
 function provFormHTML(p){
   p=p||{};
+  const opts=['openai','anthropic','ollama','custom','acplugin'];
+  // 复用来源下拉：空白 / 我的个人配置 / 组织默认 / 每个已有 Provider 池条目
+  const reuseOptions=['<option value="">（空白/手填）</option>'];
+  if(currentMyCfg){
+    reuseOptions.push(`<option value="my:${esc(currentMyCfg.provider||'')}" data-type="${esc(currentMyCfg.provider||'')}" data-base="${esc(currentMyCfg.baseUrl||'')}" data-models="${esc((currentMyCfg.model?[currentMyCfg.model]:[]).join(','))}">📌 我的个人配置（${esc(currentMyCfg.displayName||currentMyCfg.provider||'')}）</option>`);
+  }else{
+    reuseOptions.push('<option value="my:" disabled>📌 我的个人配置（未设置）</option>');
+  }
+  if(currentProvCacheList && currentProvCacheList.length){
+    currentProvCacheList.forEach(pp=>{
+      const ml=(pp.models||[]).slice(0,2).join(', ');
+      reuseOptions.push(`<option value="pool:${esc(pp.id)}" data-type="${esc(pp.type||'')}" data-base="${esc(pp.baseUrl||'')}" data-models="${esc((pp.models||[]).join(','))}">🧩 ${esc(pp.name||'')} (${esc(pp.type||'')}${ml?' · '+esc(ml):''})</option>`);
+    });
+  }
+  // 默认 type = 已存或 openai（取消原来硬编码 acplugin 默认）
+  const fallbackType = (p.type && opts.includes(p.type)) ? p.type : 'openai';
+  const typeOpts = opts.map(o=>`<option value="${o}" ${fallbackType===o?'selected':''}>${o}</option>`).join('');
   return `<div class="form">
+    <div class="card-h" style="margin-top:0;">
+      <h3>复用现有配置 <span class="muted" style="font-size:12px;font-weight:normal;">（推荐：从你已有的个人/组织/池配置一键复用，不用重填）</span></h3>
+      <span class="desc">选完后会自动填入「类型 / Base URL / 模型列表」；API Key 留空避免被覆盖</span>
+    </div>
+    <label>复用来源<select id="pReuse">${reuseOptions.join('')}</select></label>
     <div class="row"><label>名称<input id="pName" value="${esc(p.name||'')}" placeholder="如：组织默认 OpenAI"/></label>
     <label style="width:96px;">图标<input id="pEmoji" value="${esc(p.emoji||'🧩')}" maxlength="4"/></label></div>
     <div class="row">
-      <label>类型<select id="pType"><option value="openai" ${p.type==='openai'?'selected':''}>openai</option><option value="anthropic" ${p.type==='anthropic'?'selected':''}>anthropic</option><option value="ollama" ${p.type==='ollama'?'selected':''}>ollama</option><option value="custom" ${p.type==='custom'?'selected':''}>custom</option><option value="acplugin" ${p.type==='acplugin'?'selected':''}>acplugin</option></select></label>
+      <label>类型<select id="pType">${typeOpts}</select></label>
       <label>Base URL<input id="pBaseUrl" value="${esc(p.baseUrl||'')}" placeholder="https://api.openai.com/v1"/></label>
     </div>
     <label>模型列表（每行一个，首项作为默认）<textarea id="pModels" rows="4" placeholder="gpt-4o-mini&#10;gpt-5.5-sol">${esc((p.models||[]).join('\n'))}</textarea></label>
@@ -1455,6 +1487,31 @@ function openProvModal(id){
   provEditingId=id||null;
   $('provModalTitle').textContent=id?'编辑 Provider':'新建 Provider';
   $('provModalBody').innerHTML=provFormHTML(id?currentProvCache[id]:null);
+  // 「复用来源」联动：选中后自动填类型/BaseURL/模型
+  const reuseSel=$('pReuse');
+  if(reuseSel){
+    reuseSel.onchange=()=>{
+      const opt=reuseSel.options[reuseSel.selectedIndex];
+      if(!opt) return;
+      const t=opt.getAttribute('data-type')||'';
+      const b=opt.getAttribute('data-base')||'';
+      const m=opt.getAttribute('data-models')||'';
+      if(t){
+        const pTypeEl=$('pType');
+        for(const o of pTypeEl.options){if(o.value===t){pTypeEl.value=t;break;}}
+      }
+      if(b!=null) $('pBaseUrl').value=b;
+      if(m){ $('pModels').value=m.split(',').join('\n'); }
+      // 名称若有占位也带过来
+      if(reuseSel.value.startsWith('my:') && currentMyCfg){
+        if(!$('pName').value.trim()) $('pName').value='我的 '+ (currentMyCfg.displayName||'')+' 配置';
+      }else if(reuseSel.value.startsWith('pool:')){
+        const pid=reuseSel.value.slice(5);
+        const pp=currentProvCache[pid];
+        if(pp && !$('pName').value.trim()) $('pName').value=pp.name+' (副本)';
+      }
+    };
+  }
   $('provMask').classList.add('show');
 }
 function closeProvModal(){$('provMask').classList.remove('show');provEditingId=null;}

@@ -13,7 +13,11 @@ const FEISHU_HOST = process.env.FEISHU_HOST || 'https://open.feishu.cn';
  * @returns {Promise<{ok:boolean, appId?:string, appSecret?:string, code?:number, msg?:string}>}
  */
 export async function createFeishuApp({ name, description }) {
+  const safeName = (name || 'Acaily 智能体').slice(0, 50);
+  const safeDesc = (description || '由 Acaily 创建的智能体应用').slice(0, 200);
   const token = await getTenantToken();
+  // 飞书 v6 创建应用必填 i18n 数组（i18n_key 枚举：zh_cn/en_us/ja_jp/...），否则返回 "field validation failed"。
+  // 此处用 zh_cn 写入名称/描述；多语言可后续 PATCH。
   const res = await fetch(`${FEISHU_HOST}/open-apis/application/v6/applications`, {
     method: 'POST',
     headers: {
@@ -21,9 +25,14 @@ export async function createFeishuApp({ name, description }) {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      name: (name || 'Acaily 智能体').slice(0, 50),
-      description: (description || '由 Acaily 创建的智能体应用').slice(0, 200),
       app_type: 'custom',
+      i18n: [
+        {
+          i18n_key: 'zh_cn',
+          name: safeName,
+          description: safeDesc,
+        },
+      ],
     }),
   });
   const j = await res.json().catch(() => ({ code: -1, msg: '飞书返回非 JSON' }));
