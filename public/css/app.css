@@ -217,6 +217,8 @@ thead th{background:var(--surface-2);color:var(--muted);font-weight:600;text-ali
 tbody td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
 tbody tr:last-child td{border-bottom:none;}
 tbody tr:hover{background:var(--surface-2);}
+/* 表格中「时间」列强制单行展示，避免「YYYY-MM-DD」与「HH:MM:SS」被挤到两行；列宽随内容自适应 */
+.ts-cell{white-space:nowrap;font-variant-numeric:tabular-nums;}
 td .nm{font-weight:600;color:var(--text);}
 td .oid{font-size:11px;color:var(--muted);}
 .actions{display:flex;gap:6px;}

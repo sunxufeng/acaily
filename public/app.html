@@ -1172,7 +1172,7 @@ async function loadSessionList(agentId){
     if(!arr.length){list.innerHTML='<div class="muted" style="font-size:12px;padding:4px;">暂无历史会话</div>';return;}
     list.innerHTML=arr.map(s=>`<div class="csb-item ${s.id===sessionId?'active':''}" data-sid="${esc(s.id)}" data-agent="${esc(s.tag||'')}">
       <div class="t">${esc(s.title||'新对话')}</div>
-      <div class="m">${esc((s.updatedAt||'').slice(5,16).replace('T',' '))}</div>
+      <div class="m">${esc(fmtLocal(s.updatedAt,false).slice(5))}</div>
       <button class="x" data-delsid="${esc(s.id)}" title="删除">×</button>
     </div>`).join('');
     // 绑定点击 / 删除
@@ -1257,7 +1257,7 @@ async function loadAgents(){
     <td><b>${esc(a.name)}</b></td>
     <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
     <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
-    <td class="muted">${esc((a.updatedAt||'').slice(0,10))}</td>
+    <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
     <td class="ops">
       <button class="btn ghost sm" data-chat="${esc(a.id)}" title="用该智能体开启新对话">开启对话</button>
       <button class="btn ghost sm" data-edit="${esc(a.id)}">编辑</button>
@@ -1630,7 +1630,7 @@ async function loadProviders(){
     <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
     <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc((p.baseUrl||'').slice(0,40))}</td>
     <td>${p.hasKey?'<span class="tag ok">已配置</span>':'<span class="tag warn">未配置</span>'}</td>
-    <td class="muted">${esc((p.updatedAt||'').slice(0,10))}</td>
+    <td class="muted">${esc(fmtLocal(p.updatedAt,false).slice(0,10))}</td>
     <td class="ops">
       <button class="btn ghost sm" data-pedit="${esc(p.id)}">编辑</button>
       <button class="btn ghost sm danger" data-pdel="${esc(p.id)}">删除</button>
@@ -1873,7 +1873,7 @@ async function loadUsers(){
       <td>${esc(u.model||'-')}</td>
       <td>${u.botName?`<span class="pill brand">${esc(u.botName)}</span>`:'-'}</td>
       <td>${u.hasApiKey?'<span class="pill ok">已填</span>':'<span class="pill">未填</span>'}</td>
-      <td class="muted">${esc((u.updatedAt||'').slice(0,19).replace('T',' '))}</td>
+      <td class="muted">${esc(fmtLocal(u.updatedAt,true))}</td>
       <td><div class="actions">
         <button class="btn sm" onclick="editUser('${esc(u.openId)}')">编辑</button>
         <button class="btn sm danger" onclick="deleteUser('${esc(u.openId)}')">删除</button>
@@ -1895,12 +1895,28 @@ function auditRow(r,full){
         ? truncCell(metaStr, { label: 'meta', max: 380, mono: true })
         : '<span class="muted">-</span>')
     : '';
-  const cols=`<td class="muted">${esc((r.ts||'').slice(0,19).replace('T',' '))}</td>
+  // 时间列加 nowrap 避免被挤到换行；其它长内容列都走 truncCell
+  const cols=`<td class="muted ts-cell">${esc(fmtLocal(r.ts,true))}</td>
     <td>${r.actor?truncCell(r.actor,{label:'actor',max:170,mono:true}):'<span class="muted">-</span>'}</td>
-    <td>${esc(r.action||'-')}</td>
+    <td>${r.action?truncCell(r.action,{label:'action',max:180,mono:true}):'<span class="muted">-</span>'}</td>
     <td>${r.target?truncCell(r.target,{label:'target',max:220,mono:true}):'<span class="muted">-</span>'}</td>
     <td>${lvl?`<span class="pill ${lvl}">${esc(r.level)}</span>`:'<span class="pill">info</span>'}</td>`;
   return '<tr>'+cols+(full?`<td>${detailCell}</td>`:'')+'</tr>';
+}
+
+// 把任意 Date 输入（毫秒/秒/字符串都接受）按浏览器本地时区格式化成 'YYYY-MM-DD HH:MM[:SS]'
+// 解决之前直接用 toISOString() 输出 UTC 时间被当成本地时间显示的时区错位问题。
+function fmtLocal(d, withSec) {
+  if (d == null || d === '') return '';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  const y = dt.getFullYear();
+  const m = pad(dt.getMonth() + 1);
+  const day = pad(dt.getDate());
+  const hh = pad(dt.getHours());
+  const mm = pad(dt.getMinutes());
+  return `${y}-${m}-${day} ${hh}:${mm}` + (withSec ? `:${pad(dt.getSeconds())}` : '');
 }
 
 // 表格单元截断：长内容显示省略号 + "…" 按钮，点击展开全文气泡
@@ -2106,7 +2122,7 @@ function autoRunsHTML(a){
   const start=page*AUTO_RUN_PAGE_SIZE;
   const slice=runs.slice(start,start+AUTO_RUN_PAGE_SIZE);
   const rows=slice.map(r=>{
-    const t=(new Date(r.ts).toISOString().slice(0,16).replace('T',' '));
+    const t=fmtLocal(r.ts,false);
     return `<div class="run-row"><span class="muted">${t}</span> ${statusPill(r.status)} <span class="muted">${r.durationMs||0}ms</span>${r.error?` <span class="muted">${esc(String(r.error).slice(0,60))}</span>`:''}</div>`;
   }).join('');
   const pager=`<div class="runs-pager">
@@ -2118,7 +2134,7 @@ function autoRunsHTML(a){
 }
 function autoRow(a){
   const desc=describeCron(a.cron)+(a.idleOnly?' · 闲时执行':'')+` · 最长 ${Number.isFinite(a.maxSteps)?a.maxSteps:10} 步`;
-  const lastRun=a.lastRunAt?`<span class="muted">最近 ${esc((new Date(a.lastRunAt).toISOString().slice(0,16).replace('T',' ')))}</span> ${statusPill(a.lastRunStatus||'')}`:'<span class="muted">尚未运行</span>';
+  const lastRun=a.lastRunAt?`<span class="muted">最近 ${esc(fmtLocal(a.lastRunAt,false))}</span> ${statusPill(a.lastRunStatus||'')}`:'<span class="muted">尚未运行</span>';
   const pushToText=(a.pushTo||[]).map(uid=>{
     const u=AUTO_USERS.find(x=>x.openId===uid);
     return u?`${esc(u.displayName||uid)}`:esc(uid);
@@ -2402,7 +2418,7 @@ async function loadStats(){
     <td>${fmtNum(u.outputTokens)}</td>
     <td><strong>${fmtNum(u.totalTokens)}</strong></td>
   </tr>`).join(''):'<tr><td colspan="6" class="empty">近 '+d.rangeDays+' 天暂无用户调用</td></tr>';
-  $('statsAsOf').textContent='数据截至 '+new Date(d.asOf||Date.now()).toISOString().slice(0,19).replace('T',' ');
+  $('statsAsOf').textContent='数据截至 '+fmtLocal(d.asOf||Date.now(),true);
 }
 $('statsRefreshBtn').onclick=()=>loadStats();
 $('statsRange').onchange=()=>loadStats();
