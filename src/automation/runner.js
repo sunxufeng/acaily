@@ -15,6 +15,33 @@ import { getAgent, getAgentApiKey, getAgentFeishuSecret } from '../config/agentS
 let deps = null;
 export function initRunner(d) {
   deps = d;
+  // 启动时自愈：把上次进程崩溃留下的「执行中」卡死 run 标记为失败，
+  // 否则 UI 上会一直显示「执行中 0ms」让人误以为还在跑。
+  recoverStuckRuns().catch((e) => console.error('[automation] 启动自愈失败:', e));
+}
+
+const STUCK_RUN_THRESHOLD_MS = 60 * 1000; // 超过 60 秒仍 running 视为卡死
+
+async function recoverStuckRuns() {
+  // 延迟加载避免循环引用
+  const { listAutomations, updateRun } = await import('./store.js');
+  const now = Date.now();
+  let recovered = 0;
+  for (const a of await listAutomations()) {
+    if (!Array.isArray(a.runs)) continue;
+    for (const r of a.runs) {
+      if (r.status !== 'running') continue;
+      if (now - r.ts < STUCK_RUN_THRESHOLD_MS) continue;
+      const ok = await updateRun(a.id, r.ts, {
+        status: 'err',
+        durationMs: now - r.ts,
+        error: '上次的运行未正常结束（runner 进程崩溃或异常退出），启动时自愈标记为失败',
+        preview: '⚠️ 上次运行未正常结束，启动时已自愈标记为失败。',
+      });
+      if (ok) recovered++;
+    }
+  }
+  if (recovered) console.log(`[automation] 启动自愈：清理 ${recovered} 条卡死的 running 记录`);
 }
 
 // 由智能体对象拼出人设系统提示（与 app.js buildAgentSystemPrompt 同口径，但放在 runner 内避免循环依赖）
@@ -59,7 +86,9 @@ function isCrossAppError(msg) {
 }
 
 // 推送一条：优先智能体应用；遇跨应用限制退到主应用
-async function pushOneWithFallback(uid, pushText) {
+// 注意：agentFeishuCreds 必须作为参数传入（之前是 runAutomation 函数内的 let，
+// 模块级函数读不到，触发 ReferenceError "agentFeishuCreds is not defined"，导致任务永远卡在「执行中」）
+async function pushOneWithFallback(uid, pushText, agentFeishuCreds) {
   // 1) 有智能体应用 → 试 Markdown / 文本
   if (agentFeishuCreds) {
     try {
@@ -166,27 +195,37 @@ export async function runAutomation(auto, { manual = false } = {}) {
   }
 
   const durationMs = Date.now() - t0;
-  const preview = (answer || errMsg).slice(0, 160);
+  let preview = (answer || errMsg).slice(0, 160);
 
   if (answer) {
     // 推送到所有收件人（失败的单条不影响其它）；优先用智能体绑定的飞书应用身份发送，
     // 但飞书要求接收方 open_id 必须先在对应应用里建立过会话，否则返回 `open_id cross app`。
     // 这种情况下退到主应用身份（creds=null）发送，可送达但飞书端呈现为 Acaily 主机器人。
     const pushText = buildPushText(auto, answer);
-    const pushResults = [];
-    for (const uid of auto.pushTo) {
-      const r = await pushOneWithFallback(uid, pushText);
-      pushResults.push(r);
-      if (r.error && !r.error.includes('cross app')) {
-        console.error(`[automation] 推送给 ${uid} 失败:`, r.error);
+    // 把整段推送包进 try-catch：即使内部出现 ReferenceError 等意外错误，也要走完 updateRun，
+    // 否则任务会永远卡在「执行中 0ms」状态。
+    let pushResults = [];
+    let pushBlockErr = null;
+    try {
+      for (const uid of auto.pushTo) {
+        const r = await pushOneWithFallback(uid, pushText, agentFeishuCreds);
+        pushResults.push(r);
+        if (r.error && !r.error.includes('cross app')) {
+          console.error(`[automation] 推送给 ${uid} 失败:`, r.error);
+        }
       }
+    } catch (e) {
+      pushBlockErr = e.message || String(e);
+      console.error(`[automation] 推送阶段异常 (${auto.title}):`, pushBlockErr);
     }
     // 把「是否回退到主应用」写到 run 记录的预览上方，便于 UI 展示
     const fallbackCount = pushResults.filter((r) => r.sentVia === 'mainApp').length;
     const agentAppCount = pushResults.filter((r) => r.sentVia === 'agentApp').length;
     const failCount = pushResults.filter((r) => r.error).length;
     let runNote = '';
-    if (agentAppCount && fallbackCount === 0 && failCount === 0) {
+    if (pushBlockErr) {
+      runNote = `⚠️ 推送阶段异常：${pushBlockErr}`;
+    } else if (agentAppCount && fallbackCount === 0 && failCount === 0) {
       runNote = `via 智能体应用（${linkedAgent ? linkedAgent.name : ''}）`;
     } else if (fallbackCount && agentAppCount === 0 && failCount === 0) {
       runNote = `⚠️ 智能体应用的接收方尚未建立会话，本次已通过主应用 Acaily 发送。` +
