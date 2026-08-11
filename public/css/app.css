@@ -504,10 +504,13 @@ td.ops{display:flex;gap:6px;flex-wrap:wrap;}
 /* Markdown 编辑器（智能体表单内） */
 .md-edit{position:relative;}
 .md-edit textarea{width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.55;resize:vertical;}
-.md-toggle{display:flex;gap:0;margin-top:6px;border-top:1px dashed var(--border);padding-top:6px;}
+.md-toolbar{display:flex;align-items:center;gap:8px;margin-top:6px;border-top:1px dashed var(--border);padding-top:6px;}
+.md-toggle{display:flex;gap:0;}
 .md-tab{background:transparent;border:1px solid var(--border);border-right:0;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted);}
 .md-tab:first-child{border-radius:6px 0 0 6px;}
 .md-tab:last-child{border-radius:0 6px 6px 0;border-right:1px solid var(--border);}
+.md-import{margin-left:auto;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;transition:.15s;}
+.md-import:hover{border-color:var(--brand);color:var(--brand);}
 .md-tab.active{background:var(--brand);color:#fff;border-color:var(--brand);}
 .md-preview{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface-2);font-size:13px;line-height:1.6;max-height:200px;overflow:auto;}
 .md-preview h1,.md-preview h2,.md-preview h3{font-weight:700;margin:8px 0 4px;}
@@ -525,3 +528,16 @@ td.ops{display:flex;gap:6px;flex-wrap:wrap;}
 .md-cell code{font-size:11px;background:rgba(127,127,127,.1);padding:0 4px;border-radius:3px;}
 
 .tag.warn{background:#fff3cd;color:#856404;}
+
+/* 智能体编辑：框架内页面（非弹窗） */
+.agent-edit-bar{display:flex;align-items:center;gap:12px;background:var(--surface);}
+.agent-edit-form{padding:14px 16px 8px;}
+.agent-edit-form .field-label{font-size:12px;color:var(--muted);margin:4px 0 2px;}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin:10px 0 4px;flex-wrap:wrap;}
+.tab{background:transparent;border:1px solid transparent;border-bottom:0;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--muted);border-radius:8px 8px 0 0;margin-bottom:-1px;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--brand);font-weight:600;border-color:var(--border);background:var(--surface-2);}
+.tab-panels{position:relative;}
+.tab-panel{display:none;padding:4px 0 8px;}
+.tab-panel.active{display:block;}
+/* 导入 MD 后 textarea 与普通一致 */

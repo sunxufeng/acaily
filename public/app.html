@@ -458,6 +458,18 @@
         </div>
       </section>
 
+      <!-- 视图：智能体编辑（admin，框架内页面，非弹窗） -->
+      <section class="view" id="view-agent-edit">
+        <div class="card">
+          <div class="card-h agent-edit-bar">
+            <button class="btn ghost sm" id="agentEditBack" title="返回智能体列表">← 返回</button>
+            <h2 id="agentEditTitle" style="flex:1;text-align:center;margin:0;">新建智能体</h2>
+            <button class="btn" id="agentEditSave">保存</button>
+          </div>
+          <div id="agentEditBody"></div>
+        </div>
+      </section>
+
       <!-- 视图：Provider 池（admin） -->
       <section class="view" id="view-providers">
         <div class="card">
@@ -515,18 +527,6 @@
     <div class="actions">
       <button class="btn ghost" id="autoModalCancel">取消</button>
       <button class="btn" id="autoModalSave">保存</button>
-    </div>
-  </div>
-</div>
-<!-- 智能体编辑弹窗（admin） -->
-<div class="mask" id="agentMask">
-  <div class="modal" style="width:680px;">
-    <button class="close" id="agentModalClose" title="关闭">×</button>
-    <h2 id="agentModalTitle">新建智能体</h2>
-    <div id="agentModalBody"></div>
-    <div class="actions">
-      <button class="btn ghost" id="agentModalCancel">取消</button>
-      <button class="btn" id="agentModalSave">保存</button>
     </div>
   </div>
 </div>
@@ -603,8 +603,8 @@ async function api(method,path,body){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats','agents','providers']);
-const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats','agents','providers']);
+const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','stats','agents','providers','agent-edit']);
+const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','stats','agents','providers','agent-edit']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   config:['我的配置','为你的飞书账号配置专属大模型'],
@@ -616,6 +616,7 @@ const VIEW_TITLES={
   automation:['自动化','定时任务调度与飞书推送'],
   stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
   agents:['智能体配置','创建 / 编辑智能体并绑定飞书应用'],
+  'agent-edit':['智能体编辑','在框架内维护智能体（多 Tab 编辑 Markdown 人设 / 导入 .md 文件）'],
   providers:['Provider 池','管理员维护的可复用 Provider/Model 组合，智能体和用户都可从这里选择'],
 };
 function switchView(v,navItem){
@@ -1132,31 +1133,48 @@ async function loadAgents(){
     </td>
   </tr>`).join('');
 }
-function agentFormHTML(a){
+function mdEditBlock(fid, value, rows, placeholder){
+  return `<div class="md-edit" data-md="${fid}">
+    <div class="md-toolbar">
+      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
+      <button type="button" class="md-import" data-target="${fid}">导入 MD</button>
+      <input type="file" class="md-file" data-target="${fid}" accept=".md,.markdown,.txt,.text" hidden />
+    </div>
+    <textarea id="${fid}" rows="${rows}" placeholder="${esc(placeholder)}">${esc(value)}</textarea>
+    <div class="md-preview" hidden></div>
+  </div>`;
+}
+function agentEditHTML(a){
   a=a||{};
-  return `<div class="form">
+  return `<div class="agent-edit-form">
     <div class="row"><label>名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
     <label style="width:96px;">图标<input id="aEmoji" value="${esc(a.emoji||'🤖')}" maxlength="4"/></label></div>
-    <label>简介（Markdown）<div class="md-edit" data-md="aDesc">
-      <textarea id="aDesc" rows="2" placeholder="一句话简介（支持 **加粗** / 列表 / 链接 等 Markdown）">${esc(a.description||'')}</textarea>
-      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
-      <div class="md-preview" hidden></div>
-    </div></label>
-    <label>身份 IDENTITY（Markdown）<div class="md-edit" data-md="aIdentity">
-      <textarea id="aIdentity" rows="6" placeholder="这个智能体是谁 / 背景 / 角色定位&#10;&#10;示例：&#10;# 角色&#10;你是一位资深的产品经理……&#10;## 职责&#10;- 需求分析&#10;- 方案设计">${esc(a.identity||'')}</textarea>
-      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
-      <div class="md-preview" hidden></div>
-    </div></label>
-    <label>用户 USER（Markdown）<div class="md-edit" data-md="aUser">
-      <textarea id="aUser" rows="4" placeholder="面对的用户是谁 / 用户诉求">${esc(a.user||'')}</textarea>
-      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
-      <div class="md-preview" hidden></div>
-    </div></label>
-    <label>灵魂 SOUL（Markdown）<div class="md-edit" data-md="aSoul">
-      <textarea id="aSoul" rows="4" placeholder="语气 / 价值观 / 禁忌&#10;&#10;示例：&#10;- 回答简洁，不啰嗦&#10;- 永远先说结论&#10;- 禁用表情符号">${esc(a.soul||'')}</textarea>
-      <div class="md-toggle"><button type="button" class="md-tab active" data-mode="edit">编辑</button><button type="button" class="md-tab" data-mode="preview">预览</button></div>
-      <div class="md-preview" hidden></div>
-    </div></label>
+
+    <div class="tabs" id="agentTabs">
+      <button type="button" class="tab active" data-tab="desc">简介</button>
+      <button type="button" class="tab" data-tab="identity">身份 IDENTITY</button>
+      <button type="button" class="tab" data-tab="user">用户 USER</button>
+      <button type="button" class="tab" data-tab="soul">灵魂 SOUL</button>
+    </div>
+    <div class="tab-panels">
+      <div class="tab-panel active" data-panel="desc">
+        <div class="field-label">简介（Markdown）</div>
+        ${mdEditBlock('aDesc', a.description||'', 3, '一句话简介（支持 **加粗** / 列表 / 链接 等 Markdown）。点「导入 MD」可载入 .md 文件。')}
+      </div>
+      <div class="tab-panel" data-panel="identity">
+        <div class="field-label">身份 IDENTITY（Markdown）</div>
+        ${mdEditBlock('aIdentity', a.identity||'', 8, '这个智能体是谁 / 背景 / 角色定位\n\n# 角色\n你是一位资深的产品经理……\n## 职责\n- 需求分析\n- 方案设计')}
+      </div>
+      <div class="tab-panel" data-panel="user">
+        <div class="field-label">用户 USER（Markdown）</div>
+        ${mdEditBlock('aUser', a.user||'', 6, '面对的用户是谁 / 用户诉求')}
+      </div>
+      <div class="tab-panel" data-panel="soul">
+        <div class="field-label">灵魂 SOUL（Markdown）</div>
+        ${mdEditBlock('aSoul', a.soul||'', 6, '语气 / 价值观 / 禁忌\n\n- 回答简洁，不啰嗦\n- 永远先说结论\n- 禁用表情符号')}
+      </div>
+    </div>
+
     <div class="card-h" style="margin-top:8px;"><h3>模型配置（可选）</h3><span class="desc">优先从「Provider 池」选择；选池条目后会自动填入类型 / Base URL / API Key，再自定义 Model。池为空时退化为下方手填字段。</span></div>
     <label>Provider 池<select id="aProviderPool"><option value="">（不选池，下方手填）</option></select></label>
     <div class="row">
@@ -1168,16 +1186,54 @@ function agentFormHTML(a){
   </div>`;
 }
 let agentEditingId=null;
-function openAgentModal(id){
+function openAgentEdit(id){
   agentEditingId=id||null;
-  $('agentModalTitle').textContent=id?'编辑智能体':'新建智能体';
-  $('agentModalBody').innerHTML=agentFormHTML(id?currentAgentCache[id]:null);
-  // 异步加载 Provider 池 + 智能体 markdown 切换器
+  $('agentEditTitle').textContent=id?'编辑智能体':'新建智能体';
+  $('agentEditBody').innerHTML=agentEditHTML(id?currentAgentCache[id]:null);
   loadProviderPoolIntoAgentForm();
-  setupMdToggles($('agentModalBody'));
-  $('agentMask').classList.add('show');
+  setupMdToggles($('agentEditBody'));
+  setupMdImport($('agentEditBody'));
+  setupAgentTabs($('agentEditBody'));
+  switchView('agent-edit');
 }
-function closeAgentModal(){$('agentMask').classList.remove('show');agentEditingId=null;}
+function setupAgentTabs(scope){
+  const tabs=scope.querySelectorAll('#agentTabs .tab');
+  const panels=scope.querySelectorAll('.tab-panel');
+  tabs.forEach(t=>{
+    t.onclick=()=>{
+      tabs.forEach(x=>x.classList.remove('active'));
+      panels.forEach(p=>p.classList.remove('active'));
+      t.classList.add('active');
+      const p=scope.querySelector(`.tab-panel[data-panel="${t.dataset.tab}"]`);
+      if(p)p.classList.add('active');
+    };
+  });
+}
+// 导入 .md 文件：读取文本填入 textarea 并切回「编辑」态
+function setupMdImport(scope){
+  scope.querySelectorAll('.md-import').forEach(btn=>{
+    const fid=btn.dataset.target;
+    const file=scope.querySelector(`.md-file[data-target="${fid}"]`);
+    const ta=scope.querySelector('#'+fid);
+    const box=ta?ta.closest('.md-edit'):null;
+    if(file)btn.onclick=()=>file.click();
+    if(file&&ta&&box){
+      file.onchange=()=>{
+        const f=file.files&&file.files[0]; if(!f)return;
+        const r=new FileReader();
+        r.onload=()=>{
+          ta.value=r.result||'';
+          // 切回编辑态
+          box.querySelectorAll('.md-tab').forEach(x=>x.classList.toggle('active', x.dataset.mode==='edit'));
+          const pv=box.querySelector('.md-preview'); if(pv)pv.hidden=true;
+          ta.style.display='';
+        };
+        r.readAsText(f);
+        file.value='';
+      };
+    }
+  });
+}
 async function loadProviderPoolIntoAgentForm(){
   const sel=$('aProviderPool'); if(!sel)return;
   try{
@@ -1228,7 +1284,7 @@ function applyProviderPoolToAgentForm(){
     }
   });
 }
-async function saveAgentModal(){
+async function saveAgentEdit(){
   const poolId=$('aProviderPool').value||null;
   const payload={
     name:$('aName').value.trim()||'未命名智能体',
@@ -1243,10 +1299,10 @@ async function saveAgentModal(){
     baseUrl:poolId?null:($('aBaseUrl').value.trim()||null),
     apiKey:poolId?null:($('aApiKey').value||null),
   };
-  const saveBtn=$('agentModalSave');saveBtn.disabled=true;saveBtn.textContent='保存中…';
+  const saveBtn=$('agentEditSave');saveBtn.disabled=true;saveBtn.textContent='保存中…';
   const {status}=await api(agentEditingId?'PUT':'POST',agentEditingId?`/api/admin/agents/${encodeURIComponent(agentEditingId)}`:'/api/admin/agents',payload);
   saveBtn.disabled=false;saveBtn.textContent='保存';
-  if(status===200){toast('已保存');closeAgentModal();await loadAgents();await loadChatAgents();}
+  if(status===200){toast('已保存');await loadAgents();await loadChatAgents();switchView('agents');}
   else toast('保存失败（'+status+'）');
 }
 async function bindAgentFeishu(id){
@@ -1259,14 +1315,13 @@ async function bindAgentFeishu(id){
     alert('绑定失败：'+((data&&data.error)||status));
   }
 }
-$('agentNewBtn').onclick=()=>openAgentModal(null);
-$('agentModalClose').onclick=closeAgentModal;
-$('agentModalCancel').onclick=closeAgentModal;
-$('agentModalSave').onclick=saveAgentModal;
+$('agentNewBtn').onclick=()=>openAgentEdit(null);
+$('agentEditBack').onclick=()=>switchView('agents');
+$('agentEditSave').onclick=saveAgentEdit;
 $('agentBody').addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.dataset.chat){startAgentChat(t.dataset.chat);}
-  else if(t.dataset.edit){openAgentModal(t.dataset.edit);}
+  else if(t.dataset.edit){openAgentEdit(t.dataset.edit);}
   else if(t.dataset.bind){bindAgentFeishu(t.dataset.bind);}
   else if(t.dataset.del){
     const id=t.dataset.del;
