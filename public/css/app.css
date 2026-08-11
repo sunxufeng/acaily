@@ -289,17 +289,14 @@ td .oid{font-size:11px;color:var(--muted);}
 .msg-body a{color:var(--brand);text-decoration:underline;}
 .msg.user .msg-body code{background:rgba(255,255,255,.22);color:#fff;}
 .msg.user .msg-body a{color:#fff;text-decoration:underline;}
-.chat-input{border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:flex-end;background:var(--surface);}
+.chat-input{border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:flex-end;background:var(--surface);position:relative;}
 .chat-input textarea{flex:1;min-height:44px;max-height:140px;}
 .chat-input .send{height:44px;}
 
-/* 对话工具条 + 附件 */
-.chat-toolbar{display:flex;gap:6px;align-items:center;padding:8px 16px 0 16px;background:var(--surface);border-top:1px solid var(--border);position:relative;}
-.chat-toolbar .grow{flex:1;}
-/* + 号按钮：圆形，圆润，hover 高亮 */
-.chat-toolbar .icon-btn.plus{width:32px;height:32px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);font-size:22px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;}
-.chat-toolbar .icon-btn.plus:hover{border-color:var(--brand);color:var(--brand);background:var(--surface);}
-.chat-toolbar .icon-btn.plus:active{transform:scale(.96);}
+/* + 号按钮：与输入框同行（左侧）、方形圆角，与发送按钮等高对齐（不再独占一行） */
+.chat-input .icon-btn.plus{width:44px;height:44px;flex:0 0 44px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);font-size:22px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;align-self:flex-end;}
+.chat-input .icon-btn.plus:hover{border-color:var(--brand);color:var(--brand);background:var(--surface);}
+.chat-input .icon-btn.plus:active{transform:scale(.96);}
 .chat-attachments{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 0 16px;background:var(--surface);border-top:1px solid var(--border);min-height:0;}
 .chat-attachments:empty{display:none;}
 .attach-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-size:12px;max-width:240px;}
@@ -309,7 +306,7 @@ td .oid{font-size:11px;color:var(--muted);}
 .attach-chip .attach-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;}
 .attach-chip .attach-x{background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;}
 .attach-chip .attach-x:hover{color:var(--err,#e54848);}
-.emoji-pop{position:absolute;left:16px;top:46px;display:none;grid-template-columns:repeat(8,1fr);gap:4px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:30;}
+.emoji-pop{position:absolute;left:16px;bottom:58px;display:none;grid-template-columns:repeat(8,1fr);gap:4px;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:30;}
 .emoji-pick{background:transparent;border:0;font-size:20px;cursor:pointer;border-radius:6px;padding:2px;}
 .emoji-pick:hover{background:var(--surface-2);}
 

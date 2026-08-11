@@ -121,17 +121,13 @@
             <div class="msg bot"><div class="av">A</div><div class="bubble"><div class="role">Acaily</div>你好，我是你的专属 AI 助手。在左侧「我的配置」里填好模型后即可在此对话；也可以直接在飞书里 @我。</div></div>
           </div>
           <div class="chat-attachments" id="chatAttachments"></div>
-          <div class="chat-toolbar">
-            <button class="icon-btn plus" type="button" id="attachPlusBtn" title="点击选择文件 / 图片（也支持粘贴/拖拽）">+</button>
-            <span class="grow"></span>
-            <span class="muted" id="attachHint" style="font-size:12px;"></span>
-          </div>
           <input type="file" id="filePicker" accept=".txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.log,.yaml,.yml,.xml,.html,.htm,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.kt,.sh,.bash,.zsh,.sql,.ini,.cfg,.conf,.toml,.docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf,image/png,image/jpeg,image/gif,image/webp" style="display:none;"/>
           <div class="emoji-pop" id="emojiPop" style="display:none;">
             ${['😀','😁','😂','🤣','😊','😉','😍','😘','😜','😎','🤩','🥳','🤔','😴','😢','😭','😡','🤯','🥺','👍','👎','👏','🙏','💪','🔥','✨','🎉','🎊','❤️','💔','💯','✅','❌','⭐','📌','💡','📎','📷','🎵','🚀'].map(e=>`<button type="button" class="emoji-pick">${e}</button>`).join('')}
           </div>
           <div class="chat-input">
-            <textarea id="chatText" placeholder="输入消息，Enter 发送，Shift+Enter 换行；可粘贴图片截图"></textarea>
+            <button class="icon-btn plus" type="button" id="attachPlusBtn" title="选择文件 / 图片（也支持粘贴/拖拽）">+</button>
+            <textarea id="chatText" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
             <button class="btn send" id="sendBtn">发送</button>
           </div>
         </div>
