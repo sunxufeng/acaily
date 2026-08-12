@@ -181,20 +181,25 @@ export async function runAutomation(auto, { manual = false } = {}) {
   const explicitRecipients = Array.isArray(auto.pushRecipients) ? auto.pushRecipients : [];
   for (const r of explicitRecipients) {
     const uid = r.openId || r.unionId;
-    if (uid) recvMap.set(uid, r.unionId || null);
+    // 仅当显式携带了 union_id 时才预填；若只带了 open_id 则留空，
+    // 必须交由下方统一解析（不能预置成 null，否则会被下面「已在 recvMap」的判断跳过）。
+    if (uid && r.unionId) recvMap.set(uid, r.unionId);
   }
-  const pendingResolve = [];
-  for (const uid of auto.pushTo) {
-    if (recvMap.has(uid)) continue;
-    const u = getUnionId(uid);
-    if (u) { recvMap.set(uid, u); continue; }
-    pendingResolve.push(uid);
+  const needResolve = [];
+  const allUids = new Set([...auto.pushTo, ...recvMap.keys()]);
+  for (const uid of allUids) {
+    // 已直接带 union_id 的跳过；其余一律尝试解析（缓存优先，再走主应用 contact API）。
+    if (recvMap.has(uid) && recvMap.get(uid)) continue;
+    const cached = getUnionId(uid);
+    if (cached) { recvMap.set(uid, cached); continue; }
+    if (!needResolve.includes(uid)) needResolve.push(uid);
   }
-  for (const uid of pendingResolve) {
+  for (const uid of needResolve) {
     let u = null;
     try { u = await resolveUnionId(uid, null); } catch {}
     if (u) setUnionId(uid, u);
-    recvMap.set(uid, u || null);
+    // 解析失败也保留（为 null），退化逻辑由 pushOneWithFallback 兜底
+    if (!recvMap.has(uid) || !recvMap.get(uid)) recvMap.set(uid, u || null);
   }
 
   if (!useAgentModel && !getConfig(caller)) {
