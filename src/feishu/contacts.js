@@ -107,3 +107,44 @@ export async function searchContacts(q, { pageSize = 20 } = {}) {
 export function isSearchAvailable() {
   return _searchAvailable;
 }
+
+/**
+ * 列出组织架构内的全部成员（用于「下拉批量多选 / 全选全体人员」）。
+ * 通过 GET /contact/v3/users 分页拉取；受应用可见范围限制，只能看到授权范围内的员工。
+ * @returns {Promise<{items:Array, available:boolean, note?:string, total?:number, truncated?:boolean}>}
+ */
+export async function listAllContacts({ pageSize = 50, maxPages = 40 } = {}) {
+  const app = await getContactApp();
+  if (!app) return { items: [], available: false, note: '未找到具备通讯录权限的智能体应用（需观澜/启明等绑定了飞书应用且开启 contact 权限）' };
+  const token = await getTenantToken(app);
+  if (!token) return { items: [], available: false, note: '无法获取通讯录应用令牌' };
+  try {
+    const items = [];
+    let pageToken = '';
+    let pages = 0;
+    do {
+      const u = new URL(`${FEISHU_HOST}/open-apis/contact/v3/users`);
+      u.searchParams.set('user_id_type', 'union_id');
+      u.searchParams.set('page_size', String(Math.min(50, pageSize)));
+      if (pageToken) u.searchParams.set('page_token', pageToken);
+      const res = await fetch(u, { headers: { authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (data.code !== 0) {
+        return {
+          items,
+          available: false,
+          note: `通讯录列表不可用（飞书返回 ${data.code} ${data.msg}）。请到飞书开放平台为「${app.appId}」开启 contact:user.base:readonly，并把「通讯录权限范围」设为「全部员工」。`,
+          total: items.length,
+          truncated: true,
+        };
+      }
+      const chunk = (data.data && data.data.items || []).map(normalize).filter(Boolean);
+      items.push(...chunk);
+      pageToken = (data.data && data.data.page_token) || '';
+      pages++;
+    } while (pageToken && pages < maxPages);
+    return { items, available: true, total: items.length, truncated: pages >= maxPages };
+  } catch {
+    return { items: [], available: false, note: '通讯录列表请求失败（网络/代理异常）' };
+  }
+}

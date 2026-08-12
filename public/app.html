@@ -2293,9 +2293,17 @@ function openAutomationEdit(a){
     </label>
     <label>推送给 <span class="req">*</span> <span class="muted" style="font-weight:400;">（运行结果将推送到以下飞书用户，可指定上方智能体身份发送）</span></label>
     <div class="recipient-picker">
-      <input id="a_search" placeholder="搜索组织架构成员（姓名 / 拼音 / 邮箱）…" autocomplete="off"/>
-      <div id="a_search_status" class="hint"></div>
-      <div id="a_search_results" class="user-pick-list"></div>
+      <div class="rp-control">
+        <input id="a_search" placeholder="搜索组织架构成员（姓名 / 拼音 / 邮箱），或点右侧展开全量名单…" autocomplete="off"/>
+        <button type="button" id="a_rp_toggle" class="btn ghost sm">▾ 选择成员</button>
+      </div>
+      <div id="a_rp_dropdown" class="rp-dropdown" style="display:none;">
+        <div class="rp-dropdown-head">
+          <label class="rp-selectall"><input type="checkbox" id="a_rp_all"/> 全选本列表（<span id="a_rp_count">0</span> 人）</label>
+          <span id="a_search_status" class="hint"></span>
+        </div>
+        <div id="a_search_results" class="user-pick-list"></div>
+      </div>
       <div id="a_push_chips" class="chip-row"></div>
     </div>
     <div class="hint">预览 cron：<code id="a_cron_prev"></code></div>
@@ -2315,7 +2323,7 @@ function openAutomationEdit(a){
   ['a_freq','a_weekday','a_monthday','a_hour','a_minute'].forEach(id=>$(id).oninput=refreshCron);
   refreshCron();
 
-  // ---- 收件人搜索 / 选择器 ----
+  // ---- 收件人搜索 / 选择器（下拉多选 + 全选全体） ----
   const pushKey=r=>(r.unionId&&('u:'+r.unionId))||(r.openId&&('o:'+r.openId))||null;
   const pushHas=k=>AUTO_PUSH.some(r=>pushKey(r)===k);
   const renderChips=()=>{
@@ -2325,14 +2333,15 @@ function openAutomationEdit(a){
     box.querySelectorAll('.chip-x').forEach(x=>x.onclick=()=>{
       const k=x.getAttribute('data-k');
       AUTO_PUSH=AUTO_PUSH.filter(r=>pushKey(r)!==k);
-      renderChips(); renderCandidates(currentCandidates);
+      renderChips(); renderCandidates(currentCandidates); updateSelectAll();
     });
   };
   let currentCandidates=[];
   const renderCandidates=list=>{
     currentCandidates=list||[];
     const box=$('a_search_results');
-    if(!currentCandidates.length){ box.innerHTML='<div class="muted">没有匹配的成员</div>'; return; }
+    $('a_rp_count').textContent=currentCandidates.length;
+    if(!currentCandidates.length){ box.innerHTML='<div class="muted">没有匹配的成员</div>'; updateSelectAll(); return; }
     box.innerHTML=currentCandidates.map(r=>{
       const k=pushKey(r); const sel=pushHas(k)?' checked':'';
       const tag=r.source==='book'?'地址簿':(r.source==='search'?'组织':'已配置');
@@ -2343,29 +2352,57 @@ function openAutomationEdit(a){
       if(!rec)return;
       if(cb.checked){ if(!pushHas(k)) AUTO_PUSH.push({openId:rec.openId||'',unionId:rec.unionId||'',name:rec.name||'',source:rec.source||'search'}); }
       else { AUTO_PUSH=AUTO_PUSH.filter(r=>pushKey(r)!==k); }
-      renderChips();
+      renderChips(); updateSelectAll();
     });
+    updateSelectAll();
+  };
+  const updateSelectAll=()=>{
+    const all=$('a_rp_all'); if(!all) return;
+    const list=currentCandidates||[];
+    const selCount=list.filter(r=>pushHas(pushKey(r))).length;
+    all.checked = list.length>0 && selCount===list.length;
+    all.indeterminate = selCount>0 && selCount<list.length;
   };
   const searchBox=$('a_search');
   const statusBox=$('a_search_status');
   let searchTimer=null;
   const doSearch=async q=>{
-    statusBox.textContent='搜索中…';
+    statusBox.textContent='加载中…';
     try{
       const res=await api('GET','/api/admin/contacts/search?q='+encodeURIComponent(q));
       if(res.status===200){
-        const list=(res.data.contacts||[]).filter(r=>!pushHas(pushKey(r)));
-        renderCandidates(list);
+        renderCandidates(res.data.contacts||[]);
         if(res.data.note) statusBox.innerHTML='<span style="color:#b00;">'+esc(res.data.note)+'</span>';
-        else if(q && res.data.searchAvailable===false) statusBox.textContent='组织搜索不可用（见提示）；可直接用下方已知用户。';
-        else statusBox.textContent='';
-      } else { statusBox.textContent='搜索失败：'+(res.data.error||res.status); }
-    }catch(e){ statusBox.textContent='搜索异常：'+(e&&e.message||e); }
+        else if(res.data.searchAvailable===false) statusBox.textContent='组织搜索不可用（见提示）。';
+        else statusBox.textContent = res.data.total!=null ? `共 ${res.data.total} 人${res.data.truncated?'（已达上限，建议用搜索缩小范围）':''}` : '';
+      } else { statusBox.textContent='加载失败：'+(res.data.error||res.status); }
+    }catch(e){ statusBox.textContent='加载异常：'+(e&&e.message||e); }
   };
   searchBox.oninput=()=>{ clearTimeout(searchTimer); const v=searchBox.value.trim(); searchTimer=setTimeout(()=>doSearch(v),250); };
+  // 下拉开关：展开时若尚未加载过名单，则拉取完整组织架构
+  const dropdown=$('a_rp_dropdown');
+  $('a_rp_toggle').onclick=()=>{
+    const show=dropdown.style.display==='none';
+    dropdown.style.display=show?'block':'none';
+    if(show && !currentCandidates.length) doSearch(searchBox.value.trim());
+  };
+  // 全选 / 取消全选当前列表
+  $('a_rp_all').onchange=()=>{
+    const check=$('a_rp_all').checked;
+    currentCandidates.forEach(r=>{
+      const k=pushKey(r);
+      if(check){ if(!pushHas(k)) AUTO_PUSH.push({openId:r.openId||'',unionId:r.unionId||'',name:r.name||'',source:r.source||'search'}); }
+      else { AUTO_PUSH=AUTO_PUSH.filter(x=>pushKey(x)!==k); }
+    });
+    renderChips(); renderCandidates(currentCandidates);
+  };
+  // 点击下拉区域以外的地方收起
+  document.addEventListener('click', ev=>{
+    if(dropdown.style.display!=='none' && !dropdown.contains(ev.target) && ev.target!==$('a_rp_toggle') && !$('a_rp_toggle').contains(ev.target)){
+      dropdown.style.display='none';
+    }
+  });
   renderChips();
-  // 初始：加载地址簿 + 已知用户
-  doSearch('');
 }
 
 $('autoNewBtn').onclick=()=>newAuto();

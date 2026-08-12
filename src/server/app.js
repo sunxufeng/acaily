@@ -43,7 +43,7 @@ import { initRunner } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
 import { createFeishuApp, enableBotCapability, validateFeishuCredentials } from '../feishu/appMgmt.js';
 import { listProviders, getProvider, saveProvider, deleteProvider, getProviderApiKey } from '../config/providerPoolStore.js';
-import { searchContacts, resolveContact } from '../feishu/contacts.js';
+import { searchContacts, resolveContact, listAllContacts } from '../feishu/contacts.js';
 import { listRecipients, addRecipient, removeRecipient } from '../config/recipientStore.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
@@ -961,9 +961,10 @@ const server = createServer(async (req, res) => {
           department: u.department || '',
           source: 'config',
         }));
-        // 组织搜索（q 非空时才打飞书；空 q 仅返回地址簿+已知用户，避免无谓调用）
+        // 组织成员：空 q 时拉取完整组织架构（供下拉全选），非空 q 时按关键词搜索
         let org = { items: [], available: true };
         if (q) org = await searchContacts(q);
+        else org = await listAllContacts();
         const all = [...book.map((b) => ({ ...b, source: 'book' })), ...org.items.map((i) => ({ ...i, source: 'search' })), ...known];
         // 去重：union_id 优先，其次 open_id
         const seen = new Set();
