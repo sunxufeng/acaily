@@ -75,7 +75,11 @@ export function getUnionId(openId) {
 export function setUnionId(openId, unionId) {
   if (!openId || !unionId) return;
   const db = load();
-  const prev = db.users[openId] || {};
+  const prev = db.users[openId];
+  // 只为「已存在的用户」（配置过模型 / 管理员 / 地址簿里的人）回写 union_id；
+  // 不为「随便给机器人发消息的陌生用户」新建空壳条目，避免 /api/admin/users 里冒出幽灵收件人。
+  // 陌生人若日后被管理员添加为收件人，其 union_id 会随 pushRecipients 显式落库，无需在此预存。
+  if (!prev) return;
   if (prev.unionId === unionId) return; // 无变化不落盘
   db.users[openId] = { ...prev, unionId, updatedAt: new Date().toISOString() };
   persist();

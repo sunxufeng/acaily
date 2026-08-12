@@ -62,9 +62,30 @@ export async function getAutomation(id) {
   return db.automations.find((a) => a.id === id) || null;
 }
 
+// 把前端传来的收件人数组归一化为 { openId, unionId, name }，最多 32 个。
+// openId/unionId 至少要有其一；用于「指定某个智能体给具体人发消息」时，
+// unionId 是跨应用稳定寻址的关键。
+function normalizeRecipients(arr) {
+  if (!Array.isArray(arr)) return undefined;
+  return arr
+    .filter((r) => r && (r.openId || r.unionId))
+    .slice(0, 32)
+    .map((r) => ({
+      openId: String(r.openId || '').trim(),
+      unionId: String(r.unionId || '').trim(),
+      name: String(r.name || '').trim(),
+    }));
+}
+
 function normalizeCreateInput(input = {}) {
   const now = Date.now();
   const id = randomUUID();
+  const recipients = normalizeRecipients(input.pushRecipients);
+  const pushTo = Array.isArray(input.pushTo)
+    ? input.pushTo.filter(Boolean).slice(0, 32)
+    : recipients
+      ? recipients.map((r) => r.openId || r.unionId).filter(Boolean)
+      : [];
   return {
     id,
     title: String(input.title || '未命名自动化').slice(0, 80),
@@ -73,7 +94,8 @@ function normalizeCreateInput(input = {}) {
     enabled: input.enabled !== false,
     idleOnly: !!input.idleOnly,
     agentId: input.agentId ? String(input.agentId) : null,
-    pushTo: Array.isArray(input.pushTo) ? input.pushTo.filter(Boolean).slice(0, 32) : [],
+    pushTo,
+    pushRecipients: recipients,
     maxSteps: Number.isFinite(+input.maxSteps) && +input.maxSteps > 0 ? Math.min(50, Math.floor(+input.maxSteps)) : 10,
     createdAt: now,
     updatedAt: now,
@@ -90,6 +112,7 @@ function normalizeUpdateInput(input = {}) {
   if (typeof input.idleOnly === 'boolean') patch.idleOnly = input.idleOnly;
   if ('agentId' in input) patch.agentId = input.agentId ? String(input.agentId) : null;
   if (Array.isArray(input.pushTo)) patch.pushTo = input.pushTo.filter(Boolean).slice(0, 32);
+  if (Array.isArray(input.pushRecipients)) patch.pushRecipients = normalizeRecipients(input.pushRecipients);
   if (Number.isFinite(+input.maxSteps) && +input.maxSteps > 0) patch.maxSteps = Math.min(50, Math.floor(+input.maxSteps));
   return patch;
 }

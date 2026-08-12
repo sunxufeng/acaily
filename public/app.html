@@ -2098,6 +2098,7 @@ let AUTO_LIST=[];
 let AUTO_EDITING=null;
 let AUTO_USERS=[];
 let AUTO_AGENTS=[];
+let AUTO_PUSH=[];   // 当前编辑中的收件人：[{openId, unionId, name, source}]
 const AUTO_RUN_PAGE_SIZE=5;
 let AUTO_RUN_PAGE={};   // 每个自动化独立记录「执行记录」翻页位置
 
@@ -2141,10 +2142,13 @@ function autoRunsHTML(a){
 function autoRow(a){
   const desc=describeCron(a.cron)+(a.idleOnly?' · 闲时执行':'')+` · 最长 ${Number.isFinite(a.maxSteps)?a.maxSteps:10} 步`;
   const lastRun=a.lastRunAt?`<span class="muted">最近 ${esc(fmtLocal(a.lastRunAt,false))}</span> ${statusPill(a.lastRunStatus||'')}`:'<span class="muted">尚未运行</span>';
-  const pushToText=(a.pushTo||[]).map(uid=>{
+  const recName=(uid)=>{
+    const r=(a.pushRecipients||[]).find(x=>(x.openId&&x.openId===uid)||(x.unionId&&x.unionId===uid));
+    if(r&&r.name) return r.name;
     const u=AUTO_USERS.find(x=>x.openId===uid);
     return u?`${esc(u.displayName||uid)}`:esc(uid);
-  }).join('、 ')||'<span class="muted">未设置</span>';
+  };
+  const pushToText=(a.pushTo||[]).map(uid=>recName(uid)).join('、 ')||'<span class="muted">未设置</span>';
   const agentText=(a.agentId&&AUTO_AGENTS.find(x=>x.id===a.agentId))?esc((AUTO_AGENTS.find(x=>x.id===a.agentId).emoji||'🤖')+' '+(AUTO_AGENTS.find(x=>x.id===a.agentId).name||a.agentId)):'<span class="muted">（未关联，用收件人模型）</span>';
   const enabled=a.enabled!==false;
   return `
@@ -2245,7 +2249,14 @@ function openAutomationEdit(a){
   const userOptions=AUTO_USERS.map(u=>{
     const checked=a&&(a.pushTo||[]).includes(u.openId);
     return `<label class="user-pick"><input type="checkbox" value="${esc(u.openId)}" ${checked?'checked':''}/> <span>${esc(u.displayName||u.openId)}</span> <span class="muted" style="font-size:11px;">${esc(u.openId)}</span></label>`;
-  }).join('')||'<div class="muted">还没有任何配置过模型的用户；请先在「用户管理」让他们完成配置。</div>';
+  }).join('');
+  // 已选收件人（兼容历史 pushTo 与新的 pushRecipients）
+  AUTO_PUSH = (a && Array.isArray(a.pushRecipients) && a.pushRecipients.length)
+    ? a.pushRecipients.map(r=>({ openId:r.openId||'', unionId:r.unionId||'', name:r.name||'', source:r.source||'auto' }))
+    : (a && (a.pushTo||[]).map(uid=>{
+        const u=AUTO_USERS.find(x=>x.openId===uid);
+        return { openId:uid, unionId:(u&&u.unionId)||'', name:(u&&u.displayName)||uid, source:'config' };
+      }));
   const agentOptions=(AUTO_AGENTS||[]).map(ag=>`<option value="${esc(ag.id)}" ${a&&a.agentId===ag.id?'selected':''}>${esc((ag.emoji||'🤖')+' '+(ag.name||ag.id))}</option>`).join('');
   const agentSelect=`<select id="a_agent"><option value="">（不关联，结果用收件人模型生成）</option>${agentOptions}</select>`;
   $('autoEditBody').innerHTML=`
@@ -2280,8 +2291,13 @@ function openAutomationEdit(a){
       <input type="checkbox" id="a_idle" ${a&&a.idleOnly?'checked':''} style="width:auto;margin-right:6px;"/>
       闲时执行（00:00-06:00）：开启后任务在空闲窗口执行，结果照常推送
     </label>
-    <label>推送给 <span class="req">*</span> <span class="muted" style="font-weight:400;">（运行结果将推送到以下飞书用户）</span></label>
-    <div class="user-pick-list">${userOptions}</div>
+    <label>推送给 <span class="req">*</span> <span class="muted" style="font-weight:400;">（运行结果将推送到以下飞书用户，可指定上方智能体身份发送）</span></label>
+    <div class="recipient-picker">
+      <input id="a_search" placeholder="搜索组织架构成员（姓名 / 拼音 / 邮箱）…" autocomplete="off"/>
+      <div id="a_search_status" class="hint"></div>
+      <div id="a_search_results" class="user-pick-list"></div>
+      <div id="a_push_chips" class="chip-row"></div>
+    </div>
     <div class="hint">预览 cron：<code id="a_cron_prev"></code></div>
     <div id="autoEditStatus" class="status"></div>`;
   switchView('automation-edit');
@@ -2298,6 +2314,58 @@ function openAutomationEdit(a){
   };
   ['a_freq','a_weekday','a_monthday','a_hour','a_minute'].forEach(id=>$(id).oninput=refreshCron);
   refreshCron();
+
+  // ---- 收件人搜索 / 选择器 ----
+  const pushKey=r=>(r.unionId&&('u:'+r.unionId))||(r.openId&&('o:'+r.openId))||null;
+  const pushHas=k=>AUTO_PUSH.some(r=>pushKey(r)===k);
+  const renderChips=()=>{
+    const box=$('a_push_chips');
+    if(!AUTO_PUSH.length){ box.innerHTML='<span class="muted">尚未选择收件人</span>'; return; }
+    box.innerHTML=AUTO_PUSH.map(r=>`<span class="chip" data-k="${esc(pushKey(r))}">${esc(r.name||r.unionId||r.openId)} <span class="chip-x" data-k="${esc(pushKey(r))}">×</span></span>`).join('');
+    box.querySelectorAll('.chip-x').forEach(x=>x.onclick=()=>{
+      const k=x.getAttribute('data-k');
+      AUTO_PUSH=AUTO_PUSH.filter(r=>pushKey(r)!==k);
+      renderChips(); renderCandidates(currentCandidates);
+    });
+  };
+  let currentCandidates=[];
+  const renderCandidates=list=>{
+    currentCandidates=list||[];
+    const box=$('a_search_results');
+    if(!currentCandidates.length){ box.innerHTML='<div class="muted">没有匹配的成员</div>'; return; }
+    box.innerHTML=currentCandidates.map(r=>{
+      const k=pushKey(r); const sel=pushHas(k)?' checked':'';
+      const tag=r.source==='book'?'地址簿':(r.source==='search'?'组织':'已配置');
+      return `<label class="user-pick${sel}"><input type="checkbox" value="${esc(k)}" ${sel}/> <span>${esc(r.name||r.unionId||r.openId)}</span> <span class="muted" style="font-size:11px;">${esc(tag)}${r.department?(' · '+r.department):''}</span></label>`;
+    }).join('');
+    box.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.onchange=()=>{
+      const k=cb.value; const rec=currentCandidates.find(r=>pushKey(r)===k);
+      if(!rec)return;
+      if(cb.checked){ if(!pushHas(k)) AUTO_PUSH.push({openId:rec.openId||'',unionId:rec.unionId||'',name:rec.name||'',source:rec.source||'search'}); }
+      else { AUTO_PUSH=AUTO_PUSH.filter(r=>pushKey(r)!==k); }
+      renderChips();
+    });
+  };
+  const searchBox=$('a_search');
+  const statusBox=$('a_search_status');
+  let searchTimer=null;
+  const doSearch=async q=>{
+    statusBox.textContent='搜索中…';
+    try{
+      const res=await api('GET','/api/admin/contacts/search?q='+encodeURIComponent(q));
+      if(res.status===200){
+        const list=(res.data.contacts||[]).filter(r=>!pushHas(pushKey(r)));
+        renderCandidates(list);
+        if(res.data.note) statusBox.innerHTML='<span style="color:#b00;">'+esc(res.data.note)+'</span>';
+        else if(q && res.data.searchAvailable===false) statusBox.textContent='组织搜索不可用（见提示）；可直接用下方已知用户。';
+        else statusBox.textContent='';
+      } else { statusBox.textContent='搜索失败：'+(res.data.error||res.status); }
+    }catch(e){ statusBox.textContent='搜索异常：'+(e&&e.message||e); }
+  };
+  searchBox.oninput=()=>{ clearTimeout(searchTimer); const v=searchBox.value.trim(); searchTimer=setTimeout(()=>doSearch(v),250); };
+  renderChips();
+  // 初始：加载地址簿 + 已知用户
+  doSearch('');
 }
 
 $('autoNewBtn').onclick=()=>newAuto();
@@ -2313,14 +2381,15 @@ $('autoEditSave').onclick=async()=>{
   else if(freq==='monthly')cron=`${minute} ${hour} ${Number($('a_monthday').value)||1} * *`;
   else cron=`${minute} ${hour} * * *`;
   const idleOnly=$('a_idle').checked;
-  const pushTo=Array.from($('autoEditBody').querySelectorAll('.user-pick input:checked')).map(i=>i.value);
+  const pushTo=AUTO_PUSH.map(r=>r.openId||r.unionId).filter(Boolean);
+  const pushRecipients=AUTO_PUSH.map(r=>({ openId:r.openId||'', unionId:r.unionId||'', name:r.name||'' }));
   const maxStepsRaw=Number($('a_maxSteps').value);
   const maxSteps=Number.isFinite(maxStepsRaw)&&maxStepsRaw>0?Math.min(50,Math.floor(maxStepsRaw)):10;
   const st=$('autoEditStatus');
   if(!title){st.className='status err';st.textContent='请填写标题';toast('请填写标题');return;}
   if(!desc.trim()){st.className='status err';st.textContent='请填写描述/提示词';toast('请填写描述/提示词');return;}
   if(!pushTo.length){st.className='status err';st.textContent='请至少选择一个推送目标';toast('请至少选择一个推送目标');return;}
-  const body={title,description:desc,cron,idleOnly,pushTo,maxSteps,agentId};
+  const body={title,description:desc,cron,idleOnly,pushTo,pushRecipients,maxSteps,agentId};
   const url=AUTO_EDITING?('/api/admin/automations/'+encodeURIComponent(AUTO_EDITING)):'/api/admin/automations';
   const method=AUTO_EDITING?'PATCH':'POST';
   const saveBtn=$('autoEditSave');

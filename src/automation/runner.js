@@ -85,6 +85,25 @@ function isCrossAppError(msg) {
   return /cross app|not in same app|230020|230001|invalid receive_id/i.test(String(msg));
 }
 
+// 用主应用身份推送：优先 open_id（已知配置用户，必中）；open_id 失败时若有 union_id 再试 union_id
+// （覆盖「组织架构成员」这类只有 union_id、没有主应用 open_id 的收件人）。
+async function pushMain(uid, unionId, pushText) {
+  try {
+    const r = await sendMarkdown(uid, pushText);
+    if (r && r.skipped) return r;
+    return { uid, sentVia: 'mainApp' };
+  } catch (e) {
+    if (!unionId) return { uid, error: e.message || String(e), sentVia: 'mainApp' };
+    try {
+      const r = await sendMarkdown(unionId, pushText, null, { receiveIdType: 'union_id' });
+      if (r && r.skipped) return r;
+      return { uid, sentVia: 'mainApp' };
+    } catch (e2) {
+      return { uid, error: e2.message || String(e2), sentVia: 'mainApp' };
+    }
+  }
+}
+
 // 推送一条：优先智能体应用；遇跨应用限制退到主应用
 // 注意：agentFeishuCreds 必须作为参数传入（之前是 runAutomation 函数内的 let，
 // 模块级函数读不到，触发 ReferenceError "agentFeishuCreds is not defined"，导致任务永远卡在「执行中」）
@@ -111,23 +130,11 @@ async function pushOneWithFallback(uid, pushText, agentFeishuCreds, unionId, age
         } catch {}
       }
     }
-    // 子应用发送失败（缺 contact 权限 / 不在可用范围）→ 退到主应用(open_id)
-    try {
-      await sendMarkdown(uid, pushText);
-      return { uid, sentVia: 'mainApp', agentFailed: agentAttempted };
-    } catch (e2) {
-      try { await sendText(uid, pushText); return { uid, sentVia: 'mainApp', agentFailed: agentAttempted }; }
-      catch (e3) { return { uid, error: e3.message || String(e3), sentVia: 'mainApp' }; }
-    }
+    // 子应用发送失败（缺 contact 权限 / 不在可用范围）→ 退到主应用(open_id → union_id)
+    return pushMain(uid, unionId, pushText);
   }
   // 2) 没智能体应用 → 直接用主应用
-  try {
-    await sendMarkdown(uid, pushText);
-    return { uid, sentVia: 'mainApp' };
-  } catch (e) {
-    try { await sendText(uid, pushText); return { uid, sentVia: 'mainApp' }; }
-    catch (e2) { return { uid, error: e2.message || String(e2) }; }
-  }
+  return pushMain(uid, unionId, pushText);
 }
 
 export async function runAutomation(auto, { manual = false } = {}) {
@@ -168,16 +175,25 @@ export async function runAutomation(auto, { manual = false } = {}) {
     }
   }
 
-  // 解析每个收件人的 union_id（跨应用稳定 ID）：优先取事件里已捕获并落库的，
-  // 否则尝试用主应用 contact API 解析（需主应用具备 contact:user.base:readonly）。
-  // 有 union_id 才能让「子应用(观澜)身份」正确寻址到主应用的同一用户；否则只能退回主应用发送。
-  const recvMap = new Map();
+  // 收件人 → union_id 映射。优先用自动化显式存好的 pushRecipients（管理员从组织架构成员里
+  // 挑选的人，直接带 union_id，跨应用稳定），否则回退到 pushTo + 事件里已捕获/contact 解析的 union_id。
+  const recvMap = new Map(); // openId -> unionId | null
+  const explicitRecipients = Array.isArray(auto.pushRecipients) ? auto.pushRecipients : [];
+  for (const r of explicitRecipients) {
+    const uid = r.openId || r.unionId;
+    if (uid) recvMap.set(uid, r.unionId || null);
+  }
+  const pendingResolve = [];
   for (const uid of auto.pushTo) {
-    let u = getUnionId(uid);
-    if (!u) {
-      try { u = await resolveUnionId(uid, null); } catch {}
-      if (u) setUnionId(uid, u);
-    }
+    if (recvMap.has(uid)) continue;
+    const u = getUnionId(uid);
+    if (u) { recvMap.set(uid, u); continue; }
+    pendingResolve.push(uid);
+  }
+  for (const uid of pendingResolve) {
+    let u = null;
+    try { u = await resolveUnionId(uid, null); } catch {}
+    if (u) setUnionId(uid, u);
     recvMap.set(uid, u || null);
   }
 

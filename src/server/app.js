@@ -43,6 +43,8 @@ import { initRunner } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
 import { createFeishuApp, enableBotCapability, validateFeishuCredentials } from '../feishu/appMgmt.js';
 import { listProviders, getProvider, saveProvider, deleteProvider, getProviderApiKey } from '../config/providerPoolStore.js';
+import { searchContacts, resolveContact } from '../feishu/contacts.js';
+import { listRecipients, addRecipient, removeRecipient } from '../config/recipientStore.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
 const tools = [
@@ -941,6 +943,87 @@ const server = createServer(async (req, res) => {
       const s = requireAdminApi(req, res);
       if (!s) return;
       return sendJson(res, 200, { users: listUsers(), adminOpenIds: listAdmins() });
+    }
+
+    // 收件人候选：合并「组织搜索(观澜通讯录) + 地址簿 + 已知用户」。
+    // 管理员据此把任意组织成员加入自动化收件人，或指定某个智能体发给具体人。
+    if (method === 'GET' && pathname === '/api/admin/contacts/search') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const q = (url.searchParams.get('q') || '').trim();
+      try {
+        const book = await listRecipients();
+        const known = listUsers().map((u) => ({
+          openId: u.openId,
+          unionId: u.unionId || '',
+          name: u.displayName || u.openId,
+          email: u.email || '',
+          department: u.department || '',
+          source: 'config',
+        }));
+        // 组织搜索（q 非空时才打飞书；空 q 仅返回地址簿+已知用户，避免无谓调用）
+        let org = { items: [], available: true };
+        if (q) org = await searchContacts(q);
+        const all = [...book.map((b) => ({ ...b, source: 'book' })), ...org.items.map((i) => ({ ...i, source: 'search' })), ...known];
+        // 去重：union_id 优先，其次 open_id
+        const seen = new Set();
+        const merged = [];
+        for (const r of all) {
+          const key = (r.unionId && `u:${r.unionId}`) || (r.openId && `o:${r.openId}`);
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          merged.push({ openId: r.openId, unionId: r.unionId, name: r.name, email: r.email, department: r.department, source: r.source });
+        }
+        return sendJson(res, 200, { contacts: merged, searchAvailable: org.available, note: org.note || null });
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+    }
+
+    // 收件人地址簿管理（管理员手动维护的组织成员）
+    if (method === 'GET' && pathname === '/api/admin/recipients') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      return sendJson(res, 200, { recipients: await listRecipients() });
+    }
+    if (method === 'POST' && pathname === '/api/admin/recipients') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      try {
+        const body = await readBody(req);
+        let { openId, unionId, name, email, department, source } = body || {};
+        openId = (openId || '').trim();
+        unionId = (unionId || '').trim();
+        if (!openId && !unionId) return sendJson(res, 400, { error: 'openId 与 unionId 至少提供一个' });
+        // 没给名字时尝试用通讯录解析（按 union_id 优先）
+        if (!name) {
+          const resolved = unionId
+            ? await resolveContact(unionId, 'union_id')
+            : openId
+              ? await resolveContact(openId, 'open_id')
+              : null;
+          if (resolved) {
+            name = resolved.name;
+            email = email || resolved.email;
+            department = department || resolved.department;
+            if (!unionId) unionId = resolved.unionId;
+            if (!openId) openId = resolved.openId;
+          }
+        }
+        const rec = await addRecipient({ openId, unionId, name, email, department, source: source || 'manual' });
+        return sendJson(res, 200, { ok: true, recipient: rec });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
+    if (method === 'DELETE' && pathname.startsWith('/api/admin/recipients/')) {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const id = decodeURIComponent(pathname.slice('/api/admin/recipients/'.length));
+      const ok = await removeRecipient(id);
+      if (!ok) return sendJson(res, 404, { error: '收件人不存在' });
+      await record({ actor: s.openId, action: 'admin.recipient.delete', target: 'recipient', meta: { id } });
+      return sendJson(res, 200, { ok: true });
     }
     if (method === 'GET' && pathname.startsWith('/api/admin/config/')) {
       const s = requireAdminApi(req, res);
