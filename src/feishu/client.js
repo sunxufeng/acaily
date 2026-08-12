@@ -33,20 +33,24 @@ export async function getTenantToken(creds) {
   return data.tenant_access_token;
 }
 
-// 以机器人身份给指定 open_id 发送文本消息（receive_id_type=open_id）
-// creds：可选，指定用哪个飞书应用（智能体绑定的应用）的身份发送
-export async function sendText(openId, text, creds) {
+// 以机器人身份给指定 receive_id 发送文本消息。
+// @param receiveId 接收方 ID（open_id 或 union_id，取决于 receiveIdType）
+// @param creds 可选，指定用哪个飞书应用（智能体绑定的应用）的身份发送
+// @param opts.receiveIdType 'open_id'(默认) | 'union_id'。union_id 在同一开发商旗下
+//   各应用间稳定一致，是「用子应用(如观澜)身份给主应用用户发消息」的正确寻址方式。
+export async function sendText(receiveId, text, creds, opts = {}) {
+  const receiveIdType = opts.receiveIdType || 'open_id';
   const token = await getTenantToken(creds);
   if (!token) return { skipped: true, reason: '未配置飞书凭据' };
 
-  const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/messages?receive_id_type=open_id`, {
+  const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      receive_id: openId,
+      receive_id: receiveId,
       msg_type: 'text',
       content: JSON.stringify({ text }),
     }),
@@ -54,6 +58,30 @@ export async function sendText(openId, text, creds) {
   const data = await res.json();
   if (data.code !== 0) throw new Error(`发送飞书消息失败: ${data.msg}`);
   return { ok: true, messageId: data.data?.message_id };
+}
+
+// 把某个 open_id 解析成 union_id（同一开发商旗下稳定一致）。
+// 需要调用方应用具备 contact:user.base:readonly 权限；无权限或解析失败返回 null。
+const _unionCache = new Map(); // openId -> unionId
+export async function resolveUnionId(openId, creds) {
+  if (!openId) return null;
+  if (_unionCache.has(openId)) return _unionCache.get(openId);
+  const token = await getTenantToken(creds);
+  if (!token) return null;
+  try {
+    const res = await fetch(
+      `${FEISHU_HOST}/open-apis/contact/v3/users/${openId}?user_id_type=open_id`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    const data = await res.json();
+    if (data.code === 0 && data.data?.user?.union_id) {
+      _unionCache.set(openId, data.data.user.union_id);
+      return data.data.user.union_id;
+    }
+  } catch {
+    /* 权限不足/网络异常 → 静默返回 null，调用方退化为 open_id 寻址 */
+  }
+  return null;
 }
 
 // 下载飞书消息里的图片（用户发送的图片），转成 data URL 交给多模态模型。
@@ -325,14 +353,16 @@ export function cardMarkdown(md = '') {
   return out.join('\n');
 }
 
-export async function sendMarkdown(openId, md, creds) {
+export async function sendMarkdown(receiveId, md, creds, opts = {}) {
+  const receiveIdType = opts.receiveIdType || 'open_id';
+  const cardTitle = opts.title || 'Acaily';
   const token = await getTenantToken(creds);
   if (!token) return { skipped: true, reason: '未配置飞书凭据' };
 
   let content = (md || '').trim();
   // 超长：直接回退纯文本，避免卡片超限
   if (content.length > CARD_MD_LIMIT) {
-    return sendText(openId, stripMarkdown(content), creds);
+    return sendText(receiveId, stripMarkdown(content), creds, { receiveIdType });
   }
 
   // 卡片 markdown 不支持 # 标题，先转成加粗
@@ -342,19 +372,19 @@ export async function sendMarkdown(openId, md, creds) {
     config: { streaming_mode: false },
     header: {
       template: 'blue',
-      title: { tag: 'plain_text', content: 'Acaily' },
+      title: { tag: 'plain_text', content: cardTitle },
     },
     elements: [{ tag: 'markdown', content: cardContent }],
   };
 
-  const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/messages?receive_id_type=open_id`, {
+  const res = await fetch(`${FEISHU_HOST}/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      receive_id: openId,
+      receive_id: receiveId,
       msg_type: 'interactive',
       content: JSON.stringify(card),
     }),
@@ -363,7 +393,7 @@ export async function sendMarkdown(openId, md, creds) {
   if (data.code !== 0) {
     // 卡片失败（权限/格式）→ 回退纯文本
     console.warn('[feishu] 卡片发送失败，回退文本:', data.msg);
-    return sendText(openId, stripMarkdown(content), creds);
+    return sendText(receiveId, stripMarkdown(content), creds, { receiveIdType });
   }
   return { ok: true, messageId: data.data?.message_id, card: true };
 }

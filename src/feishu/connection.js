@@ -16,6 +16,7 @@ import { WSClient, EventDispatcher } from '@larksuiteoapi/node-sdk';
 import { downloadImage, downloadFile } from './client.js';
 import { extractText, truncateExtracted, CLOUD_DOC_TYPES } from './fileExtract.js';
 import { listBoundAgents } from '../config/agentStore.js';
+import { setUnionId } from '../config/userConfigStore.js';
 
 // 把消息里 @_user_1 这类占位符替换成真实姓名，避免模型收到裸占位符而困惑。
 function resolveMentions(text, mentions) {
@@ -62,6 +63,9 @@ function makeDispatcher({ creds, label, agentId, onMessage }) {
           return;
         }
         const senderOpenId = sender.sender_id && sender.sender_id.open_id;
+        const senderUnionId = sender.sender_id && sender.sender_id.union_id;
+        // 记录 union_id（跨应用自动化推送时让子应用正确寻址同一用户），无需额外飞书权限
+        if (senderOpenId && senderUnionId) setUnionId(senderOpenId, senderUnionId);
         const messageId = msg.message_id;
         const chatType = msg.chat_type; // 'p2p' | 'group'
         const messageType = msg.message_type;

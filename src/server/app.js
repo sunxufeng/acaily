@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname } from 'node:path';
-import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds } from '../config/userConfigStore.js';
+import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds, setUnionId } from '../config/userConfigStore.js';
 import { createSession, appendMessage, getHistory, listSessions } from '../config/conversationStore.js';
 import { Retriever } from '../rag/retriever.js';
 import { EmbeddingService } from '../rag/embeddings.js';
@@ -230,7 +230,11 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
 // file:  飞书文件下载并提取后的结构化对象（{ name, type, text, truncated } 或带 unsupported/cloudDoc 标记）
 // agentId: 归属的智能体（主应用为 null）
 // creds:  该消息所属飞书应用的 { appId, appSecret }（主应用为 null → 用环境变量身份回复）
-async function processFeishuMessage(openId, text, image, file, chatId, agentId, creds) {
+async function processFeishuMessage(openId, text, image, file, chatId, agentId, creds, unionId) {
+  // 记录该用户的 union_id（用于跨应用自动化推送时让子应用正确寻址到同一用户）
+  if (unionId) {
+    try { setUnionId(openId, unionId); } catch {}
+  }
   const isAgent = !!agentId;
   const ctx = { openId, chatId, agentId: agentId || null, feishuCreds: creds || null };
   let agent = null;
@@ -409,7 +413,7 @@ async function handleFeishuEvent(rawBody, headers) {
   if (msg && msg.text) {
     // 快速返回 200，消息异步处理（Webhook 模式要求即时响应）
     // Webhook 路径属于主应用，agentId / creds 均为 null（使用主应用环境变量身份）
-    processFeishuMessage(msg.openId, msg.text.trim(), null, null, msg.chatId, null, null);
+    processFeishuMessage(msg.openId, msg.text.trim(), null, null, msg.chatId, null, null, msg.unionId);
   }
   return { status: 200, json: { code: 0, msg: 'ok' } };
 }

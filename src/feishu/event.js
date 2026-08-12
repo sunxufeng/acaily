@@ -52,6 +52,11 @@ export function extractMessage(parsed) {
   }
   return {
     openId: sender.sender_id.open_id,
+    // union_id 在同一开发商旗下的不同飞书应用间稳定一致，是「跨应用发消息」的关键：
+    // 自动化用观澜(子应用)身份推送时，接收方 open_id 是主应用维度的，直接发会报
+    // "open_id cross app"，必须改用 union_id 才能让观澜应用正确寻址到同一用户。
+    unionId: sender.sender_id?.union_id || null,
+    userId: sender.sender_id?.user_id || null,
     text,
     messageId: message.message_id,
     chatType: message.chat_type, // p2p / group

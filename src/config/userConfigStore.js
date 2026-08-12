@@ -65,6 +65,22 @@ export function deleteConfig(openId) {
   return false;
 }
 
+// 跨应用推送所需：记录某 open_id 对应的 union_id（同一开发商旗下各应用间稳定一致）。
+// union_id 来自用户发来的 inbound 事件（sender.sender_id.union_id），无需额外飞书权限即可获取。
+export function getUnionId(openId) {
+  const cfg = getConfig(openId);
+  return (cfg && cfg.unionId) || null;
+}
+
+export function setUnionId(openId, unionId) {
+  if (!openId || !unionId) return;
+  const db = load();
+  const prev = db.users[openId] || {};
+  if (prev.unionId === unionId) return; // 无变化不落盘
+  db.users[openId] = { ...prev, unionId, updatedAt: new Date().toISOString() };
+  persist();
+}
+
 export function listOpenIds() {
   return Object.keys(load().users);
 }

@@ -4,9 +4,9 @@
 //   2. 把结果推送给 pushTo 中所有 open_id
 //   3. 落 run 日志到 store + 审计
 
-import { getConfig } from '../config/userConfigStore.js';
+import { getConfig, getUnionId, setUnionId } from '../config/userConfigStore.js';
 import { routeChat, routeChatConfig } from '../gateway/router.js';
-import { sendMarkdown, sendText } from '../feishu/client.js';
+import { sendMarkdown, sendText, resolveUnionId } from '../feishu/client.js';
 import { record as auditRecord } from '../audit/auditLog.js';
 import { appendRun, updateRun } from './store.js';
 import { getAgent, getAgentApiKey, getAgentFeishuSecret } from '../config/agentStore.js';
@@ -88,25 +88,35 @@ function isCrossAppError(msg) {
 // 推送一条：优先智能体应用；遇跨应用限制退到主应用
 // 注意：agentFeishuCreds 必须作为参数传入（之前是 runAutomation 函数内的 let，
 // 模块级函数读不到，触发 ReferenceError "agentFeishuCreds is not defined"，导致任务永远卡在「执行中」）
-async function pushOneWithFallback(uid, pushText, agentFeishuCreds) {
-  // 1) 有智能体应用 → 试 Markdown / 文本
+// @param unionId 接收方的 union_id（跨应用稳定）。有则用 receive_id_type=union_id 让子应用正确寻址；
+//   没有则退回 open_id（子应用会因 open_id cross app 报错，进而 fallback 到主应用）。
+async function pushOneWithFallback(uid, pushText, agentFeishuCreds, unionId, agentName) {
+  // 子应用侧：能用 union_id 就用 union_id（跨应用正确寻址），否则用 open_id（会触发 cross app）
+  const agentRecv = unionId ? { id: unionId, type: 'union_id' } : { id: uid, type: 'open_id' };
   if (agentFeishuCreds) {
+    // 只有「确实用 union_id 尝试了子应用发送却失败」才算作「子应用身份送达失败」；
+    // 若根本没有 union_id（只能拿 open_id 试，必然 cross app），那是预期降级，不算失败。
+    let agentAttempted = !!unionId;
     try {
-      await sendMarkdown(uid, pushText, agentFeishuCreds);
+      await sendMarkdown(agentRecv.id, pushText, agentFeishuCreds, {
+        receiveIdType: agentRecv.type,
+        title: agentName || 'Acaily',
+      });
       return { uid, sentVia: 'agentApp' };
     } catch (e) {
       if (!isCrossAppError(e.message)) {
-        // 非跨应用错误：试一下纯文本再退到主应用
-        try { await sendText(uid, pushText, agentFeishuCreds); return { uid, sentVia: 'agentApp' }; }
-        catch {}
+        try {
+          await sendText(agentRecv.id, pushText, agentFeishuCreds, { receiveIdType: agentRecv.type });
+          return { uid, sentVia: 'agentApp' };
+        } catch {}
       }
     }
-    // 跨应用限制 → 退到主应用
+    // 子应用发送失败（缺 contact 权限 / 不在可用范围）→ 退到主应用(open_id)
     try {
       await sendMarkdown(uid, pushText);
-      return { uid, sentVia: 'mainApp', note: 'cross-app' };
+      return { uid, sentVia: 'mainApp', agentFailed: agentAttempted };
     } catch (e2) {
-      try { await sendText(uid, pushText); return { uid, sentVia: 'mainApp', note: 'cross-app' }; }
+      try { await sendText(uid, pushText); return { uid, sentVia: 'mainApp', agentFailed: agentAttempted }; }
       catch (e3) { return { uid, error: e3.message || String(e3), sentVia: 'mainApp' }; }
     }
   }
@@ -158,11 +168,26 @@ export async function runAutomation(auto, { manual = false } = {}) {
     }
   }
 
+  // 解析每个收件人的 union_id（跨应用稳定 ID）：优先取事件里已捕获并落库的，
+  // 否则尝试用主应用 contact API 解析（需主应用具备 contact:user.base:readonly）。
+  // 有 union_id 才能让「子应用(观澜)身份」正确寻址到主应用的同一用户；否则只能退回主应用发送。
+  const recvMap = new Map();
+  for (const uid of auto.pushTo) {
+    let u = getUnionId(uid);
+    if (!u) {
+      try { u = await resolveUnionId(uid, null); } catch {}
+      if (u) setUnionId(uid, u);
+    }
+    recvMap.set(uid, u || null);
+  }
+
   if (!useAgentModel && !getConfig(caller)) {
     // 既没绑定智能体模型，主叫用户也未配置模型 → 推一条错误回所有收件人
     const errText = `⚠️ 自动化「${auto.title}」无法执行：未关联有效智能体，且收件人 ${caller} 尚未配置模型。请在个人设置页先填写 Provider / API Key / Model，或在自动化里关联一个智能体。`;
     for (const uid of auto.pushTo) {
-      try { await sendText(uid, errText, agentFeishuCreds); } catch {}
+      const u = recvMap.get(uid);
+      const recv = u ? { id: u, type: 'union_id' } : { id: uid, type: 'open_id' };
+      try { await sendText(recv.id, errText, agentFeishuCreds, { receiveIdType: recv.type }); } catch {}
     }
     await appendRun(auto.id, { durationMs: 0, status: 'err', error: 'caller 未配置模型且未关联智能体' });
     return { status: 'err', error: 'caller 未配置模型且未关联智能体' };
@@ -198,9 +223,10 @@ export async function runAutomation(auto, { manual = false } = {}) {
   let preview = (answer || errMsg).slice(0, 160);
 
   if (answer) {
-    // 推送到所有收件人（失败的单条不影响其它）；优先用智能体绑定的飞书应用身份发送，
-    // 但飞书要求接收方 open_id 必须先在对应应用里建立过会话，否则返回 `open_id cross app`。
-    // 这种情况下退到主应用身份（creds=null）发送，可送达但飞书端呈现为 Acaily 主机器人。
+    // 推送到所有收件人（失败的单条不影响其它）；优先用智能体绑定的飞书应用身份发送。
+    // 关键：飞书 open_id 是「应用维度」的，主应用里的 open_id 不能直接用于子应用(观澜)发送
+    // （报 open_id cross app）。因此子应用侧改用 union_id 寻址——union_id 在同一开发商旗下
+    // 各应用间稳定一致，可让观澜正确定位到同一用户并以观澜机器人身份送达。
     const pushText = buildPushText(auto, answer);
     // 把整段推送包进 try-catch：即使内部出现 ReferenceError 等意外错误，也要走完 updateRun，
     // 否则任务会永远卡在「执行中 0ms」状态。
@@ -208,7 +234,8 @@ export async function runAutomation(auto, { manual = false } = {}) {
     let pushBlockErr = null;
     try {
       for (const uid of auto.pushTo) {
-        const r = await pushOneWithFallback(uid, pushText, agentFeishuCreds);
+        const unionId = recvMap.get(uid) || null;
+        const r = await pushOneWithFallback(uid, pushText, agentFeishuCreds, unionId, linkedAgent ? linkedAgent.name : null);
         pushResults.push(r);
         if (r.error && !r.error.includes('cross app')) {
           console.error(`[automation] 推送给 ${uid} 失败:`, r.error);
@@ -221,15 +248,23 @@ export async function runAutomation(auto, { manual = false } = {}) {
     // 把「是否回退到主应用」写到 run 记录的预览上方，便于 UI 展示
     const fallbackCount = pushResults.filter((r) => r.sentVia === 'mainApp').length;
     const agentAppCount = pushResults.filter((r) => r.sentVia === 'agentApp').length;
+    const agentFailedCount = pushResults.filter((r) => r.agentFailed).length;
     const failCount = pushResults.filter((r) => r.error).length;
+    const agentName = linkedAgent ? linkedAgent.name : '';
     let runNote = '';
     if (pushBlockErr) {
       runNote = `⚠️ 推送阶段异常：${pushBlockErr}`;
     } else if (agentAppCount && fallbackCount === 0 && failCount === 0) {
-      runNote = `via 智能体应用（${linkedAgent ? linkedAgent.name : ''}）`;
+      runNote = `via 智能体应用（${agentName}）`;
+    } else if (agentFailedCount) {
+      // 子应用身份发送失败（多半缺 contact:user.base:readonly，或用户不在其可用范围）→ 退回主应用
+      runNote = `⚠️ 智能体应用「${agentName}」无法以自身身份送达（多半缺少 contact:user.base:readonly 权限，` +
+        `或你不在该应用的可用范围内）。本次退回主应用 Acaily 发送。` +
+        `请到飞书开放平台为「${agentName}」应用开启「获取用户基础信息(contact:user.base:readonly)」权限并发布新版本。`;
     } else if (fallbackCount && agentAppCount === 0 && failCount === 0) {
-      runNote = `⚠️ 智能体应用的接收方尚未建立会话，本次已通过主应用 Acaily 发送。` +
-        `请先给「${linkedAgent ? linkedAgent.name : ''}」飞书机器人发一条消息建立会话，之后就能以该机器人身份送达。`;
+      // 没有 union_id 可用（用户还没给 Acaily 主机器人发过消息，系统尚未记录 union_id）
+      runNote = `⚠️ 尚未获取到接收方的跨应用 ID(union_id)，本次退回主应用 Acaily 发送。` +
+        `请先给 Acaily 主机器人发一条消息，系统记录你的 union_id 后，即可用「${agentName}」身份送达。`;
     } else if (fallbackCount && agentAppCount) {
       runNote = `部分用户走主应用、部分走智能体应用（飞书 open_id 跨应用限制）。`;
     }
