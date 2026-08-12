@@ -33,24 +33,32 @@ export async function routeChat(openId, messages, opts = {}) {
 // cfg 需含 { provider, model, baseUrl, displayName, retries? }；apiKey 为明文（已解密）。
 // 可选 cfg.providerPoolId：若指定，则从 Provider 池解析 type/baseUrl/apiKey，覆盖 cfg 中对应字段。
 export async function routeChatConfig(cfg, apiKey, messages, opts = {}) {
-  if (!cfg || !cfg.provider) {
+  if (!cfg) {
     throw new ProviderError('智能体未配置模型（请在智能体配置页填写 Provider / API Key / Model）', {
       provider: 'gateway',
       status: 404,
     });
   }
-  // Provider 池解析：若指定 providerPoolId，从池里取出 (type, baseUrl, apiKey) 覆盖 cfg
+  // Provider 池解析（优先于 provider 校验）：pool-only 智能体（provider 为 null）靠池提供 type/baseUrl/apiKey。
+  // 必须先解析池，否则下面的 !cfg.provider 检查会把「只挂了 Provider 池」的智能体误杀。
   if (cfg.providerPoolId) {
     const pool = getPoolProvider(cfg.providerPoolId);
     if (pool) {
       cfg = {
         ...cfg,
         type: pool.type || cfg.provider,
+        provider: cfg.provider || pool.type || null,
         baseUrl: pool.baseUrl || cfg.baseUrl,
         models: pool.models || [],
       };
       apiKey = getPoolApiKey(cfg.providerPoolId) || apiKey;
     }
+  }
+  if (!cfg.provider) {
+    throw new ProviderError('智能体未配置模型（请在智能体配置页选择 Provider 池，或填写 Provider / API Key / Model）', {
+      provider: 'gateway',
+      status: 404,
+    });
   }
   const displayName = cfg.displayName || cfg.name || '智能体';
   const openId = `agent:${cfg.id || 'unknown'}`; // 仅用于统计标识
