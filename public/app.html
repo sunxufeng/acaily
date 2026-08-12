@@ -1089,20 +1089,31 @@ EMOJI_POP.querySelectorAll('.emoji-pick').forEach(b => {
 // ===== /附件 =====
 async function send(){
   const ta=$('chatText');
-  const text=ta.value.trim();
+  const text=(ta&&ta.value||'').trim();
   const atts=collectAttachments();
   if(!text && !atts.length)return;
   // 把附件数组折叠成 image / file（每类最多 1 个）
   const imageAtt = atts.find(a=>a.kind==='image');
   const fileAtt = atts.find(a=>a.kind==='file');
-  ta.value='';
-  addMsg('user',text || (imageAtt?'[图片]':'')+(fileAtt?` [文件: ${fileAtt.name}]`:''));
   const sendBtn=$('sendBtn');
-  sendBtn.disabled=true;sendBtn.innerHTML='<span class="spin"></span>';
-  const typing=addMsg('bot','…');
-  const typingBody=typing.querySelector('.msg-body');
-  const finishBot=(t)=>renderMsgBody(typingBody,'bot',t||'（无回复）');
+  // 无论发生什么异常，按钮都必须复位（避免「一直转圈」）
+  const resetBtn=()=>{ try{ if(sendBtn){ sendBtn.disabled=false; sendBtn.textContent='发送'; } }catch(_){} };
+  if(sendBtn){ sendBtn.disabled=true; sendBtn.innerHTML='<span class="spin"></span>'; }
+  let typingBody=null;
+  // 渲染回复：先用富文本；任何异常都回退成纯文本，绝不让异常卡住按钮复位
+  const finishBot=(t)=>{
+    try{
+      if(typingBody) renderMsgBody(typingBody,'bot',t||'（无回复）');
+      else addMsg('bot',t||'（无回复）');
+    }catch(_){
+      try{ if(typingBody) typingBody.textContent=t||'（无回复）'; else addMsg('bot',t||'（无回复）'); }catch(__){}
+    }
+  };
   try{
+    ta.value='';
+    addMsg('user', text || (imageAtt?'[图片]':'')+(fileAtt?` [文件: ${fileAtt.name}]`:''));
+    const typing=addMsg('bot','…');
+    typingBody=(typing&&typing.querySelector)?typing.querySelector('.msg-body'):null;
     const modelSel=$('modelSelect'); const agentSel=$('agentSelect');
     const model=modelSel&&modelSel.value?modelSel.value:'';
     const agentId=agentSel&&agentSel.value?agentSel.value:'';
@@ -1116,7 +1127,9 @@ async function send(){
       file: fileAtt ? fileAtt.file : null,
       model: model || null,
       agentId: agentId || null,
-    },{ timeoutMs: 120_000 });
+    // 客户端超时设 100s，略高于服务端单调用 90s 上限：保证「慢/挂起」的回复一定会在 ~100s 内
+    // 让按钮复位（服务端在 90s 内必返回超时错误或正常答案），绝不无限转圈。
+    },{ timeoutMs: 100_000 });
     if(data&&data.sessionId)sessionId=data.sessionId;
     if(status===200 && data&&data.answer){
       finishBot(data.answer);
@@ -1128,9 +1141,9 @@ async function send(){
   }catch(e){
     finishBot('⚠️ 请求失败：'+(e&&e.message||e));
   }finally{
-    clearAttachments();
-    sendBtn.disabled=false;sendBtn.textContent='发送';
-    chatBody.scrollTop=chatBody.scrollHeight;
+    try{ clearAttachments(); }catch(_){}
+    resetBtn();
+    try{ chatBody.scrollTop=chatBody.scrollHeight; }catch(_){}
   }
 }
 $('sendBtn').onclick=send;

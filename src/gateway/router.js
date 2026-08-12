@@ -115,6 +115,8 @@ async function doRoute({ cfg, apiKey, openId, displayName, messages, opts = {} }
       lastErr = err;
       // 4xx 客户端错误（非 429）属于配置/鉴权问题，不重试
       if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) break;
+      // 超时/中止等明确标记不可重试的错误（如上游挂起）直接放弃，避免把一次慢请求放大成 N 倍等待
+      if (err.retryable === false) break;
     }
   }
 

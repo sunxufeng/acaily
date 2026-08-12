@@ -1,7 +1,9 @@
 // 所有 Provider 适配器的基类：统一的 chat 接口、超时控制、错误包装。
 // 内部消息格式：{ role: 'system' | 'user' | 'assistant', content: string }
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+// 默认总超时。观澜等慢模型单次回复常需 50s+，故给到 90s 余量；
+// 真正的「挂起」上游会在 90s 内被 readBodyToString 中止并转为超时错误，而非无限挂起。
+const DEFAULT_TIMEOUT_MS = 90_000;
 
 // 把底层 HTTP / 网络错误包装成用户能看懂的提示（移植自 acplugin ProviderManager.formatProviderError）
 function errorHint(status, raw) {
@@ -28,12 +30,14 @@ function errorHint(status, raw) {
 }
 
 export class ProviderError extends Error {
-  constructor(message, { status, provider, cause } = {}) {
+  constructor(message, { status, provider, cause, retryable } = {}) {
     super(message);
     this.name = 'ProviderError';
     this.status = status;
     this.provider = provider;
     this.cause = cause;
+    // retryable=false 时，调用方（如路由层的重试循环）应放弃重试，避免把一次慢/挂起请求放大成 N 倍等待
+    this.retryable = retryable;
   }
 }
 
@@ -80,17 +84,18 @@ export class BaseProvider {
         signal: controller.signal,
       });
       const ctype = res.headers.get('content-type') || '';
-      // 上游判定为 SSE（流式响应）：逐 chunk 解析并累计
+      // 统一「带总超时」读取响应体：Node undici 在响应头已返回后，不会因 AbortController
+      // 中断「响应体」读取，慢/挂起的上游会让 res.text() 永久挂起 → 调用方永远拿不到结果。
+      // 因此这里改用带截止时间的 reader 读取，超时即中止。
+      const raw = await readBodyToString(res, ms, controller);
       if (res.ok && /text\/event-stream/i.test(ctype)) {
-        return await parseSseResponse(res, url, this.type);
+        return parseSseString(raw, url, this.type);
       }
-      // 否则按 JSON/text 处理
-      const text = await res.text();
       let data = null;
-      try { data = text ? JSON.parse(text) : null; } catch { /* 非 JSON 响应 */ }
+      try { data = raw ? JSON.parse(raw) : null; } catch { /* 非 JSON 响应 */ }
       if (!res.ok) {
-        const detail = data && (data.error?.message || data.error || text);
-        const hint = errorHint(res.status, detail || text);
+        const detail = data && (data.error?.message || data.error || raw);
+        const hint = errorHint(res.status, detail || raw);
         throw new ProviderError(
           `${this.type} 请求失败 (${res.status}): ${detail || res.statusText}${hint ? '\n' + hint : ''}`,
           { status: res.status, provider: this.type, attemptedUrl: url }
@@ -100,7 +105,8 @@ export class BaseProvider {
     } catch (err) {
       if (err instanceof ProviderError) throw err;
       if (err.name === 'AbortError') {
-        throw new ProviderError(`${this.type} 请求超时（>${ms}ms）`, { provider: this.type, cause: err });
+        // 超时/中止属于「上游太慢或挂起」，重试几乎必然再次超时，徒增等待，故标记不可重试。
+        throw new ProviderError(`${this.type} 请求超时（>${ms}ms）`, { provider: this.type, cause: err, retryable: false });
       }
       throw new ProviderError(`${this.type} 网络错误: ${err.message}`, { provider: this.type, cause: err });
     } finally {
@@ -143,55 +149,77 @@ export class BaseProvider {
 // usage 通常在最后一个 chunk（choices:[] + usage 非空）出现，结束标记为 `data: [DONE]`。
 // 返回结构与普通 JSON 一致：{ choices:[{message:{role,content}}], usage }，
 // 这样所有 provider（openai/anthropic/custom/acplugin）透明复用，不再被「流式返回空内容」卡死。
-export async function parseSseResponse(res /* , attemptedUrl, providerType */) {
+// 带截止时间的响应体读取：Node undici 在「响应头已返回」后不会因 AbortController 中断
+// 「响应体」读取，慢/挂起的上游会让 res.text() 永久挂起。这里用 reader + 截止时间竞速，
+// 超过 ms 仍读不到下一块就主动 abort 并抛 AbortError（交由 _request 转成超时错误）。
+async function readBodyToString(res, ms, controller) {
   const reader = res.body && res.body.getReader ? res.body.getReader() : null;
-  if (!reader) {
-    const text = await res.text();
-    return { choices: [{ message: { role: 'assistant', content: text } }], usage: {} };
-  }
+  if (!reader) return '';
   const decoder = new TextDecoder('utf-8');
+  const deadline = (typeof ms === 'number' && ms > 0) ? Date.now() + ms : 0;
   let buf = '';
+  while (true) {
+    let chunk;
+    if (deadline) {
+      const remain = deadline - Date.now();
+      if (remain <= 0) {
+        if (controller && controller.abort) try { controller.abort(); } catch { /* ignore */ }
+        throw Object.assign(new Error('响应体读取超时'), { name: 'AbortError' });
+      }
+      chunk = await Promise.race([
+        reader.read(),
+        new Promise((_, reject) => setTimeout(() => {
+          if (controller && controller.abort) try { controller.abort(); } catch { /* ignore */ }
+          reject(Object.assign(new Error('响应体读取超时'), { name: 'AbortError' }));
+        }, remain)),
+      ]);
+    } else {
+      chunk = await reader.read();
+    }
+    if (chunk.done) break;
+    buf += decoder.decode(chunk.value, { stream: true });
+  }
+  buf += decoder.decode();
+  return buf;
+}
+
+// 解析 OpenAI 兼容协议的 Server-Sent Events（SSE）文本（已完整读取到 raw 字符串）：
+// 把每行 `data: {...}` 视作增量，choices[0].delta.content 累加成完整回复；
+// usage 通常在最后一个 chunk 出现，结束标记为 `data: [DONE]`。
+// 返回结构与普通 JSON 一致：{ choices:[{message:{role,content}}], usage }。
+export function parseSseString(raw, _url, _type) {
   let full = '';
   let lastUsage = null;
   let finishReason = null;
   let role = 'assistant';
-  const flush = () => ({
-    choices: [{ message: { role, content: full }, finish_reason: finishReason || 'stop' }],
-    usage: lastUsage || {},
-  });
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) return flush();
-    buf += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf('\n\n')) !== -1) {
-      const evt = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      let dataLine = null;
-      for (const line of evt.split('\n')) {
-        if (line.startsWith('data:')) {
-          const payload = line.slice(5).trim();
-          if (payload === '[DONE]') { dataLine = '[DONE]'; break; }
-          if (dataLine == null) dataLine = payload;
-        }
-      }
-      if (dataLine == null) continue;
-      if (dataLine === '[DONE]') return flush();
-      try {
-        const obj = JSON.parse(dataLine);
-        const ch0 = obj.choices && obj.choices[0];
-        if (ch0) {
-          const delta = ch0.delta || {};
-          if (delta.role) role = delta.role;
-          if (delta.content) full += delta.content;
-          if (ch0.finish_reason) finishReason = ch0.finish_reason;
-        }
-        if (obj.usage && (obj.usage.prompt_tokens != null || obj.usage.completion_tokens != null)) {
-          lastUsage = obj.usage;
-        }
-      } catch {
-        // 跳过非 JSON 行（部分代理会插入心跳 / 注释）
+  for (const evt of raw.split('\n\n')) {
+    let dataLine = null;
+    for (const line of evt.split('\n')) {
+      if (line.startsWith('data:')) {
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') { dataLine = '[DONE]'; break; }
+        if (dataLine == null) dataLine = payload;
       }
     }
+    if (dataLine == null || dataLine === '[DONE]') continue;
+    try {
+      const obj = JSON.parse(dataLine);
+      const ch0 = obj.choices && obj.choices[0];
+      if (ch0) {
+        const delta = ch0.delta || {};
+        if (delta.role) role = delta.role;
+        if (delta.content) full += delta.content;
+        if (ch0.finish_reason) finishReason = ch0.finish_reason;
+      }
+      if (obj.usage && (obj.usage.prompt_tokens != null || obj.usage.completion_tokens != null)) {
+        lastUsage = obj.usage;
+      }
+    } catch {
+      // 跳过非 JSON 行（部分代理会插入心跳 / 注释）
+    }
   }
+  return {
+    choices: [{ message: { role, content: full }, finish_reason: finishReason || 'stop' }],
+    usage: lastUsage || {},
+  };
 }
