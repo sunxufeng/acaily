@@ -826,6 +826,32 @@ const server = createServer(async (req, res) => {
         if (file && file.text) {
           promptText = buildFilePrompt(file, promptText);
         }
+        // 飞书云文档链接：服务端直接拉正文注入模型，避免模型去联网抓「需登录」页面
+        // （与飞书机器人消息路径一致，补齐网页对话此前缺失的文档读取能力）
+        const feishuLinks = promptText ? extractFeishuDocLinks(promptText) : [];
+        if (feishuLinks.length) {
+          const readable = feishuLinks.find(isReadableCloudDoc);
+          if (!readable) {
+            const url = feishuLinks[0].url;
+            return sendJson(res, 200, { answer:
+              `📄 你发来的飞书链接（${url}）属于在线表格 / 多维表格 / 幻灯片等类型，我暂时无法直接读取。\n\n` +
+              `请任选一种方式发给我：\n` +
+              `1）把内容导出为 Word / PDF 后作为文件发送；\n` +
+              `2）直接把正文粘贴到对话框。` });
+          }
+          try {
+            const doc = readable.type === 'wiki'
+              ? await fetchFeishuWiki(readable.token)
+              : await fetchFeishuDoc(readable.token);
+            if (!doc.ok) {
+              return sendJson(res, 200, { answer: `⚠️ 无法读取该飞书文档：${doc.error}\n\n${doc.hint || ''}` });
+            }
+            const trunc = truncateExtracted(doc.text);
+            promptText = buildDocLinkPrompt(readable.url, trunc.text, promptText, trunc.truncated);
+          } catch (e) {
+            return sendJson(res, 200, { answer: `⚠️ 读取云文档时出错：${e.message}` });
+          }
+        }
         const r = await handleAgent(s.openId, promptText, history, sessionId, chatImage, {
           model: model || null,
           systemPrompt: systemPrompt || null,
