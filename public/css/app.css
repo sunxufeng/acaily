@@ -212,6 +212,11 @@ textarea{resize:vertical;min-height:80px;line-height:1.6;}
 input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(51,112,255,.12);}
 .row{display:flex;gap:12px;}
 .row>*{flex:1;}
+
+/* 复选框组：紧凑横向排列，子项不被 .row 的 flex:1 拉伸（用于「能力与输出」等开关项） */
+.checkbox-row{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-top:4px;}
+.checkbox-item{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);font-weight:400;margin:0;}
+.checkbox-item input[type="checkbox"]{width:auto;margin:0;flex:0 0 auto;cursor:pointer;}
 .hint{font-size:12px;color:var(--muted);margin-top:5px;}
 .hint code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:12px;}
 

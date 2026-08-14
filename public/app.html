@@ -210,9 +210,9 @@
           <textarea id="systemPrompt" rows="4" placeholder="例如：你是一个乐于助人的 AI 助手。" maxlength="4000"></textarea>
 
           <div class="section-title">能力与输出</div>
-          <div class="row" style="gap:18px;">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input id="capMultimodal" type="checkbox" /> 支持多模态（图像输入）</label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input id="capStream" type="checkbox" /> 流式输出（取消勾选可强制一次性返回）</label>
+          <div class="checkbox-row">
+            <label class="checkbox-item"><input id="capMultimodal" type="checkbox" /> <span>支持多模态（图像输入）</span></label>
+            <label class="checkbox-item"><input id="capStream" type="checkbox" /> <span>流式输出（取消勾选可强制一次性返回）</span></label>
           </div>
 
           <div class="section-title">高级采样参数</div>
