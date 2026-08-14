@@ -41,13 +41,9 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
         <span class="lbl">成员管理</span>
       </a>
-      <a class="nav-item admin-only" href="/admin" data-view="push" data-tip="组织默认配置">
+      <a class="nav-item admin-only" href="/admin" data-view="provider-org" data-tip="组织 Provider">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
-        <span class="lbl">组织默认配置</span>
-      </a>
-      <a class="nav-item admin-only" href="/admin" data-view="provider-shared" data-tip="组织共享 Provider">
-        <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M9 14h6"/></svg></span>
-        <span class="lbl">组织共享 Provider</span>
+        <span class="lbl">组织 Provider</span>
       </a>
       <a class="nav-item admin-only" href="/admin" data-view="audit" data-tip="审计日志">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".7" fill="currentColor"/><circle cx="3.5" cy="12" r=".7" fill="currentColor"/><circle cx="3.5" cy="18" r=".7" fill="currentColor"/></svg></span>
@@ -220,8 +216,7 @@
           <ul class="quick-links">
             <li>· <a href="#" data-jump="chat">对话</a>：用你配置的 Provider 直接与 Acaily 对话（API Key 不会传给第三方）</li>
             <li>· <a href="#" data-jump="provider">我的 Provider</a>：维护个人的 Provider 列表（新建 / 编辑 / 停用 / 删除），管理员分发的副本也在此显示</li>
-            <li>· <a href="#" data-jump="provider-shared">组织共享 Provider（管理员）</a>：统一维护组织级 Provider 池，按需分发给指定成员</li>
-            <li>· <a href="#" data-jump="push">组织默认配置（管理员）</a>：一键下发基础配置给所有成员</li>
+            <li>· <a href="#" data-jump="provider-org">组织 Provider（管理员）</a>：一键下发基础配置给全员 + 维护组织共享 Provider 池并按需分发</li>
             <li>· <a href="#" data-jump="users">成员管理（管理员）</a>：查看 / 编辑 / 删除成员配置</li>
             <li>· <a href="#" data-jump="automation">自动化任务（管理员）</a>：定时任务调度与飞书推送</li>
             <li>· <a href="#" data-jump="stats">使用统计（管理员）</a>：基于全量事件日志的 Token / 模型 / 用户聚合</li>
@@ -289,10 +284,11 @@
         </div>
       </section>
 
-      <!-- 视图：组织默认配置（admin） -->
-      <section class="view" id="view-push">
-        <div class="card" id="push">
-          <div class="card-h"><h2>组织默认配置 · 一键下发</h2><span class="desc">把一份基础模型配置应用到全员（移植自 acplugin 的组织下发）；API Key 留空则保留各人现有密钥</span></div>
+      <!-- 视图：组织 Provider（admin：一键下发 + 组织共享 Provider 列表，原 view-push 与 view-provider-shared 合并） -->
+      <section class="view" id="view-provider-org">
+        <!-- 子卡片 1：一键下发基础配置 -->
+        <div class="card" id="push" style="margin-bottom:18px;">
+          <div class="card-h"><h2>一键下发基础配置</h2><span class="desc">把一份基线模型配置应用到全员；API Key 留空则保留各人现有密钥</span></div>
           <div class="row" style="align-items:flex-end;">
             <div><label>Provider</label>
               <select id="pushProvider"><!-- 由 injectProviderPresets() 注入 --></select>
@@ -303,6 +299,20 @@
             <button class="btn" id="pushBtn">确认下发到全员</button>
           </div>
           <div id="pushResult" class="hint" style="margin-top:10px;"></div>
+        </div>
+        <!-- 子卡片 2：组织共享 Provider 列表（CRUD + 分发） -->
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-h" style="padding:18px 18px 0;margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <h2>组织共享 Provider</h2>
+              <div class="desc">系统管理员统一维护的 Provider 池。通过「分发」可一键克隆到指定成员的「我的 Provider」列表（成员收到后可自由修改）；再次分发将用源配置覆盖目标成员的副本。智能体表单的「Provider」下拉框也会自动列出这里的条目。</div>
+            </div>
+            <button class="btn" id="orgProvNewBtn">+ 新建组织 Provider</button>
+          </div>
+          <div class="table-wrap" style="border:none;box-shadow:none;">
+            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:300px;">操作</th></tr></thead>
+              <tbody id="orgProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
+          </div>
         </div>
       </section>
 
@@ -419,24 +429,7 @@
           </div>
           <div id="provEditBody"></div>
         </div>
-      </section>
-
-      <!-- 视图：组织共享 Provider（admin） -->
-      <section class="view" id="view-provider-shared">
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div class="card-h" style="padding:18px 18px 0;margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:200px;">
-              <h2>组织共享 Provider</h2>
-              <div class="desc">系统管理员统一维护的 Provider 池。通过「分发」可一键克隆到指定成员的「我的 Provider」列表（成员收到后可自由修改）；再次分发将用源配置覆盖目标成员的副本。智能体表单的「Provider」下拉框也会自动列出这里的条目。</div>
-            </div>
-            <button class="btn" id="orgProvNewBtn">+ 新建组织 Provider</button>
-          </div>
-          <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:300px;">操作</th></tr></thead>
-            <tbody id="orgProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
-          </div>
-        </div>
-      </section>
+</section>
 
       <!-- 视图：分发弹窗（admin） -->
       <section class="view" id="view-provider-distribute">
@@ -675,16 +668,15 @@ async function api(method,path,body,opts){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-shared','provider-distribute','permissions']);
-const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-shared','provider-distribute','permissions']);
+const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','user-view','provider-org','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-distribute','permissions']);
+const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','provider-org','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-distribute','permissions']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   provider:['我的 Provider','维护个人 Provider 列表：可新建 / 编辑 / 停用 / 删除；管理员分发的副本也在此显示'],
   about:['关于 Acaily','核心理念 / 使用方法'],
   dash:['概览','组织级概览与成员配置管理'],
   users:['成员管理','查看与编辑成员模型配置'],
-  push:['组织默认配置','一键下发基础模型配置到全员'],
-  'provider-shared':['组织共享 Provider','系统管理员统一维护的 Provider 池；可分发到指定成员'],
+  'provider-org':['组织 Provider','一键下发基础配置 + 维护组织共享 Provider 池（CRUD / 分发）'],
   'provider-distribute':['分发 Provider','选择要接收该 Provider 副本的成员'],
   audit:['审计日志','安全合规操作留痕'],
   automation:['自动化任务','定时调用关联智能体并把结果推送到飞书'],
@@ -1712,7 +1704,7 @@ async function startAgentChat(agentId){
 
 // ====================== Provider 池管理 ======================
 // 「我的 Provider」（view-provider）：列表 + 新建/编辑/停用/删除。
-// 「组织共享 Provider」（view-provider-shared，admin）：同上 + 分发/再次分发。
+// 「组织共享 Provider」（view-provider-org 内的子卡片，admin）：列表 + 新建/编辑/停用/删除/分发/再次分发。
 // 两页共用同一份 provFormHTML 编辑表单；按 scope 各自的缓存，互不覆盖。
 // 历史 bug：admin boot 时 loadMyProviders 先填，loadOrgProviders 紧跟着把 currentProvCache 整个清掉，
 // 导致管理员点「我的 Provider」编辑时 cache 为空、表单空白。
@@ -1728,7 +1720,7 @@ function provCacheListOf(scope){
 }
 let currentMyCfg=null;       // /api/config/me（兼容旧逻辑：仅「复用来源」下拉里展示「我的个人配置」用）
 let PROV_MODE='my';          // 'my' = 我的 Provider；'org' = 组织共享 Provider（决定提交/列表 API）
-let provEditingScope=null;   // {kind:'my'|'org', returnView:'provider'|'provider-shared'}
+let provEditingScope=null;   // {kind:'my'|'org', returnView:'provider'|'provider-org'}
 
 function rowStatusTag(p){
   if(p.disabled) return '<span class="tag warn">已停用</span>';
@@ -1880,7 +1872,7 @@ let provEditingId=null;
 function openProviderEdit(id, scope){
   scope = scope || PROV_MODE;
   provEditingId=id||null;
-  provEditingScope = { kind: scope, returnView: scope==='org' ? 'provider-shared' : 'provider' };
+  provEditingScope = { kind: scope, returnView: scope==='org' ? 'provider-org' : 'provider' };
   const p=id?provCacheOf(scope)[id]:null;
   $('provEditTitle').textContent=id?(scope==='org'?'编辑组织共享 Provider':'编辑我的 Provider'):(scope==='org'?'新建组织共享 Provider':'新建我的 Provider');
   $('provEditBody').innerHTML=provFormHTML(p, scope);
@@ -2115,7 +2107,7 @@ async function submitDistribute(){
     toast('分发失败：'+(r.data&&r.data.error||r.status));
   }
 }
-$('distBack').onclick=()=>{ distSelectedOpenIds.clear(); switchView('provider-shared'); };
+$('distBack').onclick=()=>{ distSelectedOpenIds.clear(); switchView('provider-org'); };
 
 // ====================== Admin：概览/成员/审计/自动化/统计 ======================
 let ADMINS=[];let CURRENT=null;
