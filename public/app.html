@@ -2296,17 +2296,19 @@ window.openUserPage=async function(openId, readOnly){
   titleEl.textContent=(readOnly?'成员详情：':'编辑成员：')+openId;
   bodyEl.innerHTML='<div class="muted">加载中…</div>';
   switchView(readOnly?'user-view':'user-edit');
-  const [cfgRes, autoRes, agAllRes, userRes]=await Promise.all([
+  const [cfgRes, autoRes, agAllRes, agMineRes, userRes]=await Promise.all([
     api('GET','/api/admin/config/'+encodeURIComponent(openId)),
     api('GET','/api/admin/automations?forOpenId='+encodeURIComponent(openId)),
-    api('GET','/api/admin/agents'),
+    api('GET','/api/admin/agents'), // 全部（供自动化表单选智能体）
+    api('GET','/api/admin/agents?owner='+encodeURIComponent(openId)), // 该成员专属 + 组织共享（owner 为空）
     api('GET','/api/admin/users').catch(()=>({data:{users:[]}})),
   ]);
   const cfg=(cfgRes.status===200&&cfgRes.data.config)?cfgRes.data.config:{};
   const hasApiKey=!!(cfgRes.data&&cfgRes.data.hasApiKey);
   const autos=(autoRes.status===200&&autoRes.data.automations)?autoRes.data.automations:[];
   const agentsAll=(agAllRes.status===200&&agAllRes.data.agents)?agAllRes.data.agents:[];
-  const agents=agentsAll.filter(a=>a.owner===openId); // 仅该用户归属的智能体
+  // 该成员在成员页可见的：自己专属（owner===openId）+ 组织共享（owner 为空）。与 rerenderUserAgentSection 保持一致。
+  const agents=(agMineRes.status===200&&agMineRes.data.agents)?agMineRes.data.agents:[];
   // 供「成员编辑页内」的自动化列表 + 弹窗收件人/智能体选择使用
   AUTO_LIST=autos;
   AUTO_AGENTS=agentsAll;
@@ -2500,21 +2502,24 @@ async function rerenderUserAutoSection(){
 
 function agentsHTML(agents, ro){
   // 成员编辑页内的智能体列表（管理员可在此直接编辑/删除/绑定飞书，亦可代该成员新建）。
-  const rows = agents.map(a=>`<tr data-agent-id="${esc(a.id)}">
+  const rows = agents.map(a=>{
+    const isOrg=!a.owner; // 组织共享（owner 为空）：对所有成员可见，删除会影响全员
+    return `<tr data-agent-id="${esc(a.id)}">
       <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
-      <td><b>${esc(a.name)}</b> <span class="tag">该成员</span></td>
+      <td><b>${esc(a.name)}</b> <span class="tag ${isOrg?'warn':'ok'}">${isOrg?'组织共享':'该成员'}</span></td>
       <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
       <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
       <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
       <td class="ops">
         <button class="btn ghost sm" data-ua-edit="${esc(a.id)}">编辑</button>
         <button class="btn ghost sm" data-ua-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
-        <button class="btn ghost sm danger" data-ua-del="${esc(a.id)}">删除</button>
+        <button class="btn ghost sm danger" data-ua-del="${esc(a.id)}"${isOrg?' data-ua-org="1"':''}>删除</button>
       </td>
-    </tr>`).join('');
-  const empty = agents.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有登录用户生效，无需在此列出。</tr>';
+    </tr>`;
+  }).join('');
+  const empty = agents.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无智能体（专属或组织共享）。</tr>';
   const createBtn = ro ? '' : '<button class="btn sm" id="uaNewAgent" style="margin-top:10px;">+ 代该成员新建智能体</button>';
-  const hint = ro ? '' : '<div class="hint" style="margin-top:6px;">管理员可在此直接编辑 / 删除 / 绑定飞书，或代该成员新建智能体（owner 归属该成员）。</div>';
+  const hint = ro ? '' : '<div class="hint" style="margin-top:6px;">管理员可在此直接编辑 / 删除 / 绑定飞书，或代该成员新建智能体（owner 归属该成员）。标记为「组织共享」的智能体对所有成员生效，删除会影响全员。</div>';
   return `<div class="table-wrap"><table>
     <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
     <tbody id="userAgentBody">${rows}${empty}</tbody>
@@ -2532,19 +2537,22 @@ async function rerenderUserAgentSection(){
   // 简化：直接重渲整个 card 区（保留 providers/automation 不变，需要从缓存恢复）
   // 为避免破坏同页其它区块，改成只替换 userAgentBody 内部的行：清空后重插入。
   if(bodyEl){
-    const rows=list.map(a=>`<tr data-agent-id="${esc(a.id)}">
+    const rows=list.map(a=>{
+      const isOrg=!a.owner;
+      return `<tr data-agent-id="${esc(a.id)}">
       <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
-      <td><b>${esc(a.name)}</b> <span class="tag">该成员</span></td>
+      <td><b>${esc(a.name)}</b> <span class="tag ${isOrg?'warn':'ok'}">${isOrg?'组织共享':'该成员'}</span></td>
       <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
       <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
       <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
       <td class="ops">
         <button class="btn ghost sm" data-ua-edit="${esc(a.id)}">编辑</button>
         <button class="btn ghost sm" data-ua-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
-        <button class="btn ghost sm danger" data-ua-del="${esc(a.id)}">删除</button>
+        <button class="btn ghost sm danger" data-ua-del="${esc(a.id)}"${isOrg?' data-ua-org="1"':''}>删除</button>
       </td>
-    </tr>`).join('');
-    const empty = list.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有登录用户生效，无需在此列出。</tr>';
+    </tr>`;
+    }).join('');
+    const empty = list.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无智能体（专属或组织共享）。</tr>';
     bodyEl.innerHTML = rows + empty;
     wireUserAgentSection();
   }
@@ -2570,7 +2578,8 @@ function wireUserAgentSection(){
   });
   tbody.querySelectorAll('button[data-ua-del]').forEach(b=>{
     b.onclick=async()=>{
-      if(!confirm('确定删除该智能体？')) return;
+      const isOrg=b.dataset.uaOrg==='1';
+      if(!confirm(isOrg?'该智能体为「组织共享」，删除将影响全部成员，确定删除？':'确定删除该智能体？')) return;
       const r=await api('DELETE',`/api/admin/agents/${encodeURIComponent(b.dataset.uaDel)}`);
       if(r.status===200){ toast('已删除'); rerenderUserAgentSection(); }
       else toast('删除失败：'+(r.data&&r.data.error||r.status));
