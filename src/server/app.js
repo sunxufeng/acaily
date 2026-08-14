@@ -759,6 +759,41 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { providers: listProviders() });
     }
     // 管理视角：CRUD
+    // 注意：分发相关子路由（/distribute、/distributions）必须**先于此处的通用 CRUD 块匹配**，
+    // 否则会被 `/api/admin/providers/<id>` 的内层正则截走（不匹配含后缀的路径）→ 落到 POST 创建处误返 "name 必填"
+    // POST /api/admin/providers/:id/distribute  body={ openIds: [openId,...] }
+    const distMatch = pathname.match(/^\/api\/admin\/providers\/([^/]+)\/distribute$/);
+    if (distMatch) {
+      const admin = requireAdminApi(req, res);
+      if (!admin) return;
+      const id = decodeURIComponent(distMatch[1]);
+      const raw = getProviderRaw(id);
+      if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
+      if (raw.owner !== 'admin') return sendJson(res, 400, { error: '只能分发组织共享 Provider' });
+      try {
+        const body = await readBody(req);
+        const openIds = Array.isArray(body && body.openIds) ? body.openIds : [];
+        if (!openIds.length) return sendJson(res, 400, { error: 'openIds 不能为空' });
+        const result = distributeProvider(id, openIds);
+        await record({
+          actor: admin.openId,
+          action: 'admin.provider.distribute',
+          target: id,
+          meta: { distributed: result.distributed.length, skipped: result.skipped.length },
+        });
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
+    // GET /api/admin/providers/:id/distributions  → 已分发对象名单（用于「再次分发」前查重）
+    const distListMatch = pathname.match(/^\/api\/admin\/providers\/([^/]+)\/distributions$/);
+    if (distListMatch) {
+      const admin = requireAdminApi(req, res);
+      if (!admin) return;
+      const id = decodeURIComponent(distListMatch[1]);
+      return sendJson(res, 200, { distributions: listProviderDistributions(id) });
+    }
     if (pathname === '/api/admin/providers' || pathname.startsWith('/api/admin/providers/')) {
       const admin = requireAdminApi(req, res);
       if (!admin) return;
@@ -882,39 +917,8 @@ const server = createServer(async (req, res) => {
     }
 
     // ---- 组织共享 Provider 分发（admin） ----
-    // POST /api/admin/providers/:id/distribute  body={ openIds: [openId,...] }
-    const distMatch = pathname.match(/^\/api\/admin\/providers\/([^/]+)\/distribute$/);
-    if (distMatch) {
-      const admin = requireAdminApi(req, res);
-      if (!admin) return;
-      const id = decodeURIComponent(distMatch[1]);
-      const raw = getProviderRaw(id);
-      if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
-      if (raw.owner !== 'admin') return sendJson(res, 400, { error: '只能分发组织共享 Provider' });
-      try {
-        const body = await readBody(req);
-        const openIds = Array.isArray(body && body.openIds) ? body.openIds : [];
-        if (!openIds.length) return sendJson(res, 400, { error: 'openIds 不能为空' });
-        const result = distributeProvider(id, openIds);
-        await record({
-          actor: admin.openId,
-          action: 'admin.provider.distribute',
-          target: id,
-          meta: { distributed: result.distributed.length, skipped: result.skipped.length },
-        });
-        return sendJson(res, 200, { ok: true, ...result });
-      } catch (e) {
-        return sendJson(res, 400, { error: e.message });
-      }
-    }
-    // GET /api/admin/providers/:id/distributions  → 已分发对象名单（用于「再次分发」前查重）
-    const distListMatch = pathname.match(/^\/api\/admin\/providers\/([^/]+)\/distributions$/);
-    if (distListMatch) {
-      const admin = requireAdminApi(req, res);
-      if (!admin) return;
-      const id = decodeURIComponent(distListMatch[1]);
-      return sendJson(res, 200, { distributions: listProviderDistributions(id) });
-    }
+    // 注意：分发相关路由（/distribute、/distributions）已提前到 admin/providers CRUD 块**之前**匹配
+    // （此处删除重复以免误命中）—— 见上方。
 
     // 个人配置（自服务，open_id 取自会话，绝不信任请求体）
     if (method === 'GET' && pathname === '/api/config/me') {
