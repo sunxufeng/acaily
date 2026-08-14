@@ -2155,20 +2155,25 @@ window.openUserPage=async function(openId, readOnly){
   titleEl.textContent=(readOnly?'成员详情：':'编辑成员：')+openId;
   bodyEl.innerHTML='<div class="muted">加载中…</div>';
   switchView(readOnly?'user-view':'user-edit');
-  const [cfgRes, autoRes, agRes]=await Promise.all([
+  const [cfgRes, autoRes, agAllRes, userRes]=await Promise.all([
     api('GET','/api/admin/config/'+encodeURIComponent(openId)),
     api('GET','/api/admin/automations'),
-    api('GET','/api/admin/agents?owner='+encodeURIComponent(openId)),
+    api('GET','/api/admin/agents'),
+    api('GET','/api/admin/users').catch(()=>({data:{users:[]}})),
   ]);
   const cfg=(cfgRes.status===200&&cfgRes.data.config)?cfgRes.data.config:{};
   const hasApiKey=!!(cfgRes.data&&cfgRes.data.hasApiKey);
   const autos=(autoRes.status===200&&autoRes.data.automations)?autoRes.data.automations:[];
-  const agentsRaw=(agRes.status===200&&agRes.data.agents)?agRes.data.agents:[];
-  const agents=agentsRaw.filter(a=>a.owner===openId); // 仅该用户归属的智能体
+  const agentsAll=(agAllRes.status===200&&agAllRes.data.agents)?agAllRes.data.agents:[];
+  const agents=agentsAll.filter(a=>a.owner===openId); // 仅该用户归属的智能体
+  // 供「成员编辑页内」的自动化列表 + 弹窗收件人/智能体选择使用
+  AUTO_LIST=autos;
+  AUTO_AGENTS=agentsAll;
+  AUTO_USERS=(userRes.status===200&&userRes.data&&userRes.data.users)?userRes.data.users:[];
+  AUTO_READONLY=false;
   CURRENT_USER.unionId=cfg.unionId||null;
   CURRENT_USER.displayName=cfg.displayName||openId;
   CURRENT_USER_CFG=cfg; CURRENT_USER_HASKEY=hasApiKey; CURRENT_USER_AGENTS=agents;
-  CURRENT_AUTO_MAP={}; autos.forEach(a=>{CURRENT_AUTO_MAP[a.id]=a;});
   renderUserPage(bodyEl, {openId, cfg, hasApiKey, autos, agents, readOnly});
 };
 
@@ -2179,8 +2184,8 @@ function renderUserPage(bodyEl, data){
   html+=`<div class="sub-card"><div class="sub-h">Provider 配置 ${ro?'<span class="muted">(只读)</span>':'（可编辑）'}</div>`;
   html+= ro? providerKvHTML(cfg,hasApiKey) : providerFormHTML(cfg);
   html+=`</div>`;
-  html+=`<div class="sub-card"><div class="sub-h">自动化设置 ${ro?'<span class="muted">(只读)</span>':'（勾选 = 作为该自动化收件人）'}</div>`;
-  html+= automationHTML(openId, autos, ro, CURRENT_USER.unionId);
+  html+=`<div class="sub-card"><div class="sub-h">自动化任务 ${ro?'<span class="muted">(只读)</span>':'（点击「编辑」/「新建」打开任务表单）'}</div>`;
+  html+= automationListHTML();
   html+=`</div>`;
   html+=`<div class="sub-card"><div class="sub-h">智能体配置 ${ro?'<span class="muted">(只读)</span>':''}</div>`;
   html+= agentsHTML(agents, ro);
@@ -2189,7 +2194,7 @@ function renderUserPage(bodyEl, data){
   if(!ro){
     const sp=$('ueSaveProvider'); if(sp) sp.onclick=()=>saveUserProvider(openId);
     const tp=$('ueTestProvider'); if(tp) tp.onclick=()=>testUserProvider(openId);
-    const sa=$('ueSaveAuto'); if(sa) sa.onclick=()=>saveUserAutomation();
+    wireUserAutoSection(openId, CURRENT_USER.unionId, CURRENT_USER.displayName);
   }
 }
 
@@ -2272,44 +2277,82 @@ async function testUserProvider(openId){
   }
 }
 
-function automationHTML(openId, autos, ro, unionId){
-  if(!autos.length) return '<div class="muted">暂无自动化任务</div>';
-  const items=autos.map(a=>{
-    const recs=a.pushRecipients||[];
-    const isRec=recs.some(r=>r.openId===openId||(unionId&&r.unionId===unionId));
-    const cb=ro?'':`<label class="auto-cb"><input type="checkbox" class="ue-auto-cb" data-aid="${esc(a.id)}" ${isRec?'checked':''}/> 作为收件人</label>`;
-    return `<div class="auto-item">
-      ${cb}
-      <div class="auto-meta"><span class="auto-name">${esc(a.name||a.id)}</span> <span class="muted">${esc(describeCron(a.cron))}</span> ${a.enabled===false?'<span class="pill">已停用</span>':'<span class="pill ok">启用</span>'}</div>
-    </div>`;
-  }).join('');
-  return `<div class="auto-list">${items}</div>`+(ro?'':`<button class="btn" id="ueSaveAuto" style="margin-top:12px;">保存自动化设置</button>
-    <div class="hint" style="margin-top:6px;">勾选后该用户会在对应自动化执行时收到飞书推送；取消则不再接收。</div>`);
+function automationListHTML(){
+  const list=AUTO_LIST||[];
+  const items=list.map(a=>autoRow(a, false)).join('');
+  const empty=list.length?'':`<div class="muted" style="padding:6px 0;">暂无自动化任务。点击下方按钮创建一条。</div>`;
+  return `<div id="userAutoWrap">
+    <div id="userAutoList">${items}${empty}</div>
+    <div style="margin-top:12px;"><button class="btn" id="ueNewAuto">+ 新建自动化任务</button></div>
+    <div class="hint" style="margin-top:6px;">点击「编辑」修改任务（含调整收件人、频率等）；「新建」可将该成员直接设为收件人。完整调度/运行记录也可前往「自动化任务」页面查看。</div>
+  </div>`;
 }
 
-async function saveUserAutomation(){
-  const {openId, unionId, displayName}=CURRENT_USER;
-  const cbs=[...document.querySelectorAll('.ue-auto-cb')];
-  let okCount=0, fail=0;
-  for(const cb of cbs){
-    const aid=cb.dataset.aid;
-    const a=CURRENT_AUTO_MAP[aid];
-    if(!a)continue;
-    const recs=a.pushRecipients||[];
-    const exists=recs.some(r=>r.openId===openId||(unionId&&r.unionId===unionId));
-    const want=cb.checked;
-    let newRecs;
-    if(want&&!exists) newRecs=[...recs,{openId, unionId:unionId||'', name:displayName||openId}];
-    else if(!want&&exists) newRecs=recs.filter(r=>!(r.openId===openId||(unionId&&r.unionId===unionId)));
-    else continue;
-    const r=await api('PATCH','/api/admin/automations/'+encodeURIComponent(aid),{pushRecipients:newRecs});
-    if(r.status===200)okCount++; else fail++;
-  }
-  if(fail) toast('部分保存失败('+fail+')'); else toast('已保存 '+okCount+' 项自动化设置');
-  const autoRes=await api('GET','/api/admin/automations');
-  const autos=(autoRes.status===200&&autoRes.data.automations)?autoRes.data.automations:[];
-  CURRENT_AUTO_MAP={}; autos.forEach(a=>{CURRENT_AUTO_MAP[a.id]=a;});
-  renderUserPage($('userEditBody'), {openId, cfg:CURRENT_USER_CFG, hasApiKey:CURRENT_USER_HASKEY, autos, agents:CURRENT_USER_AGENTS, readOnly:false});
+// 绑定成员编辑页内「自动化任务」列表的操作（新建 / 编辑 / 删除 / 启停 / 刷新 / 运行）
+function wireUserAutoSection(openId, unionId, displayName){
+  USER_AUTO_CTX = { openId, unionId, displayName };
+  const listEl = $('userAutoList'); if(!listEl) return;
+  // 单条内的操作
+  listEl.querySelectorAll('.auto-item').forEach(el=>{
+    const id=el.dataset.id;
+    const tg=el.querySelector('[data-action="toggle"]'); if(tg) tg.onchange=(e)=>toggleAutoAndRefresh(id, e.target.checked);
+    const rf=el.querySelector('[data-action="refresh"]'); if(rf) rf.onclick=()=>refreshAutoAndRefresh(id);
+    const rn=el.querySelector('[data-action="run"]'); if(rn) rn.onclick=()=>runAutoAndRefresh(id);
+    const ed=el.querySelector('[data-action="edit"]'); if(ed) ed.onclick=()=>{ AUTO_EDIT_RETURN='user-edit'; editAuto(id); };
+    const dl=el.querySelector('[data-action="del"]'); if(dl) dl.onclick=()=>deleteAutoAndRefresh(id);
+  });
+  // 新建按钮：预填当前成员为收件人
+  const nb=$('ueNewAuto'); if(nb) nb.onclick=()=>{ AUTO_EDIT_RETURN='user-edit'; openAutomationEdit(null, { openId, unionId:unionId||'', name:displayName||openId }); };
+}
+
+let USER_AUTO_CTX = null;
+
+// 单条操作的包装：完成后仅刷新成员编辑页内的列表，不影响全局 automation 视图
+async function toggleAutoAndRefresh(id, enabled){
+  const res=await api('PATCH','/api/admin/automations/'+encodeURIComponent(id),{enabled});
+  if(res.status===200){ toast(enabled?'已启用':'已停用'); await rerenderUserAutoSection(); }
+  else toast('操作失败：'+(res.data&&res.data.error||res.status));
+}
+async function refreshAutoAndRefresh(id){
+  const res=await api('GET','/api/admin/automations');
+  if(res.status!==200){ toast('刷新失败'); return; }
+  AUTO_LIST=res.data.automations||[];
+  rerenderUserAutoSection(true);
+  toast('已刷新');
+}
+async function runAutoAndRefresh(id){
+  const res=await api('POST','/api/admin/automations/'+encodeURIComponent(id)+'/run',{});
+  if(res.status===200){ toast('已触发；执行日志稍后刷新可见'); setTimeout(rerenderUserAutoSection, 2500); }
+  else toast('触发失败：'+(res.data&&res.data.error||res.status));
+}
+async function deleteAutoAndRefresh(id){
+  if(!confirm('确认删除该自动化任务？'))return;
+  const res=await api('DELETE','/api/admin/automations/'+encodeURIComponent(id));
+  if(res.status===200){ toast('已删除'); await rerenderUserAutoSection(); }
+  else toast('删除失败：'+(res.data&&res.data.error||res.status));
+}
+
+// 重新拉取并渲染成员编辑页内的自动化列表
+async function rerenderUserAutoSection(){
+  const res=await api('GET','/api/admin/automations');
+  if(res.status!==200) return;
+  AUTO_LIST=res.data.automations||[];
+  const listEl=$('userAutoList'); if(!listEl) return;
+  const list=AUTO_LIST||[];
+  const items=list.map(a=>autoRow(a,false)).join('');
+  const empty=list.length?'':`<div class="muted" style="padding:6px 0;">暂无自动化任务。点击下方按钮创建一条。</div>`;
+  listEl.innerHTML = items + empty;
+  // 重新绑定单条操作
+  listEl.querySelectorAll('.auto-item').forEach(el=>{
+    const id=el.dataset.id;
+    const tg=el.querySelector('[data-action="toggle"]'); if(tg) tg.onchange=(e)=>toggleAutoAndRefresh(id, e.target.checked);
+    const rf=el.querySelector('[data-action="refresh"]'); if(rf) rf.onclick=()=>refreshAutoAndRefresh(id);
+    const rn=el.querySelector('[data-action="run"]'); if(rn) rn.onclick=()=>runAutoAndRefresh(id);
+    const ed=el.querySelector('[data-action="edit"]'); if(ed) ed.onclick=()=>{ AUTO_EDIT_RETURN='user-edit'; editAuto(id); };
+    const dl=el.querySelector('[data-action="del"]'); if(dl) dl.onclick=()=>deleteAutoAndRefresh(id);
+  });
+  // 同步「全局」自动化页面（如果同时打开）
+  const nb=$('autoNewBtn'); if(nb) nb.style.display='';
 }
 
 function agentsHTML(agents, ro){
@@ -2453,6 +2496,7 @@ let AUTO_EDITING=null;
 let AUTO_USERS=[];
 let AUTO_AGENTS=[];
 let AUTO_PUSH=[];   // 当前编辑中的收件人：[{openId, unionId, name, source}]
+let AUTO_EDIT_RETURN='automation'; // 保存后返回的视图（'automation' / 'user-edit' / 'user-view'）
 const AUTO_RUN_PAGE_SIZE=5;
 let AUTO_RUN_PAGE={};   // 每个自动化独立记录「执行记录」翻页位置
 
@@ -2600,12 +2644,14 @@ async function deleteAuto(id){
   else toast('删除失败：'+(res.data.error||res.status));
 }
 
-function newAuto(){openAutomationEdit(null);}
+function newAuto(){ AUTO_EDIT_RETURN='automation'; openAutomationEdit(null); }
 async function editAuto(id){
   const a=AUTO_LIST.find(x=>x.id===id);if(!a)return;
+  // 若调用方未预设返回视图（成员编辑页内），默认为全局自动化页面
+  if(AUTO_EDIT_RETURN!=='user-edit' && AUTO_EDIT_RETURN!=='user-view') AUTO_EDIT_RETURN='automation';
   openAutomationEdit(a);
 }
-function openAutomationEdit(a){
+function openAutomationEdit(a, presetRecipient){
   AUTO_EDITING=a?a.id:null;
   $('autoEditTitle').textContent=a?'编辑自动化任务：'+a.title:'新建自动化任务';
   let freq='daily',hour=9,minute=35,weeklyDay=1,monthlyDay=1;
@@ -2618,13 +2664,19 @@ function openAutomationEdit(a){
     const checked=a&&(a.pushTo||[]).includes(u.openId);
     return `<label class="user-pick"><input type="checkbox" value="${esc(u.openId)}" ${checked?'checked':''}/> <span>${esc(u.displayName||u.openId)}</span> <span class="muted" style="font-size:11px;">${esc(u.openId)}</span></label>`;
   }).join('');
-  // 已选收件人（兼容历史 pushTo 与新的 pushRecipients）
-  AUTO_PUSH = (a && Array.isArray(a.pushRecipients) && a.pushRecipients.length)
-    ? a.pushRecipients.map(r=>({ openId:r.openId||'', unionId:r.unionId||'', name:r.name||'', source:r.source||'auto' }))
-    : (a && (a.pushTo||[]).map(uid=>{
-        const u=AUTO_USERS.find(x=>x.openId===uid);
-        return { openId:uid, unionId:(u&&u.unionId)||'', name:(u&&u.displayName)||uid, source:'config' };
-      }));
+  // 已选收件人（兼容历史 pushTo 与新的 pushRecipients）；新建时若传 presetRecipient 则预填该成员
+  if(a){
+    AUTO_PUSH = (Array.isArray(a.pushRecipients) && a.pushRecipients.length)
+      ? a.pushRecipients.map(r=>({ openId:r.openId||'', unionId:r.unionId||'', name:r.name||'', source:r.source||'auto' }))
+      : ((a.pushTo||[]).map(uid=>{
+          const u=AUTO_USERS.find(x=>x.openId===uid);
+          return { openId:uid, unionId:(u&&u.unionId)||'', name:(u&&u.displayName)||uid, source:'config' };
+        }));
+  } else if(presetRecipient && presetRecipient.openId){
+    AUTO_PUSH = [{ openId:presetRecipient.openId, unionId:presetRecipient.unionId||'', name:presetRecipient.name||presetRecipient.openId, source:'preset' }];
+  } else {
+    AUTO_PUSH = [];
+  }
   const agentOptions=(AUTO_AGENTS||[]).map(ag=>`<option value="${esc(ag.id)}" ${a&&a.agentId===ag.id?'selected':''}>${esc((ag.emoji||'🤖')+' '+(ag.name||ag.id))}</option>`).join('');
   const agentSelect=`<select id="a_agent"><option value="">（不关联，结果用收件人模型生成）</option>${agentOptions}</select>`;
   $('autoEditBody').innerHTML=`
@@ -2774,7 +2826,11 @@ function openAutomationEdit(a){
 }
 
 $('autoNewBtn').onclick=()=>newAuto();
-$('autoEditBack').onclick=()=>switchView('automation');
+$('autoEditBack').onclick=()=>{
+  const ret=(AUTO_EDIT_RETURN==='user-edit'||AUTO_EDIT_RETURN==='user-view')?AUTO_EDIT_RETURN:'automation';
+  switchView(ret);
+  if(ret==='user-edit'||ret==='user-view') rerenderUserAutoSection();
+};
 $('autoEditSave').onclick=async()=>{
   const title=$('a_title').value.trim();
   const agentId=$('a_agent').value||null;
@@ -2804,7 +2860,12 @@ $('autoEditSave').onclick=async()=>{
     if(res.status===200){
       st.className='status ok';st.textContent='✅ 已保存';
       toast('已保存');
-      setTimeout(()=>{switchView('automation');loadAutomation();},600);
+      const ret=AUTO_EDIT_RETURN||'automation';
+      setTimeout(()=>{
+        switchView(ret);
+        if(ret==='user-edit'||ret==='user-view') rerenderUserAutoSection();
+        else loadAutomation();
+      },600);
     }else{
       const err=res.data&&res.data.error?res.data.error:('HTTP '+res.status);
       st.className='status err';st.textContent='❌ '+esc(err);
