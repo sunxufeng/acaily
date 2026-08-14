@@ -75,6 +75,7 @@ function normalize(p) {
     apiKeyEnc: p.apiKeyEnc || null,
     keyMask: p.keyMask || '',
     distributedAt: p.distributedAt || null,
+    extra: (p.extra && typeof p.extra === 'object') ? p.extra : {},
     createdAt: p.createdAt || new Date().toISOString(),
     updatedAt: p.updatedAt || new Date().toISOString(),
   };
@@ -144,6 +145,10 @@ export function saveProvider(input, id, opts = {}) {
     p.apiKeyEnc = existing.apiKeyEnc;
     p.keyMask = existing.keyMask;
   }
+  // 附加配置（采样参数 / 超时重试 / 多模态 / 流式 / 自定义请求头 / Chat 接口路径等）。
+  // 前端提交完整 extra 对象整体覆盖；未提交则保留旧值（兼容旧数据）。
+  const inExtra = (input.extra && typeof input.extra === 'object') ? input.extra : null;
+  p.extra = inExtra ? inExtra : ((existing && existing.extra) || {});
   db.providers[p.id] = p;
   persist();
   return strip(p);
@@ -204,6 +209,7 @@ export function distributeProvider(sourceId, openIds) {
         emoji: src.emoji,
         disabled: src.disabled,
         apiKey: apiKey || undefined,
+        extra: src.extra && typeof src.extra === 'object' ? src.extra : {},
       };
       const newRec = saveProvider(payload, existingId, { owner: openId, alwaysSetOwner: true });
       // 标记 parentId + distributedAt

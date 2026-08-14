@@ -1721,6 +1721,7 @@ function provCacheListOf(scope){
 let currentMyCfg=null;       // /api/config/me（兼容旧逻辑：仅「复用来源」下拉里展示「我的个人配置」用）
 let PROV_MODE='my';          // 'my' = 我的 Provider；'org' = 组织共享 Provider（决定提交/列表 API）
 let provEditingScope=null;   // {kind:'my'|'org', returnView:'provider'|'provider-org'}
+let reuseExtraMap={};        // 复用来源 value -> 该来源的 extra 配置（点复用后回填「附加配置」）
 
 function rowStatusTag(p){
   if(p.disabled) return '<span class="tag warn">已停用</span>';
@@ -1826,16 +1827,26 @@ async function confirmDelProvider(id, scope){
 }
 function provFormHTML(p, scope){
   p=p||{}; scope = scope || PROV_MODE;
+  const extra = (p.extra && typeof p.extra==='object') ? p.extra : {};
   const reuseList = provCacheListOf(scope);
+  reuseExtraMap={};
   // 复用来源下拉：空白 / 我的个人配置 / 组织默认 / 当前 scope 的所有 Provider 条目
   const reuseOptions=['<option value="">（空白/手填）</option>'];
   if(currentMyCfg){
+    reuseExtraMap['my:'+(currentMyCfg.provider||'')]={
+      chatCompletionsPath:currentMyCfg.chatCompletionsPath,
+      temperature:currentMyCfg.temperature, maxTokens:currentMyCfg.maxTokens, topP:currentMyCfg.topP, topK:currentMyCfg.topK,
+      frequencyPenalty:currentMyCfg.frequencyPenalty, presencePenalty:currentMyCfg.presencePenalty,
+      timeout:currentMyCfg.timeout, retries:currentMyCfg.retries,
+      multimodal:currentMyCfg.multimodal, stream:currentMyCfg.stream, customHeaders:currentMyCfg.customHeaders,
+    };
     reuseOptions.push(`<option value="my:${esc(currentMyCfg.provider||'')}" data-type="${esc(currentMyCfg.provider||'')}" data-base="${esc(currentMyCfg.baseUrl||'')}" data-models="${esc((currentMyCfg.model?[currentMyCfg.model]:[]).join(','))}">📌 我的个人配置（${esc(currentMyCfg.displayName||currentMyCfg.provider||'')}）</option>`);
   }else{
     reuseOptions.push('<option value="my:" disabled>📌 我的个人配置（未设置）</option>');
   }
   if(reuseList && reuseList.length){
     reuseList.forEach(pp=>{
+      reuseExtraMap['pool:'+pp.id] = pp.extra || {};
       const ml=(pp.models||[]).slice(0,2).join(', ');
       reuseOptions.push(`<option value="pool:${esc(pp.id)}" data-type="${esc(pp.type||'')}" data-base="${esc(pp.baseUrl||'')}" data-models="${esc((pp.models||[]).join(','))}">🧩 ${esc(pp.name||'')} (${esc(pp.type||'')}${ml?' · '+esc(ml):''})</option>`);
     });
@@ -1866,7 +1877,52 @@ function provFormHTML(p, scope){
       <button class="btn ghost" type="button" id="pTestBtn">🔌 测试连通</button>
       <span id="pTestStatus" class="muted small" style="margin-left:8px;word-break:break-all;"></span>
     </div>
+
+    <!-- 附加配置：可折叠，放采样参数 / 超时重试 / 多模态 / 流式 / 自定义请求头 / Chat 接口路径 -->
+    <details class="prov-extra" id="pExtra" style="margin-top:14px;border-top:1px dashed var(--border,#e5e7eb);padding-top:10px;">
+      <summary style="cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px;">
+        <span class="prov-extra-arrow">▸</span> 附加配置
+        <span class="desc" style="font-weight:normal;">采样参数 / 超时重试 / 多模态 / 流式 / 自定义请求头（不常用可收起）</span>
+      </summary>
+      <div class="prov-extra-body" style="margin-top:10px;">
+        <label>Chat 接口路径（自建网关可填，如 /v1/chat/completions）</label>
+        <input id="pChatPath" value="${esc(extra.chatCompletionsPath||'')}" placeholder="/v1/chat/completions"/>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+          <div><label style="margin-top:0;">Temperature</label><input id="pTemperature" type="number" step="0.1" min="0" max="2" value="${esc(extra.temperature??0.7)}"/></div>
+          <div><label style="margin-top:0;">Max Tokens</label><input id="pMaxTokens" type="number" step="1" min="1" value="${esc(extra.maxTokens??2048)}"/></div>
+          <div><label style="margin-top:0;">Top P</label><input id="pTopP" type="number" step="0.05" min="0" max="1" value="${esc(extra.topP??1)}"/></div>
+          <div><label style="margin-top:0;">Top K</label><input id="pTopK" type="number" step="1" min="1" value="${esc(extra.topK??'')}"/></div>
+          <div><label style="margin-top:0;">Freq Penalty</label><input id="pFreqPenalty" type="number" step="0.1" min="-2" max="2" value="${esc(extra.frequencyPenalty??0)}"/></div>
+          <div><label style="margin-top:0;">Pres Penalty</label><input id="pPresPenalty" type="number" step="0.1" min="-2" max="2" value="${esc(extra.presencePenalty??0)}"/></div>
+          <div><label style="margin-top:0;">超时（秒）</label><input id="pTimeout" type="number" step="1" min="1" max="600" value="${esc(extra.timeout??'')}"/></div>
+          <div><label style="margin-top:0;">失败重试次数</label><input id="pRetries" type="number" step="1" min="0" max="5" value="${esc(extra.retries??'')}"/></div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:18px;flex-wrap:wrap;">
+          <label style="font-weight:400;display:inline-flex;gap:6px;align-items:center;"><input id="pMultimodal" type="checkbox" ${extra.multimodal===true?'checked':''}/>支持多模态</label>
+          <label style="font-weight:400;display:inline-flex;gap:6px;align-items:center;"><input id="pStream" type="checkbox" ${extra.stream!==false?'checked':''}/>流式输出</label>
+        </div>
+        <label style="margin-top:10px;">自定义请求头（JSON，如 {"X-Org":"acaily"}）</label>
+        <textarea id="pCustomHeaders" rows="2" spellcheck="false" placeholder='{}'>${esc(extra.customHeaders?JSON.stringify(extra.customHeaders,null,0):'')}</textarea>
+      </div>
+    </details>
   </div>`;
+}
+// 把 extra 配置回填到「附加配置」表单（用于「复用来源」联动）
+function applyProvExtra(ex){
+  if(!ex||typeof ex!=='object')return;
+  if(ex.chatCompletionsPath!=null)$('pChatPath').value=ex.chatCompletionsPath;
+  if(ex.temperature!=null)$('pTemperature').value=ex.temperature;
+  if(ex.maxTokens!=null)$('pMaxTokens').value=ex.maxTokens;
+  if(ex.topP!=null)$('pTopP').value=ex.topP;
+  if(ex.topK!=null)$('pTopK').value=ex.topK;
+  if(ex.frequencyPenalty!=null)$('pFreqPenalty').value=ex.frequencyPenalty;
+  if(ex.presencePenalty!=null)$('pPresPenalty').value=ex.presencePenalty;
+  if(ex.timeout!=null)$('pTimeout').value=ex.timeout;
+  if(ex.retries!=null)$('pRetries').value=ex.retries;
+  if(ex.multimodal===true)$('pMultimodal').checked=true;
+  if(ex.stream===false)$('pStream').checked=false;
+  if(ex.customHeaders)$('pCustomHeaders').value=JSON.stringify(ex.customHeaders);
+  const det=$('pExtra'); if(det)det.open=true;
 }
 let provEditingId=null;
 function openProviderEdit(id, scope){
@@ -1891,6 +1947,8 @@ function openProviderEdit(id, scope){
       }
       if(b!=null) $('pBaseUrl').value=b;
       if(m){ $('pModels').value=m.split(',').join('\n'); }
+      const exx=reuseExtraMap[reuseSel.value];
+      if(exx) applyProvExtra(exx);
       // 名称若有占位也带过来
       if(reuseSel.value.startsWith('my:') && currentMyCfg){
         if(!$('pName').value.trim()) $('pName').value='我的 '+ (currentMyCfg.displayName||'')+' 配置';
@@ -1903,6 +1961,14 @@ function openProviderEdit(id, scope){
   }
   // 「类型」下拉自动填 Base URL 与「模型列表」
   setupProviderPresetSelect('pType', 'pBaseUrl', 'pModels');
+  // 「附加配置」折叠箭头随开合旋转
+  const pExtraEl=$('pExtra');
+  if(pExtraEl){
+    pExtraEl.addEventListener('toggle',()=>{
+      const ar=pExtraEl.querySelector('.prov-extra-arrow');
+      if(ar) ar.textContent = pExtraEl.open ? '▾' : '▸';
+    });
+  }
   // 「测试连通」按钮
   const tb=$('pTestBtn');
   if(tb){
@@ -1971,6 +2037,29 @@ function closeProviderEdit(){
   provEditingScope=null;
 }
 async function saveProviderEdit(){
+  const scope = provEditingScope ? provEditingScope.kind : PROV_MODE;
+  const sb=$('provEditSave');
+  // 自定义请求头 JSON 校验（提前，避免占用了按钮 loading 态）
+  const chRaw=$('pCustomHeaders').value.trim();
+  let customHeaders;
+  if(chRaw){
+    try{ customHeaders=JSON.parse(chRaw); }
+    catch(e){ toast('附加配置 · 自定义请求头不是合法 JSON：'+e.message); return; }
+  }
+  const extra={
+    chatCompletionsPath:$('pChatPath').value.trim(),
+    temperature:Number($('pTemperature').value),
+    maxTokens:Number($('pMaxTokens').value),
+    topP:Number($('pTopP').value),
+    topK:$('pTopK').value===''?undefined:Number($('pTopK').value),
+    frequencyPenalty:Number($('pFreqPenalty').value),
+    presencePenalty:Number($('pPresPenalty').value),
+    timeout:$('pTimeout').value===''?undefined:Number($('pTimeout').value),
+    retries:$('pRetries').value===''?undefined:Number($('pRetries').value),
+    multimodal:$('pMultimodal').checked,
+    stream:$('pStream').checked,
+  };
+  if(customHeaders) extra.customHeaders=customHeaders;
   const payload={
     name:$('pName').value.trim()||'未命名 Provider',
     emoji:$('pEmoji').value.trim()||'🧩',
@@ -1978,10 +2067,10 @@ async function saveProviderEdit(){
     baseUrl:$('pBaseUrl').value.trim(),
     models:$('pModels').value.split('\n').map(s=>s.trim()).filter(Boolean),
     apiKey:provApiKeyVal(),
+    extra,
   };
-  const scope = provEditingScope ? provEditingScope.kind : PROV_MODE;
   const baseUrl = scope==='org' ? '/api/admin/providers' : '/api/my/providers';
-  const sb=$('provEditSave');sb.disabled=true;sb.textContent='保存中…';
+  sb.disabled=true;sb.textContent='保存中…';
   const url = provEditingId ? `${baseUrl}/${encodeURIComponent(provEditingId)}` : baseUrl;
   const method = provEditingId ? 'PUT' : 'POST';
   const {status,data}=await api(method, url, payload);
