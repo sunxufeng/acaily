@@ -1901,10 +1901,6 @@ function provFormHTML(p, scope){
       </div>
     </label>
     <div id="pKeyStatus" class="muted small" style="margin-top:-4px;"></div>
-    <div class="row" style="margin-top:10px;align-items:center;">
-      <button class="btn ghost" type="button" id="pTestBtn">🔌 测试连通</button>
-      <span id="pTestStatus" class="muted small" style="margin-left:8px;word-break:break-all;"></span>
-    </div>
 
     <!-- 附加配置：可折叠，放采样参数 / 超时重试 / 多模态 / 流式 / 自定义请求头 / Chat 接口路径 -->
     <details class="prov-extra" id="pExtra" style="margin-top:14px;border-top:1px dashed var(--border,#e5e7eb);padding-top:10px;">
@@ -1933,6 +1929,12 @@ function provFormHTML(p, scope){
         <textarea id="pCustomHeaders" rows="2" spellcheck="false" placeholder='{}'>${esc(extra.customHeaders?JSON.stringify(extra.customHeaders,null,0):'')}</textarea>
       </div>
     </details>
+
+    <!-- 测试连通：放在「附加配置」下方，便于用上附加配置里的参数（超时/自定义请求头/Chat 路径等） -->
+    <div class="row" style="margin-top:14px;align-items:center;">
+      <button class="btn ghost" type="button" id="pTestBtn">🔌 测试连通</button>
+      <span id="pTestStatus" class="muted small" style="margin-left:8px;word-break:break-all;"></span>
+    </div>
   </div>`;
 }
 // 把 extra 配置回填到「附加配置」表单（用于「复用来源」联动）
