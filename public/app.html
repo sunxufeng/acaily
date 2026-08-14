@@ -45,6 +45,10 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
         <span class="lbl">组织默认配置</span>
       </a>
+      <a class="nav-item admin-only" href="/admin" data-view="provider-shared" data-tip="组织共享 Provider">
+        <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M9 14h6"/></svg></span>
+        <span class="lbl">组织共享 Provider</span>
+      </a>
       <a class="nav-item admin-only" href="/admin" data-view="audit" data-tip="审计日志">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".7" fill="currentColor"/><circle cx="3.5" cy="12" r=".7" fill="currentColor"/><circle cx="3.5" cy="18" r=".7" fill="currentColor"/></svg></span>
         <span class="lbl">审计日志</span>
@@ -145,142 +149,19 @@
         </div>
       </section>
 
-      <!-- 视图：Provider（我的配置 + 组织共享 Provider 池，合并页） -->
+      <!-- 视图：Provider（我的 Provider 列表：自建 + 管理员分发的副本） -->
       <section class="view" id="view-provider">
-        <div class="card">
-          <div class="card-h">
-            <h2>我的 Provider</h2>
-            <span class="desc">在这里维护你个人的 Provider（API Key、Base URL、模型、采样参数、System Prompt、多模态等）。未设置的项目会自动回退使用管理员在「组织默认配置」中下发的默认值。<br>apiKey 仅保存在服务端（AES-256-GCM 加密）。Temperature / Top P / Max Tokens / Top K / Frequency·Presence Penalty / 超时 / 重试 / 自定义请求头 / System Prompt / 流式 / 多模态开关均作用于「对话」与插件调用。</span>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-h" style="padding:18px 18px 0;margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <h2>我的 Provider</h2>
+              <div class="desc">在这里维护你个人的 Provider 列表：可新建、编辑、停用、删除。管理员从「组织共享 Provider」分发下来的副本也会出现在这里（标注「来自组织」），你可以像自建条目一样继续修改。API Key 仅保存在服务端（AES-256-GCM 加密）。</div>
+            </div>
+            <button class="btn" id="myProvNewBtn">+ 新建 Provider</button>
           </div>
-
-          <div class="row">
-            <div style="flex:1;">
-              <label>名称 <span class="hint" style="font-weight:400;">（仅展示，方便你识别）</span></label>
-              <input id="configName" placeholder="例如：Richard OpenAI" maxlength="60" />
-            </div>
-            <div style="flex:1;">
-              <label>类型 <span class="req">*</span></label>
-              <select id="provider"><!-- 由 injectProviderPresets() 注入常见大模型预置 --></select>
-            </div>
-          </div>
-
-          <label>API Key <span class="hint" style="font-weight:400;">（Ollama 留空。已保存的 Key 明文不返回前端；显示时仅展示占位掩码，不会覆盖已存密钥）</span></label>
-          <div class="row" style="gap:8px;align-items:center;">
-            <input id="apiKey" type="password" placeholder="sk-...（留空则不修改已存密钥）" autocomplete="off" data-masked="0" style="flex:1;" />
-            <button class="btn ghost" type="button" id="keyToggle">显示</button>
-          </div>
-          <div class="hint" id="keyStatus" style="margin-top:4px;"></div>
-
-          <label>Base URL <span class="req">*</span></label>
-          <input id="baseUrl" placeholder="https://api.openai.com/v1 或 http://localhost:11434" />
-          <div class="hint">OpenAI 兼容填 <code>/v1</code> 结尾；Ollama 默认 <code>http://localhost:11434</code></div>
-
-          <div class="row" style="align-items:flex-start;">
-            <div style="flex:2;">
-              <label>模型列表 <span class="hint" style="font-weight:400;">（每行一个，首项作为「默认模型」）</span></label>
-              <textarea id="models" rows="4" placeholder="gpt-4o-mini&#10;gpt-5.5-sol"></textarea>
-            </div>
-            <div style="flex:1;min-width:160px;">
-              <label>默认模型 / API 路径</label>
-              <input id="model" placeholder="gpt-4o-mini" />
-              <input id="chatCompletionsPath" placeholder="/v1/chat/completions（可选）" style="margin-top:8px;" />
-            </div>
-          </div>
-
-          <div class="section-title">采样参数（Sampling）</div>
-          <div class="row">
-            <div>
-              <label style="margin-top:0;">Temperature</label>
-              <input id="temperature" type="number" step="0.1" min="0" max="2" value="0.7" />
-              <div class="hint">0–2，越大越发散</div>
-            </div>
-            <div>
-              <label style="margin-top:0;">Max Tokens</label>
-              <input id="maxTokens" type="number" step="1" min="1" value="2048" />
-              <div class="hint">单次最大输出</div>
-            </div>
-            <div>
-              <label style="margin-top:0;">Top P</label>
-              <input id="topP" type="number" step="0.05" min="0" max="1" value="1" />
-              <div class="hint">0–1，核采样</div>
-            </div>
-          </div>
-
-          <div class="section-title">System Prompt <span class="muted" style="font-weight:400;">（默认系统提示词，留空不注入）</span></div>
-          <textarea id="systemPrompt" rows="4" placeholder="例如：你是一个乐于助人的 AI 助手。" maxlength="4000"></textarea>
-
-          <div class="section-title">能力与输出</div>
-          <div class="checkbox-row">
-            <label class="checkbox-item"><input id="capMultimodal" type="checkbox" /> <span>支持多模态（图像输入）</span></label>
-            <label class="checkbox-item"><input id="capStream" type="checkbox" /> <span>流式输出（取消勾选可强制一次性返回）</span></label>
-          </div>
-
-          <div class="section-title">高级采样参数</div>
-          <div class="row">
-            <div>
-              <label style="margin-top:0;">Top K</label>
-              <input id="topK" type="number" step="1" min="1" placeholder="留空" />
-              <div class="hint">部分模型支持（如 Gemini 等），其余可忽略</div>
-            </div>
-            <div>
-              <label style="margin-top:0;">Frequency Penalty</label>
-              <input id="frequencyPenalty" type="number" step="0.1" min="-2" max="2" value="0" />
-              <div class="hint">-2..2，降低重复</div>
-            </div>
-            <div>
-              <label style="margin-top:0;">Presence Penalty</label>
-              <input id="presencePenalty" type="number" step="0.1" min="-2" max="2" value="0" />
-              <div class="hint">-2..2，增加新鲜</div>
-            </div>
-          </div>
-
-          <div class="section-title">请求控制</div>
-          <div class="row">
-            <div>
-              <label style="margin-top:0;">超时（秒）</label>
-              <input id="timeout" type="number" step="1" min="1" max="600" placeholder="留空用服务端默认（90s）" />
-              <div class="hint">仅对网络错误 / 5xx 重试</div>
-            </div>
-            <div>
-              <label style="margin-top:0;">失败重试次数</label>
-              <input id="retries" type="number" step="1" min="0" max="5" placeholder="默认 2" />
-              <div class="hint">重试采用指数退避（1s→2s→4s）</div>
-            </div>
-          </div>
-
-          <div class="section-title">自定义请求头（可选）</div>
-          <textarea id="customHeaders" rows="3" placeholder='{"X-Trace-Id":"acaily"}' spellcheck="false"></textarea>
-          <div class="hint">JSON 对象，键名仅允许字母/数字/<code>-</code>；合并到每次外发请求（覆盖默认 content-type）</div>
-
-          <div class="section-title">专属机器人</div>
-          <div class="section-desc">配置你自己的助手名称与个性指令，让这位「机器人」只属于你。</div>
-
-          <label>助手名称（Bot Name）</label>
-          <input id="botName" placeholder="例如：小艾 / 助理 / 你的昵称（留空则用默认 Acaily）" maxlength="40" />
-
-          <div class="actions" style="margin-top:18px;">
-            <button class="btn" id="saveBtn">保存配置</button>
-            <button class="btn ghost" id="testBtn">连通性测试</button>
-          </div>
-          <div id="cfgStatus" class="status"></div>
-        </div>
-        <div class="card">
-          <div class="section-desc">本页「我的 Provider」仅你本人可访问（飞书登录后由服务端注入身份）；配置与对话均按你的 open_id 租户隔离，他人不可见。组织默认配置项可在管理员处「全员下发」。</div>
-        </div>
-
-        <div class="card" style="margin-top:18px;">
-          <div class="card-h">
-            <div>
-              <h2>组织共享 Provider 池</h2>
-              <div class="desc">管理员维护的 Provider/Model 组合，智能体和用户都可从此选择。「type / baseUrl / apiKey」由池统一管理，避免每个智能体重复配置。<br>普通用户只读；管理员可增删改。智能体表单的「Provider」下拉框会自动列出这里的条目。</div>
-            </div>
-            <button class="btn" id="provNewBtn">+ 新建 Provider</button>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>更新时间</th><th style="width:200px;">操作</th></tr></thead>
-              <tbody id="provBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
-            </table>
+          <div class="table-wrap" style="border:none;box-shadow:none;">
+            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
+            <tbody id="myProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
           </div>
         </div>
       </section>
@@ -338,7 +219,8 @@
           <div class="card-h"><h2>快捷入口</h2><span class="desc">跳转到常用页面</span></div>
           <ul class="quick-links">
             <li>· <a href="#" data-jump="chat">对话</a>：用你配置的 Provider 直接与 Acaily 对话（API Key 不会传给第三方）</li>
-            <li>· <a href="#" data-jump="provider">Provider</a>：维护个人的 Provider / 模型 / API Key，并查看组织共享 Provider 池</li>
+            <li>· <a href="#" data-jump="provider">我的 Provider</a>：维护个人的 Provider 列表（新建 / 编辑 / 停用 / 删除），管理员分发的副本也在此显示</li>
+            <li>· <a href="#" data-jump="provider-shared">组织共享 Provider（管理员）</a>：统一维护组织级 Provider 池，按需分发给指定成员</li>
             <li>· <a href="#" data-jump="push">组织默认配置（管理员）</a>：一键下发基础配置给所有成员</li>
             <li>· <a href="#" data-jump="users">成员管理（管理员）</a>：查看 / 编辑 / 删除成员配置</li>
             <li>· <a href="#" data-jump="automation">自动化任务（管理员）</a>：定时任务调度与飞书推送</li>
@@ -387,7 +269,7 @@
       <section class="view" id="view-permissions">
         <div class="card" style="padding:0;overflow:hidden;">
           <div class="card-h" style="padding:18px 18px 0;margin:0;">
-            <h2>权限配置</h2><span class="desc">为普通用户授权可访问的菜单。基础菜单（对话 / Provider / 关于）默认拥有且不可取消；管理员始终拥有全部菜单。</span>
+            <h2>权限配置</h2><span class="desc">为普通用户授权可访问的菜单。基础菜单（对话）默认拥有且不可取消；管理员可在下方勾选「自动化任务 / 智能体配置 / Provider」按需开放。管理员始终拥有全部菜单。</span>
           </div>
           <div id="permBase" class="perm-base"></div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
@@ -517,15 +399,43 @@
         </div>
       </section>
 
-      <!-- 视图：Provider 编辑（admin，框架内页面，非弹窗） -->
+      <!-- 视图：Provider 编辑（admin，组织共享 Provider 编辑/新建；复用 provFormHTML） -->
       <section class="view" id="view-provider-edit">
         <div class="card">
           <div class="card-h agent-edit-bar">
-            <button class="btn ghost sm" id="provEditBack" title="返回 Provider">← 返回</button>
+            <button class="btn ghost sm" id="provEditBack" title="返回 Provider 列表">← 返回</button>
             <h2 id="provEditTitle" style="flex:1;text-align:center;margin:0;">新建 Provider</h2>
             <button class="btn" id="provEditSave">保存</button>
           </div>
           <div id="provEditBody"></div>
+        </div>
+      </section>
+
+      <!-- 视图：组织共享 Provider（admin） -->
+      <section class="view" id="view-provider-shared">
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-h" style="padding:18px 18px 0;margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <h2>组织共享 Provider</h2>
+              <div class="desc">系统管理员统一维护的 Provider 池。通过「分发」可一键克隆到指定成员的「我的 Provider」列表（成员收到后可自由修改）；再次分发将用源配置覆盖目标成员的副本。智能体表单的「Provider」下拉框也会自动列出这里的条目。</div>
+            </div>
+            <button class="btn" id="orgProvNewBtn">+ 新建组织 Provider</button>
+          </div>
+          <div class="table-wrap" style="border:none;box-shadow:none;">
+            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:300px;">操作</th></tr></thead>
+            <tbody id="orgProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图：分发弹窗（admin） -->
+      <section class="view" id="view-provider-distribute">
+        <div class="card">
+          <div class="card-h agent-edit-bar">
+            <button class="btn ghost sm" id="distBack" title="返回">← 返回</button>
+            <h2 id="distTitle" style="flex:1;text-align:center;margin:0;">分发 Provider</h2>
+          </div>
+          <div id="distBody"></div>
         </div>
       </section>
 
@@ -755,15 +665,17 @@ async function api(method,path,body,opts){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','permissions']);
-const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','permissions']);
+const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-shared','provider-distribute','permissions']);
+const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-shared','provider-distribute','permissions']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
-  provider:['Provider','维护个人 Provider，并查看组织共享 Provider 池'],
+  provider:['我的 Provider','维护个人 Provider 列表：可新建 / 编辑 / 停用 / 删除；管理员分发的副本也在此显示'],
   about:['关于 Acaily','核心理念 / 使用方法'],
   dash:['概览','组织级概览与成员配置管理'],
   users:['成员管理','查看与编辑成员模型配置'],
   push:['组织默认配置','一键下发基础模型配置到全员'],
+  'provider-shared':['组织共享 Provider','系统管理员统一维护的 Provider 池；可分发到指定成员'],
+  'provider-distribute':['分发 Provider','选择要接收该 Provider 副本的成员'],
   audit:['审计日志','安全合规操作留痕'],
   automation:['自动化任务','定时调用关联智能体并把结果推送到飞书'],
   stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
@@ -900,30 +812,30 @@ async function loadConfig(){
   const res=await api('GET','/api/config/me');
   if(res.status===200&&res.data.config){
     const c=res.data.config;
+    // 旧版 Provider 表单（configName/sampling/botName/systemPrompt 等）已下线为列表视图，
+    // 但 /api/config/me 仍被 chat 用于 botName / 偏好默认值。这里只在存在旧 DOM 时回填。
+    const setIf=(id,v)=>{const el=$(id); if(el!=null) el.value=v;};
+    const setCheckIf=(id,v)=>{const el=$(id); if(el!=null) el.checked=v;};
+    setIf('configName', c.configName||'');
     setProviderSelectByCfg('provider', c.provider||'openai', c.baseUrl||'');
-    $('configName').value=c.configName||'';
-    $('baseUrl').value=c.baseUrl||'';
-    $('model').value=c.model||'';
-    $('models').value=Array.isArray(c.models)?c.models.join('\n'):'';
-    $('chatCompletionsPath').value=c.chatCompletionsPath||'';
-    $('temperature').value=(c.temperature??0.7);
-    $('maxTokens').value=(c.maxTokens??2048);
-    $('topP').value=(c.topP??1);
-    $('topK').value=(c.topK??'');
-    $('frequencyPenalty').value=(c.frequencyPenalty??0);
-    $('presencePenalty').value=(c.presencePenalty??0);
-    $('timeout').value=(c.timeout??'');
-    $('retries').value=(c.retries??'');
-    $('customHeaders').value=c.customHeaders?JSON.stringify(c.customHeaders):'';
-    $('botName').value=c.botName||'';
-    $('systemPrompt').value=c.systemPrompt||'';
-    $('capMultimodal').checked=c.multimodal===true;
-    $('capStream').checked=c.stream!==false;
+    setIf('baseUrl', c.baseUrl||'');
+    setIf('model', c.model||'');
+    setIf('models', Array.isArray(c.models)?c.models.join('\n'):'');
+    setIf('chatCompletionsPath', c.chatCompletionsPath||'');
+    setIf('temperature', (c.temperature??0.7));
+    setIf('maxTokens', (c.maxTokens??2048));
+    setIf('topP', (c.topP??1));
+    setIf('topK', (c.topK??''));
+    setIf('frequencyPenalty', (c.frequencyPenalty??0));
+    setIf('presencePenalty', (c.presencePenalty??0));
+    setIf('timeout', (c.timeout??''));
+    setIf('retries', (c.retries??''));
+    setIf('customHeaders', c.customHeaders?JSON.stringify(c.customHeaders):'');
+    setIf('botName', c.botName||'');
+    setIf('systemPrompt', c.systemPrompt||'');
+    setCheckIf('capMultimodal', c.multimodal===true);
+    setCheckIf('capStream', c.stream!==false);
     syncBotName();
-    if(res.data.inherited){
-      // 个人尚未配置、但管理员下发过组织默认 → 已回填默认值，提示补全 API Key
-      showCfg('📋 已应用组织默认配置（'+(c.provider||'-')+' / '+(c.model||'-')+'）。请补全 API Key 后点击「保存配置」即可启用；不保存也能直接对话（仍沿用组织默认）。', true);
-    }
   } else if(res.status===404){
     showCfg('', true); // 无个人配置、也无组织默认：保持空表单
   }
@@ -932,49 +844,56 @@ async function loadConfig(){
   updateKeyStatus();
 }
 function syncBotName(){
-  const n=$('botName').value.trim()||'Acaily';
-  BOT_NAME=n;
-  const head=document.querySelector('.chat-head .t');if(head)head.textContent=n;
-  const av=document.querySelector('.chat-head .avatar');if(av)av.textContent=n[0]||'A';
-  document.querySelectorAll('.msg.bot .role').forEach(r=>r.textContent=n);
+  // botName 现在从 /api/config/me 读，DOM 可能不存在；chat 头部用 BOT_NAME 全局变量显示
+  const el=$('botName');
+  const n = (el && el.value && el.value.trim()) || (typeof BOT_NAME === 'string' ? BOT_NAME : 'Acaily');
+  BOT_NAME=n || 'Acaily';
+  const head=document.querySelector('.chat-head .t');if(head)head.textContent=BOT_NAME;
+  const av=document.querySelector('.chat-head .avatar');if(av)av.textContent=BOT_NAME[0]||'A';
+  document.querySelectorAll('.msg.bot .role').forEach(r=>r.textContent=BOT_NAME);
 }
 function collect(includeKey){
+  // 旧表单已下线；这里仅在旧 DOM 仍存在时收集（用于保留的 saveBtn / testBtn 兼容路径）
   const c={
-    configName:$('configName').value.trim(),
-    provider:$('provider').value,
-    baseUrl:$('baseUrl').value.trim(),
-    model:$('model').value.trim(),
-    models:$('models').value.split('\n').map(s=>s.trim()).filter(Boolean),
-    chatCompletionsPath:$('chatCompletionsPath').value.trim(),
-    temperature:Number($('temperature').value),
-    maxTokens:Number($('maxTokens').value),
-    topP:Number($('topP').value),
-    topK:$('topK').value===''?undefined:Number($('topK').value),
-    frequencyPenalty:Number($('frequencyPenalty').value),
-    presencePenalty:Number($('presencePenalty').value),
-    timeout:$('timeout').value===''?undefined:Number($('timeout').value),
-    retries:$('retries').value===''?undefined:Number($('retries').value),
-    botName:$('botName').value.trim(),
-    systemPrompt:$('systemPrompt').value,
-    stream:$('capStream').checked,
-    multimodal:$('capMultimodal').checked,
+    configName:$('configName')?.value?.trim()||'',
+    provider:$('provider')?.value||'',
+    baseUrl:$('baseUrl')?.value?.trim()||'',
+    model:$('model')?.value?.trim()||'',
+    models:$('models')?($('models').value.split('\n').map(s=>s.trim()).filter(Boolean)):[],
+    chatCompletionsPath:$('chatCompletionsPath')?.value?.trim()||'',
+    temperature:Number($('temperature')?.value),
+    maxTokens:Number($('maxTokens')?.value),
+    topP:Number($('topP')?.value),
+    topK:$('topK')?.value===''||!$('topK')?undefined:Number($('topK').value),
+    frequencyPenalty:Number($('frequencyPenalty')?.value),
+    presencePenalty:Number($('presencePenalty')?.value),
+    timeout:$('timeout')?.value===''||!$('timeout')?undefined:Number($('timeout').value),
+    retries:$('retries')?.value===''||!$('retries')?undefined:Number($('retries').value),
+    botName:$('botName')?.value?.trim()||'',
+    systemPrompt:$('systemPrompt')?.value||'',
+    stream:$('capStream')?$('capStream').checked:true,
+    multimodal:$('capMultimodal')?$('capMultimodal').checked:false,
   };
-  const ch=$('customHeaders').value.trim();
+  const chEl=$('customHeaders');
+  const ch=chEl?chEl.value.trim():'';
   if(ch){try{c.customHeaders=JSON.parse(ch);}catch(e){throw new Error('自定义请求头不是合法 JSON: '+e.message);}}
-  if(includeKey&&$('apiKey').value&&$('apiKey').dataset.masked!=='1')c.apiKey=$('apiKey').value;
+  if(includeKey && $('apiKey') && $('apiKey').value && $('apiKey').dataset.masked!=='1') c.apiKey=$('apiKey').value;
   return c;
 }
-$('saveBtn').onclick=async()=>{
-  let c;try{c=collect(true);}catch(err){return showCfg('❌ '+err.message,false);}
-  if(!c.provider||!c.baseUrl)return showCfg('请至少填写 Provider 与 Base URL',false);
-  if(!c.model&&c.models&&c.models.length)c.model=c.models[0];
-  if(!c.model)return showCfg('请填写「默认模型」或在「模型列表」里至少填一项',false);
-  if(!c.models||!c.models.length)c.models=[c.model];
-  else if(!c.models.includes(c.model))c.models=[c.model,...c.models];
-  const {status,data}=await api('POST','/api/config/me',c);
-  if(status===200){showCfg('✅ 配置已保存（API Key 已加密入库）',true);syncBotName();}
-  else showCfg('❌ 保存失败：'+(data.error||status),false);
-};
+const saveBtnEl=$('saveBtn');
+if(saveBtnEl){
+  saveBtnEl.onclick=async()=>{
+    let c;try{c=collect(true);}catch(err){return showCfg('❌ '+err.message,false);}
+    if(!c.provider||!c.baseUrl)return showCfg('请至少填写 Provider 与 Base URL',false);
+    if(!c.model&&c.models&&c.models.length)c.model=c.models[0];
+    if(!c.model)return showCfg('请填写「默认模型」或在「模型列表」里至少填一项',false);
+    if(!c.models||!c.models.length)c.models=[c.model];
+    else if(!c.models.includes(c.model))c.models=[c.model,...c.models];
+    const {status,data}=await api('POST','/api/config/me',c);
+    if(status===200){showCfg('✅ 配置已保存（API Key 已加密入库）',true);syncBotName();}
+    else showCfg('❌ 保存失败：'+(data.error||status),false);
+  };
+}
 const PROVIDER_DEFAULTS={
   openai:'https://api.openai.com/v1',
   anthropic:'https://api.anthropic.com/v1',
@@ -982,56 +901,67 @@ const PROVIDER_DEFAULTS={
   custom:'https://your-gateway/v1',
   acplugin:'https://yuanbao.tencent.com/api',
 };
-$('provider').addEventListener('change',()=>{
-  const p=$('provider').value;
-  $('baseUrl').placeholder=PROVIDER_DEFAULTS[p]||'https://api.openai.com/v1';
-  if(!$('baseUrl').value)$('baseUrl').value=PROVIDER_DEFAULTS[p]||'';
-});
-$('keyToggle').onclick=()=>{
-  const inp=$('apiKey');
-  const btn=$('keyToggle');
-  const showing = inp.type==='password'; // 即将切到明文
-  if(showing){
-    // 切换到「明文」视图
-    if(!inp.value && HAS_API_KEY){
-      // 没有输入内容但服务端有 Key：展示占位掩码，标 data-masked 以避免被 collect 当成新密钥覆盖
-      inp.value='••••••••••••';
-      inp.dataset.masked='1';
+const providerSelEl=$('provider');
+if(providerSelEl){
+  providerSelEl.addEventListener('change',()=>{
+    const p=providerSelEl.value;
+    const baseEl=$('baseUrl');
+    if(baseEl){
+      baseEl.placeholder=PROVIDER_DEFAULTS[p]||'https://api.openai.com/v1';
+      if(!baseEl.value) baseEl.value=PROVIDER_DEFAULTS[p]||'';
     }
-    inp.type='text'; btn.textContent='隐藏';
-  }else{
-    // 切回「密文」：若是占位掩码则一并清空，恢复 placeholder
-    if(inp.dataset.masked==='1'){ inp.value=''; inp.dataset.masked='0'; }
-    inp.type='password'; btn.textContent='显示';
-  }
-  updateKeyStatus();
-};
-$('apiKey').addEventListener('input',()=>{
-  // 用户开始输入：清除占位掩码标记，避免误传到后端
-  if($('apiKey').dataset.masked==='1'){
-    $('apiKey').value='';
-    $('apiKey').dataset.masked='0';
+  });
+}
+const keyToggleEl=$('keyToggle');
+if(keyToggleEl){
+  keyToggleEl.onclick=()=>{
+    const inp=$('apiKey'); const btn=keyToggleEl;
+    const showing = inp.type==='password';
+    if(showing){
+      if(!inp.value && HAS_API_KEY){
+        inp.value='••••••••••••';
+        inp.dataset.masked='1';
+      }
+      inp.type='text'; btn.textContent='隐藏';
+    }else{
+      if(inp.dataset.masked==='1'){ inp.value=''; inp.dataset.masked='0'; }
+      inp.type='password'; btn.textContent='显示';
+    }
     updateKeyStatus();
-  }
-});
+  };
+}
+const apiKeyEl=$('apiKey');
+if(apiKeyEl){
+  apiKeyEl.addEventListener('input',()=>{
+    if(apiKeyEl.dataset.masked==='1'){
+      apiKeyEl.value='';
+      apiKeyEl.dataset.masked='0';
+      updateKeyStatus();
+    }
+  });
+}
 function updateKeyStatus(){
   const s=$('keyStatus'); if(!s) return;
   const inp=$('apiKey');
+  if(!inp){ s.textContent=''; return; }
   if(!HAS_API_KEY){ s.textContent='⚠️ 尚未配置 API Key（保存时若留空则不会写入）'; s.style.color='var(--warn,#c08a00)'; return; }
   if(inp.dataset.masked==='1'){ s.textContent='🔒 已显示占位掩码（不会覆盖已存密钥；如需更换请直接覆盖输入）'; s.style.color='var(--muted)'; return; }
   if(inp.value){ s.textContent='✏️ 当前输入将作为新 Key 保存（覆盖旧值）'; s.style.color='var(--muted)'; return; }
   s.textContent='🔒 已保存 API Key，明文不返回前端；点击「显示」可查看占位掩码';
   s.style.color='var(--muted)';
 }
-$('testBtn').onclick=async()=>{
-  let c;try{c=collect(true);}catch(err){return showCfg('❌ '+err.message,false);}
-  if(!c.provider||!c.baseUrl||!c.model)return showCfg('请先填写 Provider / Base URL / Model',false);
-  showCfg('⏳ 正在测试连通性…',true);
-  const {status,data}=await api('POST','/config/test',{provider:c.provider,baseUrl:c.baseUrl,apiKey:c.apiKey,model:c.model,chatCompletionsPath:c.chatCompletionsPath});
-  if(data&&data.ok)showCfg('✅ 连通性正常：'+(data.provider||'')+' / '+(data.model||''),true);
-  else showCfg('❌ 连通失败：'+(data&&data.error||status)+(data&&data.attemptedUrl?' ｜ 请求地址：'+data.attemptedUrl:''),false);
-};
-function showCfg(msg,ok){const s=$('cfgStatus');s.textContent=msg;s.className='status '+(ok?'ok':'err');}
+const testBtnEl=$('testBtn');
+if(testBtnEl){
+  testBtnEl.onclick=async()=>{
+    let c;try{c=collect(true);}catch(err){return showCfg('❌ '+err.message,false);}
+    if(!c.provider||!c.baseUrl||!c.model)return showCfg('请先填写 Provider / Base URL / Model',false);
+    showCfg('⏳ 正在测试连通性…',true);
+    const {status,data}=await api('POST','/config/test',{provider:c.provider,baseUrl:c.baseUrl,apiKey:c.apiKey,model:c.model,chatCompletionsPath:c.chatCompletionsPath});
+    if(data&&data.ok)showCfg('✅ 连通性正常：'+(data.provider||'')+' / '+(data.model||''),true);
+    else showCfg('❌ 连通失败：'+(data&&data.error||status)+(data&&data.attemptedUrl?' ｜ 请求地址：'+data.attemptedUrl:''),false);
+  };
+}
+function showCfg(msg,ok){const s=$('cfgStatus'); if(!s) return; s.textContent=msg;s.className='status '+(ok?'ok':'err');}
 
 // 网页对话
 const chatBody=$('chatBody');
@@ -1770,38 +1700,117 @@ async function startAgentChat(agentId){
   toast('已开启新对话');
 }
 
-// ====================== Provider 池管理（admin） ======================
+// ====================== Provider 池管理 ======================
+// 「我的 Provider」（view-provider）：列表 + 新建/编辑/停用/删除。
+// 「组织共享 Provider」（view-provider-shared，admin）：同上 + 分发/再次分发。
+// 两页共用同一份 provFormHTML 编辑表单与 provCache；通过全局 PROV_MODE 切换提交端点。
 let currentProvCache={};
 let currentProvCacheList=[]; // 复用下拉顺序敏感
-let currentMyCfg=null;       // /api/config/me
-let PROV_READONLY=false; // 普通用户（被授权但非管理员）查看 Provider 池时为只读，不显示「新建」
+let currentMyCfg=null;       // /api/config/me（兼容旧逻辑：仅「复用来源」下拉里展示「我的个人配置」用）
+let PROV_MODE='my';          // 'my' = 我的 Provider；'org' = 组织共享 Provider（决定提交/列表 API）
+let provEditingScope=null;   // {kind:'my'|'org', returnView:'provider'|'provider-shared'}
+
+function rowStatusTag(p){
+  if(p.disabled) return '<span class="tag warn">已停用</span>';
+  return '<span class="tag ok">启用中</span>';
+}
+function rowOriginTag(p){
+  if(!p.parentId) return ''; // 自建条目
+  return '<span class="tag neutral" title="此条目由管理员从「组织共享 Provider」分发下来，可自由修改">来自组织</span>';
+}
+
 async function loadProviders(){
-  const isAdmin=document.body.classList.contains('is-admin');
-  const body=$('provBody'); if(!body)return;
-  PROV_READONLY=!isAdmin;
-  // 拉取个人配置（best-effort，先于列表以便「复用我的配置」下拉可用）
+  // 兼容入口：根据当前所在 view 决定拉哪个端点
+  if(PROV_MODE==='org') return loadOrgProviders();
+  return loadMyProviders();
+}
+
+async function loadMyProviders(){
+  PROV_MODE='my';
+  const body=$('myProvBody'); if(!body)return;
+  // 复用下拉依旧可读取 /api/config/me（best-effort）
   try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
-  // 普通用户走 /api/providers（不含 apiKey 明文）；管理员走 /api/admin/providers
-  const {status,data}=await api('GET', isAdmin?'/api/admin/providers':'/api/providers');
-  if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
+  const {status,data}=await api('GET','/api/my/providers');
+  if(status!==200){body.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>';return;}
   const list=data.providers||[];
   currentProvCache={}; list.forEach(p=>currentProvCache[p.id]=p);
   currentProvCacheList=list;
-  const nb=$('provNewBtn'); if(nb) nb.style.display=isAdmin?'':'none';
-  if(!list.length){body.innerHTML=`<tr><td colspan="8" class="empty">${isAdmin?'暂无 Provider，点击右上角「新建 Provider」':'暂无 Provider'}</td></tr>`;return;}
+  if(!list.length){body.innerHTML='<tr><td colspan="9" class="empty">暂无 Provider，点击右上角「+ 新建 Provider」创建属于你的 Provider；管理员分发的副本也会出现在这里。</td></tr>';return;}
   body.innerHTML=list.map(p=>`<tr>
-    <td style="text-align:center;">${p.hasKey?'🔑':'🔓'}</td>
+    <td style="text-align:center;font-size:20px;">${esc(p.emoji||'🧩')}</td>
+    <td><b>${esc(p.name)}</b> ${rowOriginTag(p)}</td>
+    <td><span class="tag">${esc(p.type)}</span></td>
+    <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
+    <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc((p.baseUrl||'').slice(0,40))}</td>
+    <td>${p.hasKey?'<span class="tag ok">已配置</span>':'<span class="tag warn">未配置</span>'}</td>
+    <td>${rowStatusTag(p)}</td>
+    <td class="muted">${esc(fmtLocal(p.updatedAt,false).slice(0,10))}</td>
+    <td class="ops">
+      <button class="btn ghost sm" data-pedit="${esc(p.id)}">编辑</button>
+      <button class="btn ghost sm" data-ptoggle="${esc(p.id)}">${p.disabled?'启用':'停用'}</button>
+      <button class="btn ghost sm danger" data-pdel="${esc(p.id)}">删除</button>
+    </td>
+  </tr>`).join('');
+  // 绑定行内事件（每次重新渲染都要重绑）
+  body.onclick=(e)=>{
+    const t=e.target.closest('button'); if(!t)return;
+    if(t.dataset.pedit) return openProviderEdit(t.dataset.pedit, 'my');
+    if(t.dataset.pdel) return confirmDelProvider(t.dataset.pdel, 'my');
+    if(t.dataset.ptoggle) return toggleProvider(t.dataset.ptoggle, 'my');
+  };
+}
+
+async function loadOrgProviders(){
+  PROV_MODE='org';
+  const body=$('orgProvBody'); if(!body)return;
+  // 复用下拉依旧可读 /api/config/me，让 admin 在新建条目时也能复用自身 /api/config/me
+  try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
+  const {status,data}=await api('GET','/api/admin/providers');
+  if(status!==200){body.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>';return;}
+  const list=data.providers||[];
+  currentProvCache={}; list.forEach(p=>currentProvCache[p.id]=p);
+  currentProvCacheList=list;
+  if(!list.length){body.innerHTML='<tr><td colspan="9" class="empty">暂无组织共享 Provider，点击右上角「+ 新建组织 Provider」创建第一条；后续可分发给指定成员。</td></tr>';return;}
+  body.innerHTML=list.map(p=>`<tr>
+    <td style="text-align:center;font-size:20px;">${esc(p.emoji||'🧩')}</td>
     <td><b>${esc(p.name)}</b></td>
     <td><span class="tag">${esc(p.type)}</span></td>
     <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
     <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc((p.baseUrl||'').slice(0,40))}</td>
     <td>${p.hasKey?'<span class="tag ok">已配置</span>':'<span class="tag warn">未配置</span>'}</td>
+    <td>${rowStatusTag(p)}</td>
     <td class="muted">${esc(fmtLocal(p.updatedAt,false).slice(0,10))}</td>
-    <td class="ops">${isAdmin?`
+    <td class="ops">
       <button class="btn ghost sm" data-pedit="${esc(p.id)}">编辑</button>
+      <button class="btn ghost sm" data-ptoggle="${esc(p.id)}">${p.disabled?'启用':'停用'}</button>
+      <button class="btn ghost sm" data-pdistribute="${esc(p.id)}">分发</button>
       <button class="btn ghost sm danger" data-pdel="${esc(p.id)}">删除</button>
-    `:'<span class="muted">只读</span>'}</td>
+    </td>
   </tr>`).join('');
+  body.onclick=(e)=>{
+    const t=e.target.closest('button'); if(!t)return;
+    if(t.dataset.pedit) return openProviderEdit(t.dataset.pedit, 'org');
+    if(t.dataset.pdel) return confirmDelProvider(t.dataset.pdel, 'org');
+    if(t.dataset.ptoggle) return toggleProvider(t.dataset.ptoggle, 'org');
+    if(t.dataset.pdistribute) return openDistributeView(t.dataset.pdistribute);
+  };
+}
+
+async function toggleProvider(id, scope){
+  scope = scope || PROV_MODE;
+  const url = scope==='org' ? `/api/admin/providers/${encodeURIComponent(id)}/toggle` : `/api/my/providers/${encodeURIComponent(id)}/toggle`;
+  const r=await api('POST', url);
+  if(r.status===200){ toast('已切换状态'); (scope==='org'?loadOrgProviders:loadMyProviders)(); }
+  else toast('切换失败：'+(r.data&&r.data.error||r.status));
+}
+
+async function confirmDelProvider(id, scope){
+  scope = scope || PROV_MODE;
+  if(!confirm('确定删除该 Provider？若该条目被某些智能体引用，引用方会回退到自有配置或默认。')) return;
+  const url = scope==='org' ? `/api/admin/providers/${encodeURIComponent(id)}` : `/api/my/providers/${encodeURIComponent(id)}`;
+  const r=await api('DELETE', url);
+  if(r.status===200){ toast('已删除'); (scope==='org'?loadOrgProviders:loadMyProviders)(); }
+  else toast('删除失败：'+(r.data&&r.data.error||r.status));
 }
 function provFormHTML(p){
   p=p||{};
@@ -1847,10 +1856,12 @@ function provFormHTML(p){
   </div>`;
 }
 let provEditingId=null;
-function openProviderEdit(id){
+function openProviderEdit(id, scope){
+  scope = scope || PROV_MODE;
   provEditingId=id||null;
+  provEditingScope = { kind: scope, returnView: scope==='org' ? 'provider-shared' : 'provider' };
   const p=id?currentProvCache[id]:null;
-  $('provEditTitle').textContent=id?'编辑 Provider':'新建 Provider';
+  $('provEditTitle').textContent=id?(scope==='org'?'编辑组织共享 Provider':'编辑我的 Provider'):(scope==='org'?'新建组织共享 Provider':'新建我的 Provider');
   $('provEditBody').innerHTML=provFormHTML(p);
   // 「复用来源」联动：选中后自动填类型/BaseURL/模型
   const reuseSel=$('pReuse');
@@ -1940,7 +1951,12 @@ function provApiKeyVal(){
   if(el.dataset.masked==='1')return null;
   return el.value||null;
 }
-function closeProviderEdit(){switchView('provider');provEditingId=null;}
+function closeProviderEdit(){
+  const back = provEditingScope && provEditingScope.returnView ? provEditingScope.returnView : 'provider';
+  switchView(back);
+  provEditingId=null;
+  provEditingScope=null;
+}
 async function saveProviderEdit(){
   const payload={
     name:$('pName').value.trim()||'未命名 Provider',
@@ -1950,25 +1966,135 @@ async function saveProviderEdit(){
     models:$('pModels').value.split('\n').map(s=>s.trim()).filter(Boolean),
     apiKey:provApiKeyVal(),
   };
+  const scope = provEditingScope ? provEditingScope.kind : PROV_MODE;
+  const baseUrl = scope==='org' ? '/api/admin/providers' : '/api/my/providers';
   const sb=$('provEditSave');sb.disabled=true;sb.textContent='保存中…';
-  const {status}=await api(provEditingId?'PUT':'POST',provEditingId?`/api/admin/providers/${encodeURIComponent(provEditingId)}`:'/api/admin/providers',payload);
+  const url = provEditingId ? `${baseUrl}/${encodeURIComponent(provEditingId)}` : baseUrl;
+  const method = provEditingId ? 'PUT' : 'POST';
+  const {status,data}=await api(method, url, payload);
   sb.disabled=false;sb.textContent='保存';
-  if(status===200){toast('已保存');switchView('provider');await loadProviders();}
-  else toast('保存失败（'+status+'）');
+  if(status===200){toast('已保存');switchView(provEditingScope.returnView);provEditingId=null;provEditingScope=null;await (scope==='org'?loadOrgProviders:loadMyProviders)();}
+  else toast('保存失败：'+(data&&data.error||status));
 }
-$('provNewBtn').onclick=()=>openProviderEdit(null);
-$('provEditBack').onclick=()=>switchView('provider');
+$('myProvNewBtn').onclick=()=>openProviderEdit(null, 'my');
+$('orgProvNewBtn').onclick=()=>openProviderEdit(null, 'org');
+$('provEditBack').onclick=closeProviderEdit;
 $('provEditSave').onclick=saveProviderEdit;
-$('provBody').addEventListener('click',e=>{
-  const t=e.target.closest('button');if(!t)return;
-  if(t.dataset.pedit){openProviderEdit(t.dataset.pedit);}
-  else if(t.dataset.pdel){
-    const id=t.dataset.pdel;
-    if(confirm('确定删除该 Provider？已选此池的智能体将回退到自有配置。')){
-      api('DELETE',`/api/admin/providers/${encodeURIComponent(id)}`).then(r=>{if(r.status===200){toast('已删除');loadProviders();}else toast('删除失败');});
-    }
+
+// ====================== 组织共享 Provider：分发 ======================
+let currentDistSourceId=null;
+let distMemberCache=[];     // [{openId, displayName, ...}]
+let distAlreadyOpenIds=new Set(); // 已经持有副本的成员，用于「再次分发」提示
+
+async function openDistributeView(sourceId){
+  currentDistSourceId=sourceId;
+  const src=currentProvCache[sourceId];
+  if(!src){ toast('找不到源 Provider'); return; }
+  $('distTitle').textContent=`分发 Provider：${src.name}`;
+  $('distBody').innerHTML='<div class="muted">正在加载成员列表…</div>';
+  switchView('provider-distribute');
+  // 拉取成员清单（管理端用现有 /api/admin/users）
+  const [uRes, dRes] = await Promise.all([
+    api('GET','/api/admin/users'),
+    api('GET', `/api/admin/providers/${encodeURIComponent(sourceId)}/distributions`),
+  ]);
+  if(uRes.status!==200){ $('distBody').innerHTML='<div class="muted err">加载成员失败</div>'; return; }
+  const users=uRes.data.users||[];
+  distMemberCache=users;
+  distAlreadyOpenIds = new Set(((dRes.status===200&&dRes.data.distributions)||[]).map(d=>d.openId));
+  renderDistributeBody(src);
+}
+
+function renderDistributeBody(src){
+  const filterText=(document.getElementById('distFilter')||{}).value||'';
+  const ft=filterText.toLowerCase();
+  const sorted=[...distMemberCache].sort((a,b)=>(a.displayName||a.openId).localeCompare(b.displayName||b.openId));
+  const filtered = ft ? sorted.filter(u => (u.displayName||'').toLowerCase().includes(ft) || (u.openId||'').toLowerCase().includes(ft)) : sorted;
+  const body = $('distBody');
+  body.innerHTML = `
+    <div class="row" style="align-items:flex-end;gap:10px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <label>源 Provider</label>
+        <div><b>${esc(src.emoji||'🧩')} ${esc(src.name)}</b> · ${esc(src.type)} · ${esc((src.models||[]).slice(0,2).join(', '))}${src.models&&src.models.length>2?' …':''}</div>
+        <div class="muted small">分发后，每个目标成员的「我的 Provider」列表里会增加一份副本（标「来自组织」），成员可自由修改。</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px;align-items:flex-end;gap:10px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;"><label>筛选成员</label><input id="distFilter" placeholder="按姓名 / open_id 过滤" /></div>
+      <div class="ops">
+        <button class="btn ghost sm" id="distSelectAll">全选当前筛选</button>
+        <button class="btn ghost sm" id="distSelectNone">清空选择</button>
+        <button class="btn ghost sm" id="distSelectNew">仅选未持有</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:10px;max-height:420px;overflow:auto;">
+      <table><thead><tr><th style="width:42px;"><input type="checkbox" id="distCheckAll"/></th><th>成员</th><th>open_id</th><th>状态</th></tr></thead>
+        <tbody id="distBodyRows"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:14px;align-items:center;gap:10px;">
+      <button class="btn" id="distSubmit">确认分发到选中成员</button>
+      <span id="distSelectedCount" class="muted small">已选 0 人</span>
+      <span id="distStatus" class="muted small" style="margin-left:10px;"></span>
+    </div>
+  `;
+  const tb = $('distBodyRows');
+  function drawRows(){
+    tb.innerHTML = filtered.map(u=>{
+      const checked = distSelectedOpenIds.has(u.openId) ? 'checked' : '';
+      const already = distAlreadyOpenIds.has(u.openId);
+      const stateTag = already ? '<span class="tag neutral">已有副本</span>' : '<span class="tag">未持有</span>';
+      return `<tr>
+        <td style="text-align:center;"><input type="checkbox" class="dist-check" value="${esc(u.openId)}" ${checked}/></td>
+        <td><b>${esc(u.displayName||'(未命名)')}</b></td>
+        <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc(u.openId)}</td>
+        <td>${stateTag}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="4" class="empty">无匹配成员</td></tr>`;
+    // 行内勾选变化时同步 distSelectedOpenIds
+    tb.querySelectorAll('.dist-check').forEach(cb=>{
+      cb.onchange=()=>{
+        if(cb.checked) distSelectedOpenIds.add(cb.value);
+        else distSelectedOpenIds.delete(cb.value);
+        $('distSelectedCount').textContent=`已选 ${distSelectedOpenIds.size} 人`;
+      };
+    });
   }
-});
+  drawRows();
+  // 绑定控件
+  $('distFilter').oninput=()=>renderDistributeBody(currentProvCache[currentDistSourceId]);
+  $('distSelectAll').onclick=()=>{ filtered.forEach(u=>distSelectedOpenIds.add(u.openId)); drawRows(); $('distSelectedCount').textContent=`已选 ${distSelectedOpenIds.size} 人`; };
+  $('distSelectNone').onclick=()=>{ distSelectedOpenIds.clear(); drawRows(); $('distSelectedCount').textContent=`已选 0 人`; };
+  $('distSelectNew').onclick=()=>{ filtered.forEach(u=>{ if(!distAlreadyOpenIds.has(u.openId)) distSelectedOpenIds.add(u.openId); }); drawRows(); $('distSelectedCount').textContent=`已选 ${distSelectedOpenIds.size} 人`; };
+  $('distCheckAll').onchange=(e)=>{ if(e.target.checked) $('distSelectAll').click(); else $('distSelectNone').click(); };
+  $('distSubmit').onclick=submitDistribute;
+  $('distSelectedCount').textContent=`已选 ${distSelectedOpenIds.size} 人`;
+}
+
+let distSelectedOpenIds=new Set();
+async function submitDistribute(){
+  if(!currentDistSourceId) return;
+  const ids=[...distSelectedOpenIds];
+  if(!ids.length){ toast('请至少选择一位成员'); return; }
+  const sb=$('distSubmit'); sb.disabled=true; sb.textContent='分发中…';
+  const st=$('distStatus'); st.textContent='';
+  const r=await api('POST', `/api/admin/providers/${encodeURIComponent(currentDistSourceId)}/distribute`, { openIds: ids });
+  sb.disabled=false; sb.textContent='确认分发到选中成员';
+  if(r.status===200){
+    const ok = (r.data.distributed||[]).length;
+    const skip = (r.data.skipped||[]).length;
+    st.textContent=`✅ 已分发 ${ok} 人${skip?` · 跳过 ${skip} 人`:''}`;
+    toast(`已分发 ${ok} 人`);
+    // 重新拉已分发名单（影响下次进入视图时的「再次分发」提示）
+    const dRes = await api('GET', `/api/admin/providers/${encodeURIComponent(currentDistSourceId)}/distributions`);
+    if(dRes.status===200) distAlreadyOpenIds = new Set((dRes.data.distributions||[]).map(d=>d.openId));
+    renderDistributeBody(currentProvCache[currentDistSourceId]);
+  } else {
+    st.textContent='❌ '+(r.data&&r.data.error||r.status);
+    toast('分发失败：'+(r.data&&r.data.error||r.status));
+  }
+}
+$('distBack').onclick=()=>{ distSelectedOpenIds.clear(); switchView('provider-shared'); };
 
 // ====================== Admin：概览/成员/审计/自动化/统计 ======================
 let ADMINS=[];let CURRENT=null;
@@ -3122,11 +3248,12 @@ $('statsRange').onchange=()=>loadStats();
     await loadAutomation();
     await loadStats();
     await loadAgents();
-    await loadProviders();
+    await loadMyProviders();
+    await loadOrgProviders();
     await loadPermissions();
   }else{
     // 普通用户：仅当被授权时才加载对应页面数据（Provider 默认不授权，避免暴露模型/密钥配置）
-    if((CURRENT_MENUS||[]).includes('provider')) await loadProviders();
+    if((CURRENT_MENUS||[]).includes('provider')) await loadMyProviders();
     if((CURRENT_MENUS||[]).includes('automation')) await loadAutomation();
     if((CURRENT_MENUS||[]).includes('agents')) await loadAgents();
   }

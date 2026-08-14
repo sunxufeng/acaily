@@ -44,7 +44,8 @@ import { initRunner } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
 import { getPermissions, setPermissions, resolveMenus, listPermissions, GRANTABLE_MENUS, BASE_MENUS, BASE_DISPLAY_MENUS } from '../config/permissionStore.js';
 import { createFeishuApp, enableBotCapability, validateFeishuCredentials } from '../feishu/appMgmt.js';
-import { listProviders, getProvider, saveProvider, deleteProvider, getProviderApiKey } from '../config/providerPoolStore.js';
+import { listProviders, listOrgProviders, listUserProviders, getProvider, saveProvider, deleteProvider, setProviderDisabled, distributeProvider, listProviderDistributions, getProviderApiKey } from '../config/providerPoolStore.js';
+import { listDirectory } from '../config/userDirectoryStore.js';
 import { searchContacts, resolveContact, listAllContacts } from '../feishu/contacts.js';
 import { listRecipients, addRecipient, removeRecipient } from '../config/recipientStore.js';
 
@@ -786,13 +787,16 @@ const server = createServer(async (req, res) => {
       const m = pathname.match(/^\/api\/admin\/providers\/([^/]+)$/);
       if (m) {
         const id = decodeURIComponent(m[1]);
+        const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+        if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
+        if (raw.owner !== 'admin') return sendJson(res, 400, { error: '管理端只能操作组织共享 Provider' });
         if (method === 'GET') {
           const p = getProvider(id);
           return p ? sendJson(res, 200, { provider: p }) : sendJson(res, 404, { error: 'Provider 不存在' });
         }
         if (method === 'PUT') {
           const body = await readBody(req);
-          const p = saveProvider(body, id);
+          const p = saveProvider(body, id, { owner: 'admin' });
           await record({ actor: admin.openId, action: 'provider.update', target: id, meta: { name: p.name, type: p.type } });
           return sendJson(res, 200, { provider: p });
         }
@@ -803,15 +807,113 @@ const server = createServer(async (req, res) => {
         }
         return sendJson(res, 405, { error: '方法不允许' });
       }
-      if (method === 'GET') return sendJson(res, 200, { providers: listProviders() });
+      if (method === 'GET') return sendJson(res, 200, { providers: listOrgProviders() });
       if (method === 'POST') {
         const body = await readBody(req);
         if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
-        const p = saveProvider(body);
+        const p = saveProvider(body, null, { owner: 'admin' });
         await record({ actor: admin.openId, action: 'provider.create', target: p.id, meta: { name: p.name, type: p.type } });
         return sendJson(res, 200, { provider: p });
       }
       return sendJson(res, 405, { error: '方法不允许' });
+    }
+
+    // ---- 我的 Provider（个人空间 CRUD + 停用） ----
+    // 普通用户视角：本人可见、可 CRUD、可停用自己空间内的所有 Provider。
+    // 列表包含：本人自建 + 管理员分发下来的副本（owner=本人，parentId 指源）。
+    if (pathname === '/api/my/providers' && method === 'GET') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      return sendJson(res, 200, { providers: listUserProviders(s.openId) });
+    }
+    if (pathname === '/api/my/providers' && method === 'POST') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      try {
+        const body = await readBody(req);
+        if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
+        const p = saveProvider(body, null, { owner: s.openId });
+        await record({ actor: s.openId, action: 'my.provider.create', target: p.id, meta: { name: p.name, type: p.type } });
+        return sendJson(res, 200, { provider: p });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
+    // 我的 Provider 单条：GET / PUT / DELETE / toggle 停用
+    const myProvMatch = pathname.match(/^\/api\/my\/providers\/([^/]+)$/);
+    if (myProvMatch) {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const id = decodeURIComponent(myProvMatch[1]);
+      const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+      if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
+      if (raw.owner !== s.openId) return sendJson(res, 403, { error: '无权操作该 Provider' });
+      if (method === 'GET') return sendJson(res, 200, { provider: getProvider(id) });
+      if (method === 'PUT') {
+        try {
+          const body = await readBody(req);
+          const p = saveProvider(body, id, { owner: s.openId });
+          await record({ actor: s.openId, action: 'my.provider.update', target: id, meta: { name: p.name, type: p.type } });
+          return sendJson(res, 200, { provider: p });
+        } catch (e) {
+          return sendJson(res, 400, { error: e.message });
+        }
+      }
+      if (method === 'DELETE') {
+        const ok = deleteProvider(id);
+        await record({ actor: s.openId, action: 'my.provider.delete', target: id });
+        return sendJson(res, ok ? 200 : 404, { ok });
+      }
+      return sendJson(res, 405, { error: '方法不允许' });
+    }
+    // 停用/启用切换：POST /api/my/providers/:id/toggle
+    const myProvToggle = pathname.match(/^\/api\/my\/providers\/([^/]+)\/toggle$/);
+    if (myProvToggle) {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const id = decodeURIComponent(myProvToggle[1]);
+      const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+      if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
+      if (raw.owner !== s.openId) return sendJson(res, 403, { error: '无权操作该 Provider' });
+      const next = !raw.disabled;
+      const p = setProviderDisabled(id, next);
+      await record({ actor: s.openId, action: 'my.provider.toggle', target: id, meta: { disabled: next } });
+      return sendJson(res, 200, { provider: p });
+    }
+
+    // ---- 组织共享 Provider 分发（admin） ----
+    // POST /api/admin/providers/:id/distribute  body={ openIds: [openId,...] }
+    const distMatch = pathname.match(/^\/api\/admin\/providers\/([^/]+)\/distribute$/);
+    if (distMatch) {
+      const admin = requireAdminApi(req, res);
+      if (!admin) return;
+      const id = decodeURIComponent(distMatch[1]);
+      const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+      if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
+      if (raw.owner !== 'admin') return sendJson(res, 400, { error: '只能分发组织共享 Provider' });
+      try {
+        const body = await readBody(req);
+        const openIds = Array.isArray(body && body.openIds) ? body.openIds : [];
+        if (!openIds.length) return sendJson(res, 400, { error: 'openIds 不能为空' });
+        const result = distributeProvider(id, openIds);
+        await record({
+          actor: admin.openId,
+          action: 'admin.provider.distribute',
+          target: id,
+          meta: { distributed: result.distributed.length, skipped: result.skipped.length },
+        });
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
+    // GET /api/admin/providers/:id/distributions  → 已分发对象名单（用于「再次分发」前查重）
+    const distListMatch = pathname.match(/^\/api\/admin\/providers\/([^/]+)\/distributions$/);
+    if (distListMatch) {
+      const admin = requireAdminApi(req, res);
+      if (!admin) return;
+      const id = decodeURIComponent(distListMatch[1]);
+      return sendJson(res, 200, { distributions: listProviderDistributions(id) });
     }
 
     // 个人配置（自服务，open_id 取自会话，绝不信任请求体）
