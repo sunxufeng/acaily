@@ -2176,6 +2176,7 @@ function renderUserPage(bodyEl, data){
   bodyEl.innerHTML=html;
   if(!ro){
     const sp=$('ueSaveProvider'); if(sp) sp.onclick=()=>saveUserProvider(openId);
+    const tp=$('ueTestProvider'); if(tp) tp.onclick=()=>testUserProvider(openId);
     const sa=$('ueSaveAuto'); if(sa) sa.onclick=()=>saveUserAutomation();
   }
 }
@@ -2200,7 +2201,11 @@ function providerFormHTML(c){
     <label>助手名称 (Bot Name)</label><input id="ue_botName" value="${esc(c.botName||'')}"/>
     <label>自定义指令 (System Prompt)</label><textarea id="ue_systemPrompt" maxlength="4000">${esc(c.systemPrompt||'')}</textarea>
     <div id="ueProviderStatus" class="status"></div>
-    <button class="btn" id="ueSaveProvider">保存 Provider 配置</button>`;
+    <div class="row" style="gap:10px;align-items:center">
+      <button class="btn" id="ueSaveProvider">保存 Provider 配置</button>
+      <button class="btn ghost" id="ueTestProvider" type="button">测试连通性</button>
+      <span class="muted" id="ueTestHint">测试当前表单配置是否可达（未填 Key 时用已存 Key）</span>
+    </div>`;
 }
 
 async function saveUserProvider(openId){
@@ -2222,6 +2227,37 @@ async function saveUserProvider(openId){
     if(r.status===200){st.className='status ok';st.textContent='✅ 已保存';toast('已保存 Provider 配置');loadUsers();}
     else{st.className='status err';st.textContent='❌ '+(r.data&&r.data.error||r.status);}
   }catch(e){st.className='status err';st.textContent='❌ '+e.message;}
+}
+
+// 测试成员当前表单配置的连通性（后端 POST /api/admin/config/:openId/test）
+async function testUserProvider(openId){
+  const st=$('ueProviderStatus');
+  const tb=$('ueTestProvider');
+  const provider=$('ue_provider').value;
+  const baseUrl=$('ue_baseUrl').value.trim();
+  const model=$('ue_model').value.trim();
+  const apiKey=$('ue_apiKey').value; // 留空则用已存 Key
+  if(!provider){ st.className='status err'; st.textContent='❌ 请先选择 Provider'; return; }
+  st.className='status'; st.textContent='⏳ 正在测试连通性…';
+  tb.disabled=true; tb.textContent='测试中…';
+  try{
+    const r=await api('POST','/api/admin/config/'+encodeURIComponent(openId)+'/test',
+      { provider, baseUrl, model, apiKey });
+    const d=r.data||{};
+    if(r.status===200 && d.ok){
+      st.className='status ok';
+      st.textContent='✅ 连通成功 ('+(d.provider||provider)+(d.model?' · '+d.model:'')+')';
+    }else{
+      st.className='status err';
+      let msg='❌ '+(d.error||r.status);
+      if(d.attemptedUrl) msg+=' ｜ 请求地址：'+d.attemptedUrl;
+      st.textContent=msg;
+    }
+  }catch(e){
+    st.className='status err'; st.textContent='❌ '+e.message;
+  }finally{
+    tb.disabled=false; tb.textContent='测试连通性';
+  }
 }
 
 function automationHTML(openId, autos, ro, unionId){
