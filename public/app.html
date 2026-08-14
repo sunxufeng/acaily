@@ -2593,7 +2593,7 @@ async function loadPermissions(){
   if(res.status!==200){$('permBody').innerHTML='<tr><td colspan="4" class="empty">加载失败</td></tr>';return;}
   const {grantable, baseDisplayMenus, users, adminOpenIds}=res.data;
   $('permBase').innerHTML = (baseDisplayMenus||[]).map(m=>`<span class="tag neutral">${esc(m.label)}（默认开启）</span>`).join('');
-  $('permCols').innerHTML=grantable.map(g=>`<th>${esc(g.label)}</th>`).join('');
+  $('permCols').innerHTML=grantable.map(g=>`<th><div class="perm-th-lbl">${esc(g.label)}</div>${g.desc?`<div class="perm-th-desc">${esc(g.desc)}</div>`:''}</th>`).join('');
   const colCount=3+grantable.length;
   if(!users.length){$('permBody').innerHTML=`<tr><td colspan="${colCount}" class="empty">暂无用户</td></tr>`;return;}
   $('permBody').innerHTML=users.map(u=>{

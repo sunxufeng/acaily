@@ -12,9 +12,9 @@ const STORE = process.env.ACAILY_PERMISSIONS_STORE || join(__dirname, '../../dat
 
 // 普通用户可被管理员授权启用的「额外菜单」（基础菜单默认拥有，不在此列）
 export const GRANTABLE_MENUS = [
-  { key: 'automation', label: '自动化任务' },
-  { key: 'agents', label: '智能体配置' },
-  { key: 'provider', label: 'Provider' },
+  { key: 'automation', label: '自动化任务', desc: '定时调用关联智能体并把结果推送给指定飞书用户' },
+  { key: 'agents', label: '智能体配置', desc: '创建 / 编辑智能体并绑定飞书应用' },
+  { key: 'provider', label: 'Provider', desc: '维护个人的 Provider（API Key、Base URL、模型等）' },
 ];
 // 普通用户默认拥有、不可取消的基础菜单（在权限配置页以固定行展示）
 export const BASE_MENUS = ['chat'];

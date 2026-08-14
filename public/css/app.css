@@ -223,7 +223,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0
 /* ---------- 表格 ---------- */
 .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);}
 table{width:100%;border-collapse:collapse;font-size:13px;}
-thead th{background:var(--surface-2);color:var(--muted);font-weight:600;text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+thead th{background:var(--surface-2);color:var(--muted);font-weight:600;text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:bottom;}
+thead th .perm-th-lbl{font-size:13px;font-weight:600;color:var(--text);}
+thead th .perm-th-desc{margin-top:3px;font-size:11px;font-weight:400;color:var(--muted);white-space:normal;line-height:1.4;max-width:220px;}
 tbody td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
 tbody tr:last-child td{border-bottom:none;}
 tbody tr:hover{background:var(--surface-2);}
