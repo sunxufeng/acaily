@@ -495,6 +495,7 @@
             </div>
             <button class="btn" id="agentNewBtn">+ 新建智能体</button>
           </div>
+          <div id="agentBindHint" class="hint" style="display:none;margin-bottom:8px;">未绑定的智能体请联系系统管理员协助绑定（需飞书自建应用凭证）。</div>
           <div class="table-wrap">
             <table>
               <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:260px;">操作</th></tr></thead>
@@ -1348,6 +1349,7 @@ async function createNewChatSession(){
 let currentAgentCache={};
 async function loadAgents(){
   const isAdmin=document.body.classList.contains('is-admin');
+  const hintEl=$('agentBindHint'); if(hintEl) hintEl.style.display=isAdmin?'none':'';
   // 普通用户走 /api/agents（已按 owner 过滤：自己的 + 组织共享）；管理员走 /api/admin/agents
   const {status,data}=await api('GET', isAdmin?'/api/admin/agents':'/api/agents');
   const body=$('agentBody'); if(!body)return;
@@ -1508,7 +1510,9 @@ function agentEditHTML(a,isNew){
   </div>`;
 }
 let agentEditingId=null;
-function openAgentEdit(id, readOnly){
+let AGENT_EDIT_RETURN=null; // 保存后返回的视图（'agents' / 'user-edit' / 'user-view'）
+let AGENT_NEW_OWNER=null;   // 代某成员新建时预设的 owner open_id（管理员能力）
+function openAgentEdit(id, readOnly, opts){
   agentEditingId=id||null;
   const isAdmin=document.body.classList.contains('is-admin');
   // 普通用户：仅当智能体「属于自己」才可编辑；组织共享（owner 空）/他人智能体强制只读
@@ -1649,9 +1653,18 @@ async function saveAgentEdit(){
   const url=isAdmin
     ? (agentEditingId?`/api/admin/agents/${encodeURIComponent(agentEditingId)}`:'/api/admin/agents')
     : (agentEditingId?`/api/agents/${encodeURIComponent(agentEditingId)}`:'/api/agents');
+  // 代某成员新建时，把 owner 一起提交（仅管理员代建场景）
+  if(isAdmin && !agentEditingId && AGENT_NEW_OWNER) payload.owner = AGENT_NEW_OWNER;
   const {status}=await api(agentEditingId?'PUT':'POST',url,payload);
   saveBtn.disabled=false;saveBtn.textContent='保存';
-  if(status===200){toast('已保存');await loadAgents();await loadChatAgents();switchView('agents');}
+  if(status===200){
+    toast('已保存');
+    const ret = AGENT_EDIT_RETURN || 'agents';
+    AGENT_EDIT_RETURN=null; AGENT_NEW_OWNER=null;
+    await loadAgents(); await loadChatAgents();
+    switchView(ret);
+    if(ret==='user-edit'||ret==='user-view') rerenderUserAgentSection();
+  }
   else toast('保存失败（'+status+'）');
 }
 let _bindAgentCtx = null; // { id }
@@ -1686,6 +1699,7 @@ async function bindAgentFeishuAuto(){
     $('bindFeishuMask').classList.remove('show');
     toast(`已绑定飞书应用：${data.appId}${data.botNote||''}`);
     await loadAgents();
+    if(typeof rerenderUserAgentSection==='function') rerenderUserAgentSection();
   } else {
     const msg = (data&&data.error) || `HTTP ${status}`;
     if(errEl){
@@ -1710,6 +1724,7 @@ async function bindAgentFeishuManual(){
     $('bindFeishuMask').classList.remove('show');
     toast(`已绑定飞书应用：${data.appId}${data.botNote||''}`);
     await loadAgents();
+    if(typeof rerenderUserAgentSection==='function') rerenderUserAgentSection();
   } else {
     errEl.textContent = '绑定失败：'+((data&&data.error)||status);
   }
@@ -2196,6 +2211,7 @@ function renderUserPage(bodyEl, data){
     const tp=$('ueTestProvider'); if(tp) tp.onclick=()=>testUserProvider(openId);
     wireUserAutoSection(openId, CURRENT_USER.unionId, CURRENT_USER.displayName);
   }
+  wireUserAgentSection();
 }
 
 function providerKvHTML(c, hasApiKey){
@@ -2357,9 +2373,83 @@ async function rerenderUserAutoSection(){
 }
 
 function agentsHTML(agents, ro){
-  if(!agents.length) return '<div class="muted">该用户暂无专属智能体。组织共享智能体对所有登录用户生效，无需在此列出。</div>';
-  const items=agents.map(a=>`<div class="agent-item"><span class="agent-name">${esc((a.emoji||'')+' '+(a.name||a.id))}</span><span class="muted">${esc(a.description||'')}</span></div>`).join('');
-  return `<div class="agent-list">${items}</div><div class="hint" style="margin-top:8px;">智能体的创建与编辑请在左侧「智能体配置」菜单完成；此处仅展示该用户归属（owner）的智能体。</div>`;
+  // 成员编辑页内的智能体列表（管理员可在此直接编辑/删除/绑定飞书，亦可代该成员新建）。
+  const rows = agents.map(a=>`<tr data-agent-id="${esc(a.id)}">
+      <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
+      <td><b>${esc(a.name)}</b> <span class="tag">该成员</span></td>
+      <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
+      <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
+      <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
+      <td class="ops">
+        <button class="btn ghost sm" data-ua-edit="${esc(a.id)}">编辑</button>
+        <button class="btn ghost sm" data-ua-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
+        <button class="btn ghost sm danger" data-ua-del="${esc(a.id)}">删除</button>
+      </td>
+    </tr>`).join('');
+  const empty = agents.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有登录用户生效，无需在此列出。</tr>';
+  const createBtn = ro ? '' : '<button class="btn sm" id="uaNewAgent" style="margin-top:10px;">+ 代该成员新建智能体</button>';
+  const hint = ro ? '' : '<div class="hint" style="margin-top:6px;">管理员可在此直接编辑 / 删除 / 绑定飞书，或代该成员新建智能体（owner 归属该成员）。</div>';
+  return `<div class="table-wrap"><table>
+    <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
+    <tbody id="userAgentBody">${rows}${empty}</tbody>
+  </table></div>${createBtn}${hint}`;
+}
+
+async function rerenderUserAgentSection(){
+  const forId=(CURRENT_USER&&CURRENT_USER.openId)||'';
+  if(!forId) return;
+  const res=await api('GET','/api/admin/agents?owner='+encodeURIComponent(forId));
+  if(res.status!==200) return;
+  const list=res.data.agents||[];
+  CURRENT_USER_AGENTS=list;
+  const bodyEl=$('userAgentBody');
+  // 简化：直接重渲整个 card 区（保留 providers/automation 不变，需要从缓存恢复）
+  // 为避免破坏同页其它区块，改成只替换 userAgentBody 内部的行：清空后重插入。
+  if(bodyEl){
+    const rows=list.map(a=>`<tr data-agent-id="${esc(a.id)}">
+      <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
+      <td><b>${esc(a.name)}</b> <span class="tag">该成员</span></td>
+      <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
+      <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
+      <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
+      <td class="ops">
+        <button class="btn ghost sm" data-ua-edit="${esc(a.id)}">编辑</button>
+        <button class="btn ghost sm" data-ua-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
+        <button class="btn ghost sm danger" data-ua-del="${esc(a.id)}">删除</button>
+      </td>
+    </tr>`).join('');
+    const empty = list.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有登录用户生效，无需在此列出。</tr>';
+    bodyEl.innerHTML = rows + empty;
+    wireUserAgentSection();
+  }
+}
+
+function wireUserAgentSection(){
+  const forId=(CURRENT_USER&&CURRENT_USER.openId)||'';
+  // 新建（代该成员）
+  const nb=$('uaNewAgent'); if(nb){
+    nb.onclick=()=>{
+      AGENT_EDIT_RETURN='user-edit';
+      AGENT_NEW_OWNER=forId;
+      openAgentEdit(null);
+    };
+  }
+  // 行内操作
+  const tbody=$('userAgentBody'); if(!tbody) return;
+  tbody.querySelectorAll('button[data-ua-edit]').forEach(b=>{
+    b.onclick=()=>{ AGENT_EDIT_RETURN='user-edit'; openAgentEdit(b.dataset.uaEdit); };
+  });
+  tbody.querySelectorAll('button[data-ua-bind]').forEach(b=>{
+    b.onclick=()=>{ openBindFeishuModal(b.dataset.uaBind); };
+  });
+  tbody.querySelectorAll('button[data-ua-del]').forEach(b=>{
+    b.onclick=async()=>{
+      if(!confirm('确定删除该智能体？')) return;
+      const r=await api('DELETE',`/api/admin/agents/${encodeURIComponent(b.dataset.uaDel)}`);
+      if(r.status===200){ toast('已删除'); rerenderUserAgentSection(); }
+      else toast('删除失败：'+(r.data&&r.data.error||r.status));
+    };
+  });
 }
 
 // ====================== 权限配置（菜单授权） ======================
