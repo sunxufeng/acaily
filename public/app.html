@@ -310,7 +310,7 @@
             <button class="btn" id="orgProvNewBtn">+ 新建组织 Provider</button>
           </div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:300px;">操作</th></tr></thead>
+            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:380px;">操作</th></tr></thead>
               <tbody id="orgProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
           </div>
         </div>
@@ -1796,7 +1796,8 @@ async function loadOrgProviders(){
     <td class="ops">
       <button class="btn ghost sm" data-pedit="${esc(p.id)}">编辑</button>
       <button class="btn ghost sm" data-ptoggle="${esc(p.id)}">${p.disabled?'启用':'停用'}</button>
-      <button class="btn ghost sm" data-pdistribute="${esc(p.id)}">分发</button>
+      <button class="btn ghost sm" data-pdistribute="${esc(p.id)}" title="选择成员后下发">指定用户下发</button>
+      <button class="btn sm" data-pdistall="${esc(p.id)}" title="一键下发给全员（不含你自己）">下发全员</button>
       <button class="btn ghost sm danger" data-pdel="${esc(p.id)}">删除</button>
     </td>
   </tr>`).join('');
@@ -1806,7 +1807,34 @@ async function loadOrgProviders(){
     if(t.dataset.pdel) return confirmDelProvider(t.dataset.pdel, 'org');
     if(t.dataset.ptoggle) return toggleProvider(t.dataset.ptoggle, 'org');
     if(t.dataset.pdistribute) return openDistributeView(t.dataset.pdistribute);
+    if(t.dataset.pdistall) return distributeProviderToAll(t.dataset.pdistall);
   };
+}
+// 「下发全员」：拉成员名单（剔除自己）后一键分发；带确认防误操作
+async function distributeProviderToAll(sourceId){
+  const src = orgProvCache[sourceId];
+  if(!src){ toast('找不到源 Provider'); return; }
+  if(src.disabled){ toast('该 Provider 已停用，无法分发'); return; }
+  const [meR, uR] = await Promise.all([
+    api('GET','/api/me'),
+    api('GET','/api/admin/users'),
+  ]);
+  if(meR.status!==200){ toast('获取当前账号失败'); return; }
+  if(uR.status!==200){ toast('获取成员列表失败'); return; }
+  const selfOpenId = (meR.data && meR.data.openId) || '';
+  const members = (uR.data.users || []).filter(u => u && u.openId && u.openId !== selfOpenId);
+  if(!members.length){ toast('没有可下发的成员（成员列表为空）'); return; }
+  const total = members.length;
+  if(!confirm(`将「${src.name}」下发给全员（共 ${total} 人，不含你自己）？\n已持有副本的成员将被覆盖。`)) return;
+  toast('正在下发到全员…');
+  const r = await api('POST', `/api/admin/providers/${encodeURIComponent(sourceId)}/distribute`, { openIds: members.map(m=>m.openId) });
+  if(r.status===200){
+    const ok = (r.data.distributed||[]).length;
+    const skip = (r.data.skipped||[]).length;
+    toast(`已下发 ${ok} 人${skip?` · 跳过 ${skip} 人`:''}`);
+  } else {
+    toast('下发失败：'+((r.data&&r.data.error)||r.status));
+  }
 }
 
 async function toggleProvider(id, scope){
