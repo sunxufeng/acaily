@@ -92,11 +92,18 @@ export function listOpenIds() {
 
 // 管理后台用：列出全部用户配置摘要（不含 apiKey 明文/密文）
 // 合并「用户目录」：把仅登录过、尚未配置模型的用户也列入（displayName 取自目录，hasApiKey=false）。
+// 显示名解析优先级：通讯录目录 > 个人配置里的 displayName。
+// 通讯录来自飞书 OAuth，名字最权威；configs.json 里的 displayName 仅为兼容历史记录。
 export function listUsers() {
   const db = load();
+  // 通讯录 → openId → displayName 索引
+  const dirMap = {};
+  for (const d of listDirectory()) {
+    if (d && d.openId && d.displayName) dirMap[d.openId] = d.displayName;
+  }
   const cfgUsers = Object.entries(db.users).map(([openId, c]) => ({
     openId,
-    displayName: c.displayName || '',
+    displayName: dirMap[openId] || c.displayName || '',
     provider: c.provider || '',
     model: c.model || '',
     botName: c.botName || '',
