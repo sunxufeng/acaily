@@ -81,6 +81,9 @@ function normalizeCreateInput(input = {}) {
   const now = Date.now();
   const id = randomUUID();
   const recipients = normalizeRecipients(input.pushRecipients);
+  // owner：任务创建者 open_id（系统管理员创建填管理员 open_id；普通用户自建填自己）。
+  // 用于「我的自动化」视图按归属过滤，避免把其他人的任务列出来。
+  const owner = String(input.owner || input.createdBy || 'system').trim();
   const pushTo = Array.isArray(input.pushTo)
     ? input.pushTo.filter(Boolean).slice(0, 32)
     : recipients
@@ -97,6 +100,7 @@ function normalizeCreateInput(input = {}) {
     pushTo,
     pushRecipients: recipients,
     maxSteps: Number.isFinite(+input.maxSteps) && +input.maxSteps > 0 ? Math.min(50, Math.floor(+input.maxSteps)) : 10,
+    owner,
     createdAt: now,
     updatedAt: now,
     runs: [],

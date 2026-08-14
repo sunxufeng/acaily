@@ -2157,7 +2157,7 @@ window.openUserPage=async function(openId, readOnly){
   switchView(readOnly?'user-view':'user-edit');
   const [cfgRes, autoRes, agAllRes, userRes]=await Promise.all([
     api('GET','/api/admin/config/'+encodeURIComponent(openId)),
-    api('GET','/api/admin/automations'),
+    api('GET','/api/admin/automations?forOpenId='+encodeURIComponent(openId)),
     api('GET','/api/admin/agents'),
     api('GET','/api/admin/users').catch(()=>({data:{users:[]}})),
   ]);
@@ -2334,7 +2334,8 @@ async function deleteAutoAndRefresh(id){
 
 // 重新拉取并渲染成员编辑页内的自动化列表
 async function rerenderUserAutoSection(){
-  const res=await api('GET','/api/admin/automations');
+  const forId=(CURRENT_USER&&CURRENT_USER.openId)||'';
+  const res=await api('GET','/api/admin/automations?forOpenId='+encodeURIComponent(forId));
   if(res.status!==200) return;
   AUTO_LIST=res.data.automations||[];
   const listEl=$('userAutoList'); if(!listEl) return;

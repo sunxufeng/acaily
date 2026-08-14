@@ -625,7 +625,8 @@ const server = createServer(async (req, res) => {
       }
       return sendJson(res, 405, { error: '方法不允许' });
     }
-    // 普通用户视角：仅返回「以该用户为收件人」的自动化任务（只读），供被授权「自动化任务」菜单的用户查看
+    // 普通用户视角：仅返回「该用户创建的」或「以该用户为收件人」的自动化任务（只读），
+    // 不返回其他人的任务。
     if (method === 'GET' && pathname === '/api/my/automations') {
       const s = requireSessionApi(req, res);
       if (!s) return;
@@ -634,6 +635,7 @@ const server = createServer(async (req, res) => {
       const unionId = (myCfg && myCfg.unionId) || null;
       const mine = all
         .filter((a) => {
+          if (a.owner === s.openId) return true; // 自己创建的
           const recs = a.pushRecipients || [];
           return recs.some((r) => r.openId === s.openId || (unionId && r.unionId === unionId));
         })
@@ -1281,13 +1283,24 @@ const server = createServer(async (req, res) => {
       const s = requireAdminApi(req, res);
       if (!s) return;
       const list = await listAutomations();
-      return sendJson(res, 200, { automations: list, activeJobs: activeJobCount() });
+      // 支持 ?forOpenId=XXX：仅返回「以该用户为收件人」或「该用户创建的」任务，
+      // 用于成员编辑页按成员隔离，避免把其他人的自动化任务列出来。
+      const forOpenId = url.searchParams.get('forOpenId');
+      let scoped = list;
+      if (forOpenId) {
+        scoped = list.filter((a) => {
+          const recs = a.pushRecipients || [];
+          return a.owner === forOpenId || recs.some((r) => r.openId === forOpenId || (r.unionId && r.unionId === forOpenId));
+        });
+      }
+      return sendJson(res, 200, { automations: scoped, activeJobs: activeJobCount() });
     }
     if (method === 'POST' && pathname === '/api/admin/automations') {
       const s = requireAdminApi(req, res);
       if (!s) return;
       try {
         const body = await readBody(req);
+        body.owner = s.openId; // 记录创建者（系统管理员）
         const auto = await createAutomation(body);
         if (auto.enabled !== false) scheduleOne(auto);
         await record({ actor: s.openId, action: 'automation.create', target: auto.id, meta: { title: auto.title, cron: auto.cron, pushTo: auto.pushTo.length } });
