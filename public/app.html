@@ -267,14 +267,24 @@
 
       <!-- 视图：权限配置（admin） -->
       <section class="view" id="view-permissions">
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div class="card-h" style="padding:18px 18px 0;margin:0;">
-            <h2>权限配置</h2><span class="desc">为普通用户授权可访问的菜单。基础菜单（对话）默认拥有且不可取消；管理员可在下方勾选「自动化任务 / 智能体配置 / Provider」按需开放。管理员始终拥有全部菜单。</span>
+        <div class="card">
+          <div class="card-h">
+            <h2>权限配置</h2>
+            <span class="desc">为普通用户授权可访问的菜单。基础菜单默认拥有且不可取消；管理员可在下方为每位普通用户勾选「自动化任务 / 智能体配置 / Provider」按需开放。管理员始终拥有全部菜单。</span>
           </div>
-          <div id="permBase" class="perm-base"></div>
-          <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th>用户</th><th>open_id</th><th id="permCols"></th><th>操作</th></tr></thead>
-            <tbody id="permBody"><tr><td colspan="4" class="empty">加载中…</td></tr></tbody></table>
+          <div class="perm-base-block">
+            <div class="perm-base-label">基础菜单（默认开启，所有用户均有）</div>
+            <div id="permBase" class="perm-base-chips"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h">
+            <h3>普通用户授权</h3>
+            <span class="desc">勾选授予对应菜单；取消勾选则前端不显示对应入口。修改后卡片会高亮，点「保存」生效；点「取消」回滚到原状态。</span>
+          </div>
+          <div id="permGrid" class="perm-grid">
+            <div class="empty muted" style="grid-column:1/-1;text-align:center;padding:30px;">加载中…</div>
           </div>
         </div>
       </section>
@@ -2594,35 +2604,162 @@ function wireUserAgentSection(){
 }
 
 // ====================== 权限配置（菜单授权） ======================
-async function loadPermissions(){
-  const res=await api('GET','/api/admin/permissions');
-  if(res.status!==200){$('permBody').innerHTML='<tr><td colspan="4" class="empty">加载失败</td></tr>';return;}
-  const {grantable, baseDisplayMenus, users, adminOpenIds}=res.data;
-  $('permBase').innerHTML = (baseDisplayMenus||[]).map(m=>`<span class="tag neutral">${esc(m.label)}（默认开启）</span>`).join('');
-  $('permCols').innerHTML=grantable.map(g=>`<th><div class="perm-th-lbl">${esc(g.label)}</div>${g.desc?`<div class="perm-th-desc">${esc(g.desc)}</div>`:''}</th>`).join('');
-  const colCount=3+grantable.length;
-  if(!users.length){$('permBody').innerHTML=`<tr><td colspan="${colCount}" class="empty">暂无用户</td></tr>`;return;}
-  $('permBody').innerHTML=users.map(u=>{
-    const admin=adminOpenIds.includes(u.openId);
-    const cells=grantable.map(g=>{
-      const checked=u.menus.includes(g.key);
-      const cb=admin?'<span class="muted">—</span>':`<input type="checkbox" class="perm-cb" data-uid="${esc(u.openId)}" data-key="${esc(g.key)}" ${checked?'checked':''}/>`;
-      return `<td>${cb}</td>`;
-    }).join('');
-    return `<tr>
-      <td>${esc(u.displayName||'(未命名)')}</td>
-      <td class="muted" style="font-size:11px;">${esc(u.openId)}</td>
-      ${cells}
-      <td><button class="btn sm" onclick="savePermission('${esc(u.openId)}')" ${admin?'disabled':''}>保存</button></td>
-    </tr>`;
-  }).join('');
+// 每用户一张卡片：身份区 + 3 个 toggle + dirty 追踪 + 取消/保存。
+// 管理员的 toggle 全部禁用并显示「默认拥有全部」提示，不参与保存。
+function permAvatarStyle(seed){
+  // 给每位用户稳定分配一对补色 → 头像渐变背景，避免全是同一蓝。
+  let h=0; const s=String(seed||'');
+  for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0;
+  const a=`hsl(${h%360},68%,52%)`, b=`hsl(${(h*7+90)%360},72%,68%)`;
+  return `background:linear-gradient(135deg,${a},${b});`;
 }
-async function savePermission(openId){
-  const cbs=[...document.querySelectorAll('.perm-cb')].filter(cb=>cb.dataset.uid===openId && cb.checked);
-  const menus=cbs.map(cb=>cb.dataset.key);
-  const res=await api('PUT','/api/admin/permissions/'+encodeURIComponent(openId),{menus});
-  if(res.status===200)toast('已保存「'+(openId||'')+'」的菜单授权');
-  else toast('保存失败：'+(res.data&&res.data.error||res.status));
+function permAvatarLetter(name){
+  const s=String(name||'').trim();
+  if(!s) return '?';
+  // 优先取中文姓氏/全角首字；都拿不到再退到 ASCII 首字符
+  return Array.from(s)[0] || '?';
+}
+function applyPermDirty(card, initialMenus){
+  const cbs=[...card.querySelectorAll('input[data-key]')];
+  const initial = new Set(initialMenus||[]);
+  const sync = ()=>{
+    const current = cbs.filter(cb=>cb.checked).map(cb=>cb.dataset.key);
+    const curSet = new Set(current);
+    const isAdmin = card.dataset.admin === '1';
+    const dirty = !isAdmin && (
+      current.length !== initial.size || [...curSet].some(k=>!initial.has(k)) || [...initial].some(k=>!curSet.has(k))
+    );
+    card.classList.toggle('is-dirty', dirty);
+    const indicator = card.querySelector('.perm-dirty');
+    if(indicator) indicator.style.opacity = dirty ? '1' : '0';
+    const saveBtn = card.querySelector('[data-act="save"]');
+    if(saveBtn) saveBtn.disabled = !dirty;
+    const resetBtn = card.querySelector('[data-act="reset"]');
+    if(resetBtn) resetBtn.disabled = !dirty;
+  };
+  cbs.forEach(cb=>cb.addEventListener('change', sync));
+  const resetBtn = card.querySelector('[data-act="reset"]');
+  if(resetBtn) resetBtn.onclick = ()=>{
+    cbs.forEach(cb=>{ cb.checked = initial.has(cb.dataset.key); });
+    sync();
+  };
+  const saveBtn = card.querySelector('[data-act="save"]');
+  if(saveBtn) saveBtn.onclick = async ()=>{
+    const menus = cbs.filter(cb=>cb.checked).map(cb=>cb.dataset.key);
+    saveBtn.disabled = true;
+    const oldLabel = saveBtn.textContent;
+    saveBtn.textContent = '保存中…';
+    try{
+      const res = await api('PUT', '/api/admin/permissions/'+encodeURIComponent(card.dataset.uid), { menus });
+      if(res.status===200){
+        toast('已保存「'+(card.dataset.name||'')+'」的菜单授权');
+        // 把「当前」回写为「初始」，避免再次 dirty 闪烁
+        initial.clear(); menus.forEach(k=>initial.add(k));
+        sync();
+        saveBtn.textContent = '已保存';
+        setTimeout(()=>{ saveBtn.textContent = oldLabel; sync(); }, 1200);
+      } else {
+        toast('保存失败：'+(res.data&&res.data.error||res.status));
+        saveBtn.textContent = oldLabel;
+        sync();
+      }
+    }catch(e){
+      toast('网络异常');
+      saveBtn.textContent = oldLabel;
+      sync();
+    }
+  };
+  // 初始同步一次：保证「取消」按钮也正确禁用/启用
+  sync();
+}
+
+async function loadPermissions(){
+  const res = await api('GET', '/api/admin/permissions');
+  const grid = $('permGrid');
+  if(res.status!==200){
+    grid.innerHTML = `<div class="empty muted" style="grid-column:1/-1;text-align:center;padding:30px;">加载失败（${res.status}）</div>`;
+    return;
+  }
+  const { grantable = [], baseDisplayMenus = [], users = [], adminOpenIds = [] } = res.data || {};
+  // 顶部「基础菜单」chip
+  $('permBase').innerHTML = (baseDisplayMenus.length
+    ? baseDisplayMenus.map(m=>`<span class="tag neutral">${esc(m.label)}</span><span class="muted small">（默认开启，不可取消）</span>`).join('')
+    : '<span class="muted small">无</span>');
+
+  // 角色分组
+  const admins = users.filter(u => adminOpenIds.includes(u.openId));
+  const others = users.filter(u => !adminOpenIds.includes(u.openId));
+  const renderOne = u => {
+    const isAdmin = adminOpenIds.includes(u.openId);
+    const granted = new Set(u.menus || []);
+    const toggles = grantable.map(g => {
+      const checked = granted.has(g.key);
+      if(isAdmin){
+        return `<div class="perm-toggle is-locked">
+          <span class="perm-switch is-on-disabled" aria-hidden="true"><span class="dot"></span></span>
+          <span class="perm-toggle-text">
+            <span class="perm-toggle-label">${esc(g.label)}</span>
+            <span class="perm-toggle-desc">${esc(g.desc||'')}</span>
+          </span>
+        </div>`;
+      }
+      return `<label class="perm-toggle">
+        <input type="checkbox" data-key="${esc(g.key)}" ${checked?'checked':''}>
+        <span class="perm-switch" aria-hidden="true"><span class="dot"></span></span>
+        <span class="perm-toggle-text">
+          <span class="perm-toggle-label">${esc(g.label)}</span>
+          <span class="perm-toggle-desc">${esc(g.desc||'')}</span>
+        </span>
+      </label>`;
+    }).join('');
+    const role = isAdmin
+      ? '<span class="perm-role admin">系统管理员</span>'
+      : '<span class="perm-role user">普通成员</span>';
+    const avatar = `<div class="perm-avatar" style="${permAvatarStyle(u.openId)}">${esc(permAvatarLetter(u.displayName))}</div>`;
+    const tail = isAdmin
+      ? `<div class="perm-card-actions">
+           <span class="perm-footnote muted">管理员默认拥有全部菜单，无需配置</span>
+         </div>`
+      : `<div class="perm-card-actions">
+           <span class="perm-dirty">● 已修改</span>
+           <div class="perm-card-btns">
+             <button class="btn ghost sm" data-act="reset" disabled>取消</button>
+             <button class="btn sm" data-act="save" disabled>保存</button>
+           </div>
+         </div>`;
+    return `<div class="perm-card${isAdmin?' is-admin':''}" data-uid="${esc(u.openId)}" data-admin="${isAdmin?1:0}" data-name="${esc(u.displayName||'')}">
+      <div class="perm-card-head">
+        ${avatar}
+        <div class="perm-card-id">
+          <div class="perm-card-name">${esc(u.displayName||'(未命名)')}</div>
+          <div class="perm-card-openid" title="${esc(u.openId)}">${esc(u.openId)}</div>
+        </div>
+        ${role}
+      </div>
+      <div class="perm-card-toggles">${toggles}</div>
+      ${tail}
+    </div>`;
+  };
+
+  const blocks = [];
+  if(admins.length){
+    blocks.push(`<div class="perm-section-title">系统管理员（${admins.length}）</div>`);
+    blocks.push(...admins.map(renderOne));
+  }
+  if(others.length){
+    blocks.push(`<div class="perm-section-title">普通成员（${others.length}）</div>`);
+    blocks.push(...others.map(renderOne));
+  }
+  if(!users.length){
+    blocks.push(`<div class="empty muted" style="grid-column:1/-1;text-align:center;padding:30px;">暂无用户</div>`);
+  }
+  grid.innerHTML = blocks.join('');
+  // 绑定每张卡片的 dirty 行为
+  grid.querySelectorAll('.perm-card').forEach(card=>{
+    const u = users.find(x=>x.openId===card.dataset.uid);
+    if(!u || card.dataset.admin==='1') return;
+    applyPermDirty(card, u.menus||[]);
+  });
 }
 
 window.editUser=async function(openId){
