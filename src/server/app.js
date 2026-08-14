@@ -44,7 +44,7 @@ import { initRunner } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
 import { getPermissions, setPermissions, resolveMenus, listPermissions, GRANTABLE_MENUS, BASE_MENUS, BASE_DISPLAY_MENUS } from '../config/permissionStore.js';
 import { createFeishuApp, enableBotCapability, validateFeishuCredentials } from '../feishu/appMgmt.js';
-import { listProviders, listOrgProviders, listUserProviders, getProvider, saveProvider, deleteProvider, setProviderDisabled, distributeProvider, listProviderDistributions, getProviderApiKey } from '../config/providerPoolStore.js';
+import { listProviders, listOrgProviders, listUserProviders, getProvider, getProviderRaw, saveProvider, deleteProvider, setProviderDisabled, distributeProvider, listProviderDistributions, getProviderApiKey } from '../config/providerPoolStore.js';
 import { listDirectory } from '../config/userDirectoryStore.js';
 import { searchContacts, resolveContact, listAllContacts } from '../feishu/contacts.js';
 import { listRecipients, addRecipient, removeRecipient } from '../config/recipientStore.js';
@@ -787,7 +787,7 @@ const server = createServer(async (req, res) => {
       const m = pathname.match(/^\/api\/admin\/providers\/([^/]+)$/);
       if (m) {
         const id = decodeURIComponent(m[1]);
-        const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+        const raw = getProviderRaw(id);
         if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
         if (raw.owner !== 'admin') return sendJson(res, 400, { error: '管理端只能操作组织共享 Provider' });
         if (method === 'GET') {
@@ -845,7 +845,7 @@ const server = createServer(async (req, res) => {
       const s = requireSessionApi(req, res);
       if (!s) return;
       const id = decodeURIComponent(myProvMatch[1]);
-      const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+      const raw = getProviderRaw(id);
       if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
       if (raw.owner !== s.openId) return sendJson(res, 403, { error: '无权操作该 Provider' });
       if (method === 'GET') return sendJson(res, 200, { provider: getProvider(id) });
@@ -872,7 +872,7 @@ const server = createServer(async (req, res) => {
       const s = requireSessionApi(req, res);
       if (!s) return;
       const id = decodeURIComponent(myProvToggle[1]);
-      const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+      const raw = getProviderRaw(id);
       if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
       if (raw.owner !== s.openId) return sendJson(res, 403, { error: '无权操作该 Provider' });
       const next = !raw.disabled;
@@ -888,7 +888,7 @@ const server = createServer(async (req, res) => {
       const admin = requireAdminApi(req, res);
       if (!admin) return;
       const id = decodeURIComponent(distMatch[1]);
-      const raw = require('../config/providerPoolStore.js').getProviderRaw(id);
+      const raw = getProviderRaw(id);
       if (!raw) return sendJson(res, 404, { error: 'Provider 不存在' });
       if (raw.owner !== 'admin') return sendJson(res, 400, { error: '只能分发组织共享 Provider' });
       try {
