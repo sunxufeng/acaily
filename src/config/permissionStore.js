@@ -1,6 +1,7 @@
 // 菜单权限配置存储（T10·权限配置）
 // 管理员可为普通用户授权「额外菜单」（自动化任务 / 智能体配置）。
-// 基础菜单（对话 / 我的配置 / 关于）普通用户默认拥有、不可取消；管理员永远拥有全部。
+// 基础菜单（对话 / Provider / 关于）普通用户默认拥有、不可取消；管理员永远拥有全部。
+// 注：「Provider」页已合并「我的配置 + 组织共享 Provider 池」，对所有用户常驻，不再单独授权。
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,16 +11,15 @@ const STORE = process.env.ACAILY_PERMISSIONS_STORE || join(__dirname, '../../dat
 
 // 普通用户可被管理员授权启用的「额外菜单」（基础菜单默认拥有，不在此列）
 export const GRANTABLE_MENUS = [
-  { key: 'providers', label: 'Provider 池' },
   { key: 'automation', label: '自动化任务' },
   { key: 'agents', label: '智能体配置' },
 ];
 // 普通用户默认拥有、不可取消的基础菜单（在权限配置页以固定行展示）
-export const BASE_MENUS = ['chat', 'config', 'about'];
+export const BASE_MENUS = ['chat', 'provider', 'about'];
 // 基础菜单的展示信息（权限配置页渲染固定行用）
 export const BASE_DISPLAY_MENUS = [
   { key: 'chat', label: '对话' },
-  { key: 'config', label: '我的配置' },
+  { key: 'provider', label: 'Provider' },
   { key: 'about', label: '关于' },
 ];
 

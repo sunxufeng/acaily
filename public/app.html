@@ -31,9 +31,9 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
         <span class="lbl">对话</span>
       </a>
-      <a class="nav-item" href="/settings" data-view="config" data-tip="我的配置">
-        <span class="ic"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
-        <span class="lbl">我的配置</span>
+      <a class="nav-item" href="/settings" data-view="provider" data-tip="Provider">
+        <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></span>
+        <span class="lbl">Provider</span>
       </a>
 
       <div class="nav-group admin-only">管理</div>
@@ -58,7 +58,7 @@
         <span class="lbl">权限配置</span>
       </a>
 
-      <!-- 受权限菜单（自动化 / 智能体配置 / Provider 池）：管理员恒见；普通用户仅在被授权后显示 -->
+      <!-- 受权限菜单（自动化 / 智能体配置）：管理员恒见；普通用户仅在被授权后显示。Provider 已合并进常驻的「Provider」页，不再单独授权 -->
       <div class="nav-group nav-group-perm" id="navGroupPerm" style="display:none;">已授权</div>
       <a class="nav-item perm-menu" href="/admin" data-view="automation" data-tip="自动化任务">
         <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
@@ -67,10 +67,6 @@
       <a class="nav-item perm-menu" href="/admin" data-view="agents" data-tip="智能体配置">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 013 3v1a3 3 0 010 6v1a3 3 0 11-6 0v-1a3 3 0 010-6V5a3 3 0 013-3z"/><circle cx="12" cy="12" r="9"/></svg></span>
         <span class="lbl">智能体配置</span>
-      </a>
-      <a class="nav-item perm-menu" href="/admin" data-view="providers" data-tip="Provider 池">
-        <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></span>
-        <span class="lbl">Provider 池</span>
       </a>
 
       <!-- 关于固定在所有菜单最下方 -->
@@ -134,7 +130,7 @@
             <button class="btn ghost sm" id="csbNewBtn">+ 新对话</button>
           </div>
           <div class="chat-body" id="chatBody">
-            <div class="msg bot"><div class="av">A</div><div class="bubble"><div class="role">Acaily</div>你好，我是你的专属 AI 助手。在左侧「我的配置」里填好模型后即可在此对话；也可以直接在飞书里 @我。</div></div>
+            <div class="msg bot"><div class="av">A</div><div class="bubble"><div class="role">Acaily</div>你好，我是你的专属 AI 助手。在左侧「Provider」里填好模型后即可在此对话；也可以直接在飞书里 @我。</div></div>
           </div>
           <div class="chat-attachments" id="chatAttachments"></div>
           <input type="file" id="filePicker" accept=".txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.log,.yaml,.yml,.xml,.html,.htm,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.kt,.sh,.bash,.zsh,.sql,.ini,.cfg,.conf,.toml,.docx,.docm,.xlsx,.xlsm,.pptx,.pptm,.pdf,image/png,image/jpeg,image/gif,image/webp" style="display:none;"/>
@@ -149,11 +145,11 @@
         </div>
       </section>
 
-      <!-- 视图：我的配置（workbench） -->
-      <section class="view" id="view-config">
+      <!-- 视图：Provider（我的配置 + 组织共享 Provider 池，合并页） -->
+      <section class="view" id="view-provider">
         <div class="card">
           <div class="card-h">
-            <h2>我的配置（个人 Provider）</h2>
+            <h2>我的 Provider（个人）</h2>
             <span class="desc">在这里维护你个人的 Provider（API Key、Base URL、模型、采样参数、System Prompt、多模态等）。未设置的项目会自动回退使用管理员在「组织默认配置」中下发的默认值。<br>apiKey 仅保存在服务端（AES-256-GCM 加密）。Temperature / Top P / Max Tokens / Top K / Frequency·Presence Penalty / 超时 / 重试 / 自定义请求头 / System Prompt / 流式 / 多模态开关均作用于「对话」与插件调用。</span>
           </div>
 
@@ -269,7 +265,23 @@
           <div id="cfgStatus" class="status"></div>
         </div>
         <div class="card">
-          <div class="section-desc">本页仅你本人可访问（飞书登录后由服务端注入身份）；配置与对话均按你的 open_id 租户隔离，他人不可见。组织默认配置项可在管理员处「全员下发」。</div>
+          <div class="section-desc">本页「我的 Provider」仅你本人可访问（飞书登录后由服务端注入身份）；配置与对话均按你的 open_id 租户隔离，他人不可见。组织默认配置项可在管理员处「全员下发」。</div>
+        </div>
+
+        <div class="card" style="margin-top:18px;">
+          <div class="card-h">
+            <div>
+              <h2>组织共享 Provider 池</h2>
+              <div class="desc">管理员维护的 Provider/Model 组合，智能体和用户都可从此选择。「type / baseUrl / apiKey」由池统一管理，避免每个智能体重复配置。<br>普通用户只读；管理员可增删改。智能体表单的「Provider」下拉框会自动列出这里的条目。</div>
+            </div>
+            <button class="btn" id="provNewBtn">+ 新建 Provider</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>更新时间</th><th style="width:200px;">操作</th></tr></thead>
+              <tbody id="provBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -287,7 +299,7 @@
           </div>
           <h3 style="font-size:14px;">怎么用</h3>
           <ol style="color:var(--text-2);margin:6px 0 0;padding-left:20px;">
-            <li>在「我的配置」填写 Provider / Base URL / Model / API Key 并保存。</li>
+            <li>在「Provider」填写 Provider / Base URL / Model / API Key 并保存。</li>
             <li>在飞书任意会话里 <span class="kbd">@Acaily</span> 并提问，或在本页「对话」里直接聊。</li>
             <li>管理员可在「管理后台」统一查看成员配置与审计日志。</li>
           </ol>
@@ -326,7 +338,7 @@
           <div class="card-h"><h2>快捷入口</h2><span class="desc">跳转到常用页面</span></div>
           <ul class="quick-links">
             <li>· <a href="#" data-jump="chat">对话</a>：用你配置的 Provider 直接与 Acaily 对话（API Key 不会传给第三方）</li>
-            <li>· <a href="#" data-jump="config">我的配置</a>：维护个人的 Provider / 模型 / API Key</li>
+            <li>· <a href="#" data-jump="provider">Provider</a>：维护个人的 Provider / 模型 / API Key，并查看组织共享 Provider 池</li>
             <li>· <a href="#" data-jump="push">组织默认配置（管理员）</a>：一键下发基础配置给所有成员</li>
             <li>· <a href="#" data-jump="users">成员管理（管理员）</a>：查看 / 编辑 / 删除成员配置</li>
             <li>· <a href="#" data-jump="automation">自动化任务（管理员）</a>：定时任务调度与飞书推送</li>
@@ -375,7 +387,7 @@
       <section class="view" id="view-permissions">
         <div class="card" style="padding:0;overflow:hidden;">
           <div class="card-h" style="padding:18px 18px 0;margin:0;">
-            <h2>权限配置</h2><span class="desc">为普通用户授权可访问的菜单。基础菜单（对话 / 我的配置 / 关于）默认拥有且不可取消；管理员始终拥有全部菜单。</span>
+            <h2>权限配置</h2><span class="desc">为普通用户授权可访问的菜单。基础菜单（对话 / Provider / 关于）默认拥有且不可取消；管理员始终拥有全部菜单。</span>
           </div>
           <div id="permBase" class="perm-base"></div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
@@ -508,30 +520,11 @@
       <section class="view" id="view-provider-edit">
         <div class="card">
           <div class="card-h agent-edit-bar">
-            <button class="btn ghost sm" id="provEditBack" title="返回 Provider 池">← 返回</button>
+            <button class="btn ghost sm" id="provEditBack" title="返回 Provider">← 返回</button>
             <h2 id="provEditTitle" style="flex:1;text-align:center;margin:0;">新建 Provider</h2>
             <button class="btn" id="provEditSave">保存</button>
           </div>
           <div id="provEditBody"></div>
-        </div>
-      </section>
-
-      <!-- 视图：Provider 池（admin） -->
-      <section class="view" id="view-providers">
-        <div class="card">
-          <div class="card-h">
-            <div>
-              <h2>Provider 池</h2>
-              <div class="desc">管理员维护的 Provider/Model 组合，智能体和用户都可从此选择。「type / baseUrl / apiKey」由池统一管理，避免每个智能体重复配置。<br>智能体表单的「Provider」下拉框会自动列出这里的条目。</div>
-            </div>
-            <button class="btn" id="provNewBtn">+ 新建 Provider</button>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>更新时间</th><th style="width:200px;">操作</th></tr></thead>
-              <tbody id="provBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
-            </table>
-          </div>
         </div>
       </section>
 
@@ -761,11 +754,11 @@ async function api(method,path,body,opts){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','config','about','dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit','permissions']);
-const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit','permissions']);
+const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','permissions']);
+const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','permissions']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
-  config:['我的配置','为你的飞书账号配置专属大模型'],
+  provider:['Provider','维护个人 Provider，并查看组织共享 Provider 池'],
   about:['关于 Acaily','核心理念 / 使用方法'],
   dash:['概览','组织级概览与成员配置管理'],
   users:['成员管理','查看与编辑成员模型配置'],
@@ -775,7 +768,6 @@ const VIEW_TITLES={
   stats:['使用统计','基于使用日志的 Token / 调用 / 用户 / 模型聚合'],
   agents:['智能体配置','创建 / 编辑智能体并绑定飞书应用'],
   'agent-edit':['智能体编辑','在框架内维护智能体（多 Tab 编辑 Markdown 人设 / 导入 .md 文件）'],
-  providers:['Provider 池','管理员维护的可复用 Provider/Model 组合，智能体和用户都可从这里选择'],
   'provider-edit':['编辑 Provider','在框架内维护 Provider（类型 / Base URL / 模型列表 / API Key），保存后点「返回」回到清单'],
   permissions:['权限配置','为普通用户授权可访问的菜单（对话/我的配置默认拥有）'],
 };
@@ -804,8 +796,8 @@ function applyMenuPermissions(menus){
 function switchView(v,navItem){
   if(!ALL_VIEWS.has(v))return false;
   if(ADMIN_ONLY.has(v)&&!document.body.classList.contains('is-admin')){
-    // 非管理员：Provider 池 / 自动化 / 智能体配置若已被授权则放行，其余管理菜单仍拒绝
-    if(['providers','automation','agents'].includes(v) && (CURRENT_MENUS||[]).includes(v)){/* granted */}
+    // 非管理员：自动化 / 智能体配置若已被授权则放行，其余管理菜单仍拒绝；Provider 已合并为常驻页，不在 ADMIN_ONLY
+    if(['automation','agents'].includes(v) && (CURRENT_MENUS||[]).includes(v)){/* granted */}
     else return false;
   }
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
@@ -1919,7 +1911,7 @@ function provApiKeyVal(){
   if(el.dataset.masked==='1')return null;
   return el.value||null;
 }
-function closeProviderEdit(){switchView('providers');provEditingId=null;}
+function closeProviderEdit(){switchView('provider');provEditingId=null;}
 async function saveProviderEdit(){
   const payload={
     name:$('pName').value.trim()||'未命名 Provider',
@@ -1932,11 +1924,11 @@ async function saveProviderEdit(){
   const sb=$('provEditSave');sb.disabled=true;sb.textContent='保存中…';
   const {status}=await api(provEditingId?'PUT':'POST',provEditingId?`/api/admin/providers/${encodeURIComponent(provEditingId)}`:'/api/admin/providers',payload);
   sb.disabled=false;sb.textContent='保存';
-  if(status===200){toast('已保存');switchView('providers');await loadProviders();}
+  if(status===200){toast('已保存');switchView('provider');await loadProviders();}
   else toast('保存失败（'+status+'）');
 }
 $('provNewBtn').onclick=()=>openProviderEdit(null);
-$('provEditBack').onclick=()=>switchView('providers');
+$('provEditBack').onclick=()=>switchView('provider');
 $('provEditSave').onclick=saveProviderEdit;
 $('provBody').addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
@@ -2931,8 +2923,8 @@ $('statsRange').onchange=()=>loadStats();
     await loadProviders();
     await loadPermissions();
   }else{
-    // 被授权「Provider 池 / 自动化任务 / 智能体配置」菜单的普通用户：加载对应视图（只读 / 受限），避免点菜单空白
-    if((CURRENT_MENUS||[]).includes('providers')) await loadProviders();
+    // 合并后的「Provider」页对所有用户常驻：普通用户也加载组织共享池（只读），避免点菜单空白
+    await loadProviders();
     if((CURRENT_MENUS||[]).includes('automation')) await loadAutomation();
     if((CURRENT_MENUS||[]).includes('agents')) await loadAgents();
   }
