@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateUserModelConfig } from './schema.js';
 import { encryptSecret, decryptSecret } from '../crypto/kms.js';
+import { listDirectory } from './userDirectoryStore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STORE = process.env.ACAILY_CONFIG_STORE || join(__dirname, '../../data/configs.json');
@@ -90,19 +91,32 @@ export function listOpenIds() {
 }
 
 // 管理后台用：列出全部用户配置摘要（不含 apiKey 明文/密文）
+// 合并「用户目录」：把仅登录过、尚未配置模型的用户也列入（displayName 取自目录，hasApiKey=false）。
 export function listUsers() {
   const db = load();
-  return Object.entries(db.users)
-    .map(([openId, c]) => ({
-      openId,
-      displayName: c.displayName || '',
-      provider: c.provider || '',
-      model: c.model || '',
-      botName: c.botName || '',
-      hasApiKey: !!c._apiKeyEnc,
-      updatedAt: c.updatedAt || '',
-    }))
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  const cfgUsers = Object.entries(db.users).map(([openId, c]) => ({
+    openId,
+    displayName: c.displayName || '',
+    provider: c.provider || '',
+    model: c.model || '',
+    botName: c.botName || '',
+    hasApiKey: !!c._apiKeyEnc,
+    updatedAt: c.updatedAt || '',
+  }));
+  const cfgSet = new Set(Object.keys(db.users));
+  // 目录里、但不在配置库中的用户 → 作为「登录过但未配置」列出
+  const dirUsers = listDirectory()
+    .filter((d) => d.openId && !cfgSet.has(d.openId))
+    .map((d) => ({
+      openId: d.openId,
+      displayName: d.displayName || '',
+      provider: '',
+      model: '',
+      botName: '',
+      hasApiKey: false,
+      updatedAt: d.lastSeen || '',
+    }));
+  return [...cfgUsers, ...dirUsers].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
 // 仅网关内部使用：解密出明文 API Key

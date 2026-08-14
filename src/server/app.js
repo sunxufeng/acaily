@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname } from 'node:path';
 import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds, setUnionId, getOrgDefault, setOrgDefault } from '../config/userConfigStore.js';
+import { recordLogin, touchLogin } from '../config/userDirectoryStore.js';
 import { createSession, appendMessage, getHistory, listSessions } from '../config/conversationStore.js';
 import { Retriever } from '../rag/retriever.js';
 import { EmbeddingService } from '../rag/embeddings.js';
@@ -429,12 +430,14 @@ const STATIC_TYPES = { '.html':'text/html; charset=utf-8', '.js':'text/javascrip
 function requireSessionHtml(req, res) {
   const s = parseSession(req);
   if (!s) { res.writeHead(302, { location: '/login' }); res.end(); return null; }
+  touchLogin(s.openId, { name: s.name, avatar: s.avatar, email: s.email }); // 回填已登录但未留痕的活跃用户
   return s;
 }
 // API：未登录 → 401；返回会话或 null
 function requireSessionApi(req, res) {
   const s = parseSession(req);
   if (!s) { sendJson(res, 401, { error: '未登录，请先登录' }); return null; }
+  touchLogin(s.openId, { name: s.name, avatar: s.avatar, email: s.email }); // 回填已登录但未留痕的活跃用户
   return s;
 }
 // API：需管理员
@@ -500,6 +503,8 @@ const server = createServer(async (req, res) => {
         const info = await fetchFeishuUserInfo(tok.access_token);
         const openId = info.open_id || tok.open_id;
         const role = ensureAdmin(openId) ? 'admin' : 'user';
+        // 记录到用户目录：即便尚未配置模型，管理员也能在用户列表看到该登录用户
+        recordLogin(openId, { name: info.name || '', avatar: info.avatar_url || '', email: info.email || '' });
         setSessionCookie(res, {
           openId,
           name: info.name || '',
