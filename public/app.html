@@ -49,19 +49,26 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r=".7" fill="currentColor"/><circle cx="3.5" cy="12" r=".7" fill="currentColor"/><circle cx="3.5" cy="18" r=".7" fill="currentColor"/></svg></span>
         <span class="lbl">审计日志</span>
       </a>
-      <a class="nav-item admin-only" href="/admin" data-view="automation" data-tip="自动化任务">
-        <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
-        <span class="lbl">自动化任务</span>
-      </a>
       <a class="nav-item admin-only" href="/admin" data-view="stats" data-tip="使用统计">
         <span class="ic"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/><line x1="3" y1="20" x2="21" y2="20"/></svg></span>
         <span class="lbl">使用统计</span>
       </a>
-      <a class="nav-item admin-only" href="/admin" data-view="agents" data-tip="智能体配置">
+      <a class="nav-item admin-only" href="/admin" data-view="permissions" data-tip="权限配置">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg></span>
+        <span class="lbl">权限配置</span>
+      </a>
+
+      <!-- 受权限菜单（自动化 / 智能体配置 / Provider 池）：管理员恒见；普通用户仅在被授权后显示 -->
+      <div class="nav-group nav-group-perm" id="navGroupPerm" style="display:none;">已授权</div>
+      <a class="nav-item perm-menu" href="/admin" data-view="automation" data-tip="自动化任务">
+        <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
+        <span class="lbl">自动化任务</span>
+      </a>
+      <a class="nav-item perm-menu" href="/admin" data-view="agents" data-tip="智能体配置">
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 013 3v1a3 3 0 010 6v1a3 3 0 11-6 0v-1a3 3 0 010-6V5a3 3 0 013-3z"/><circle cx="12" cy="12" r="9"/></svg></span>
         <span class="lbl">智能体配置</span>
       </a>
-      <a class="nav-item admin-only" href="/admin" data-view="providers" data-tip="Provider 池">
+      <a class="nav-item perm-menu" href="/admin" data-view="providers" data-tip="Provider 池">
         <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></span>
         <span class="lbl">Provider 池</span>
       </a>
@@ -338,6 +345,42 @@
           <div class="table-wrap" style="border:none;box-shadow:none;">
             <table><thead><tr><th>用户</th><th>Provider</th><th>Model</th><th>机器人</th><th>Key</th><th>更新时间</th><th>操作</th></tr></thead>
             <tbody id="usersBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图：成员编辑（admin，框架内页面，非弹窗） -->
+      <section class="view" id="view-user-edit">
+        <div class="card">
+          <div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn ghost sm" onclick="switchView('users')">← 返回</button>
+            <h2 id="userEditTitle" style="margin:0;flex:1;">编辑成员</h2>
+          </div>
+          <div id="userEditBody"></div>
+        </div>
+      </section>
+
+      <!-- 视图：成员详情（admin，只读查询，非弹窗） -->
+      <section class="view" id="view-user-view">
+        <div class="card">
+          <div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn ghost sm" onclick="switchView('users')">← 返回</button>
+            <h2 id="userViewTitle" style="margin:0;flex:1;">成员详情</h2>
+          </div>
+          <div id="userViewBody"></div>
+        </div>
+      </section>
+
+      <!-- 视图：权限配置（admin） -->
+      <section class="view" id="view-permissions">
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card-h" style="padding:18px 18px 0;margin:0;">
+            <h2>权限配置</h2><span class="desc">为普通用户授权可访问的菜单。基础菜单（对话 / 我的配置 / 关于）默认拥有且不可取消；管理员始终拥有全部菜单。</span>
+          </div>
+          <div id="permBase" class="perm-base"></div>
+          <div class="table-wrap" style="border:none;box-shadow:none;">
+            <table><thead><tr><th>用户</th><th>open_id</th><th id="permCols"></th><th>操作</th></tr></thead>
+            <tbody id="permBody"><tr><td colspan="4" class="empty">加载中…</td></tr></tbody></table>
           </div>
         </div>
       </section>
@@ -718,8 +761,8 @@ async function api(method,path,body,opts){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','config','about','dash','users','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit']);
-const ADMIN_ONLY=new Set(['dash','users','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit']);
+const ALL_VIEWS=new Set(['chat','config','about','dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit','permissions']);
+const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','push','audit','automation','automation-edit','stats','agents','providers','agent-edit','provider-edit','permissions']);
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   config:['我的配置','为你的飞书账号配置专属大模型'],
@@ -734,10 +777,37 @@ const VIEW_TITLES={
   'agent-edit':['智能体编辑','在框架内维护智能体（多 Tab 编辑 Markdown 人设 / 导入 .md 文件）'],
   providers:['Provider 池','管理员维护的可复用 Provider/Model 组合，智能体和用户都可从这里选择'],
   'provider-edit':['编辑 Provider','在框架内维护 Provider（类型 / Base URL / 模型列表 / API Key），保存后点「返回」回到清单'],
+  permissions:['权限配置','为普通用户授权可访问的菜单（对话/我的配置默认拥有）'],
 };
+// 当前登录用户被授权的菜单集合（来自 /api/me.menus；管理员为全部）
+let CURRENT_MENUS=null;
+// 根据授权结果，控制「受权限菜单」导航项的显隐（自动化/智能体配置）
+function applyMenuPermissions(menus){
+  CURRENT_MENUS=menus||[];
+  const g=$('navGroupPerm');
+  if(document.body.classList.contains('is-admin')){
+    // 管理员恒见「已授权」分组及其全部受权限菜单
+    if(g) g.style.display='';
+    document.querySelectorAll('.nav-item.perm-menu').forEach(it=>it.classList.add('granted'));
+    return;
+  }
+  let any=false;
+  document.querySelectorAll('.nav-item.perm-menu').forEach(it=>{
+    const v=it.getAttribute('data-view');
+    if(CURRENT_MENUS.includes(v)){ it.classList.add('granted'); any=true; }
+    else it.classList.remove('granted');
+  });
+  // 非管理员：仅当至少一项被授权时才显示「已授权」分组标题
+  if(g) g.style.display=any?'':'none';
+}
+
 function switchView(v,navItem){
   if(!ALL_VIEWS.has(v))return false;
-  if(ADMIN_ONLY.has(v)&&!document.body.classList.contains('is-admin'))return false;
+  if(ADMIN_ONLY.has(v)&&!document.body.classList.contains('is-admin')){
+    // 非管理员：Provider 池 / 自动化 / 智能体配置若已被授权则放行，其余管理菜单仍拒绝
+    if(['providers','automation','agents'].includes(v) && (CURRENT_MENUS||[]).includes(v)){/* granted */}
+    else return false;
+  }
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
   const view=$('view-'+v);
@@ -855,6 +925,12 @@ async function loadConfig(){
     $('capMultimodal').checked=c.multimodal===true;
     $('capStream').checked=c.stream!==false;
     syncBotName();
+    if(res.data.inherited){
+      // 个人尚未配置、但管理员下发过组织默认 → 已回填默认值，提示补全 API Key
+      showCfg('📋 已应用组织默认配置（'+(c.provider||'-')+' / '+(c.model||'-')+'）。请补全 API Key 后点击「保存配置」即可启用；不保存也能直接对话（仍沿用组织默认）。', true);
+    }
+  } else if(res.status===404){
+    showCfg('', true); // 无个人配置、也无组织默认：保持空表单
   }
   // 是否已存 Key（明文永不返回）
   HAS_API_KEY = !!(res.data && res.data.hasApiKey);
@@ -1265,25 +1341,36 @@ async function createNewChatSession(){
 // ====================== 智能体管理（admin） ======================
 let currentAgentCache={};
 async function loadAgents(){
-  const {status,data}=await api('GET','/api/admin/agents');
+  const isAdmin=document.body.classList.contains('is-admin');
+  // 普通用户走 /api/agents（已按 owner 过滤：自己的 + 组织共享）；管理员走 /api/admin/agents
+  const {status,data}=await api('GET', isAdmin?'/api/admin/agents':'/api/agents');
   const body=$('agentBody'); if(!body)return;
   if(status!==200){body.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>';return;}
   const list=data.agents||[];
   currentAgentCache={}; list.forEach(a=>currentAgentCache[a.id]=a);
-  if(!list.length){body.innerHTML='<tr><td colspan="6" class="empty">暂无智能体，点击右上角「新建智能体」</td></tr>';return;}
-  body.innerHTML=list.map(a=>`<tr>
-    <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
-    <td><b>${esc(a.name)}</b></td>
-    <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
-    <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
-    <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
-    <td class="ops">
+  const nb=$('agentNewBtn'); if(nb) nb.style.display=isAdmin?'':'none';
+  if(!list.length){body.innerHTML=`<tr><td colspan="6" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体（你尚未创建，可见组织共享智能体）'}</td></tr>`;return;}
+  body.innerHTML=list.map(a=>{
+    const ownerTag=(a.owner)
+      ? '<span class="tag">我的</span>'
+      : (isAdmin?'<span class="tag neutral">组织</span>':'');
+    const ops=isAdmin?`
       <button class="btn ghost sm" data-chat="${esc(a.id)}" title="用该智能体开启新对话">开启对话</button>
       <button class="btn ghost sm" data-edit="${esc(a.id)}">编辑</button>
       <button class="btn ghost sm" data-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
       <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>
-    </td>
-  </tr>`).join('');
+    `:`
+      <button class="btn ghost sm" data-view-agent="${esc(a.id)}" title="查看智能体（只读）">查看</button>
+    `;
+    return `<tr>
+    <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
+    <td><b>${esc(a.name)}</b> ${ownerTag}</td>
+    <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
+    <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
+    <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
+    <td class="ops">${ops}</td>
+  </tr>`;
+  }).join('');
 }
 function mdEditBlock(fid, value, rows, placeholder){
   return `<div class="md-edit" data-md="${fid}">
@@ -1404,9 +1491,9 @@ function agentEditHTML(a,isNew){
   </div>`;
 }
 let agentEditingId=null;
-function openAgentEdit(id){
+function openAgentEdit(id, readOnly){
   agentEditingId=id||null;
-  $('agentEditTitle').textContent=id?'编辑智能体':'新建智能体';
+  $('agentEditTitle').textContent=(id?(readOnly?'查看智能体':'编辑智能体'):'新建智能体');
   $('agentEditBody').innerHTML=agentEditHTML(id?currentAgentCache[id]:null, !id);
   // 注入常见大模型预置到「类型」下拉；若已选池条目则按池的 (type, baseUrl) 二次定位。
   const aProv=$('aProvider');
@@ -1419,6 +1506,15 @@ function openAgentEdit(id){
   setupMdToggles($('agentEditBody'));
   setupMdImport($('agentEditBody'));
   setupAgentTabs($('agentEditBody'));
+  // 只读模式（普通用户查看）：禁用所有输入 + 隐藏保存按钮
+  const saveBtn=$('agentEditSave');
+  if(readOnly){
+    const scope=$('agentEditBody');
+    scope.querySelectorAll('input,textarea,select,button').forEach(el=>{ if(el!==saveBtn) el.disabled=true; });
+    saveBtn.style.display='none';
+  }else{
+    saveBtn.style.display='';
+  }
   switchView('agent-edit');
 }
 function setupAgentTabs(scope){
@@ -1602,6 +1698,7 @@ $('agentBody').addEventListener('click',e=>{
   const t=e.target.closest('button');if(!t)return;
   if(t.dataset.chat){startAgentChat(t.dataset.chat);}
   else if(t.dataset.edit){openAgentEdit(t.dataset.edit);}
+  else if(t.dataset.viewAgent){openAgentEdit(t.dataset.viewAgent, true);} // 普通用户只读查看
   else if(t.dataset.bind){openBindFeishuModal(t.dataset.bind);}
   else if(t.dataset.del){
     const id=t.dataset.del;
@@ -1632,16 +1729,21 @@ async function startAgentChat(agentId){
 let currentProvCache={};
 let currentProvCacheList=[]; // 复用下拉顺序敏感
 let currentMyCfg=null;       // /api/config/me
+let PROV_READONLY=false; // 普通用户（被授权但非管理员）查看 Provider 池时为只读，不显示「新建」
 async function loadProviders(){
+  const isAdmin=document.body.classList.contains('is-admin');
   const body=$('provBody'); if(!body)return;
+  PROV_READONLY=!isAdmin;
   // 拉取个人配置（best-effort，先于列表以便「复用我的配置」下拉可用）
   try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
-  const {status,data}=await api('GET','/api/admin/providers');
+  // 普通用户走 /api/providers（不含 apiKey 明文）；管理员走 /api/admin/providers
+  const {status,data}=await api('GET', isAdmin?'/api/admin/providers':'/api/providers');
   if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
   const list=data.providers||[];
   currentProvCache={}; list.forEach(p=>currentProvCache[p.id]=p);
   currentProvCacheList=list;
-  if(!list.length){body.innerHTML='<tr><td colspan="8" class="empty">暂无 Provider，点击右上角「新建 Provider」</td></tr>';return;}
+  const nb=$('provNewBtn'); if(nb) nb.style.display=isAdmin?'':'none';
+  if(!list.length){body.innerHTML=`<tr><td colspan="8" class="empty">${isAdmin?'暂无 Provider，点击右上角「新建 Provider」':'暂无 Provider'}</td></tr>`;return;}
   body.innerHTML=list.map(p=>`<tr>
     <td style="text-align:center;">${p.hasKey?'🔑':'🔓'}</td>
     <td><b>${esc(p.name)}</b></td>
@@ -1650,10 +1752,10 @@ async function loadProviders(){
     <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc((p.baseUrl||'').slice(0,40))}</td>
     <td>${p.hasKey?'<span class="tag ok">已配置</span>':'<span class="tag warn">未配置</span>'}</td>
     <td class="muted">${esc(fmtLocal(p.updatedAt,false).slice(0,10))}</td>
-    <td class="ops">
+    <td class="ops">${isAdmin?`
       <button class="btn ghost sm" data-pedit="${esc(p.id)}">编辑</button>
       <button class="btn ghost sm danger" data-pdel="${esc(p.id)}">删除</button>
-    </td>
+    `:'<span class="muted">只读</span>'}</td>
   </tr>`).join('');
 }
 function provFormHTML(p){
@@ -1886,15 +1988,16 @@ async function loadUsers(){
   if(!users.length){$('usersBody').innerHTML='<tr><td colspan="7" class="empty">暂无用户配置</td></tr>';return;}
   $('usersBody').innerHTML=users.map(u=>{
     const isAdmin=ADMINS.includes(u.openId);
+    const nameLink=`<a href="javascript:void(0)" class="ulink" title="查看成员详情" onclick="openUserPage('${esc(u.openId)}',true)">${esc(u.displayName||'(未命名)')}</a>`;
     return `<tr>
-      <td><div class="nm">${esc(u.displayName||'(未命名)')}</div><div class="oid">${esc(u.openId)}</div></td>
+      <td><div class="nm">${nameLink}</div><div class="oid">${esc(u.openId)}</div></td>
       <td>${esc(u.provider||'-')}</td>
       <td>${esc(u.model||'-')}</td>
       <td>${u.botName?`<span class="pill brand">${esc(u.botName)}</span>`:'-'}</td>
       <td>${u.hasApiKey?'<span class="pill ok">已填</span>':'<span class="pill">未填</span>'}</td>
       <td class="muted">${esc(fmtLocal(u.updatedAt,true))}</td>
       <td><div class="actions">
-        <button class="btn sm" onclick="editUser('${esc(u.openId)}')">编辑</button>
+        <button class="btn sm" onclick="openUserPage('${esc(u.openId)}',false)">编辑</button>
         <button class="btn sm danger" onclick="deleteUser('${esc(u.openId)}')">删除</button>
       </div></td></tr>`;
   }).join('');
@@ -2008,6 +2111,178 @@ document.addEventListener('click', e=>{
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') _hideTruncPop(); });
 window.addEventListener('resize', ()=>{ _hideTruncPop(); _refreshTruncStates(document); });
 window.addEventListener('scroll', _hideTruncPop, true);
+
+// ====================== 成员详情 / 编辑（页面跳转，非弹窗） ======================
+// 列表页「用户名」点击 → 只读查询页（user-view）；「编辑」按钮 → 编辑页（user-edit）。
+// 编辑页含三区块：Provider 配置 / 自动化设置 / 智能体配置；只读页同三区块但不可改。
+let CURRENT_USER={openId:null,readOnly:false,unionId:null,displayName:''};
+let CURRENT_USER_CFG={}, CURRENT_USER_HASKEY=false, CURRENT_USER_AGENTS=[], CURRENT_AUTO_MAP={};
+
+window.openUserPage=async function(openId, readOnly){
+  CURRENT_USER={openId, readOnly, unionId:null, displayName:''};
+  const titleEl=readOnly?$('userViewTitle'):$('userEditTitle');
+  const bodyEl=readOnly?$('userViewBody'):$('userEditBody');
+  titleEl.textContent=(readOnly?'成员详情：':'编辑成员：')+openId;
+  bodyEl.innerHTML='<div class="muted">加载中…</div>';
+  switchView(readOnly?'user-view':'user-edit');
+  const [cfgRes, autoRes, agRes]=await Promise.all([
+    api('GET','/api/admin/config/'+encodeURIComponent(openId)),
+    api('GET','/api/admin/automations'),
+    api('GET','/api/admin/agents?owner='+encodeURIComponent(openId)),
+  ]);
+  const cfg=(cfgRes.status===200&&cfgRes.data.config)?cfgRes.data.config:{};
+  const hasApiKey=!!(cfgRes.data&&cfgRes.data.hasApiKey);
+  const autos=(autoRes.status===200&&autoRes.data.automations)?autoRes.data.automations:[];
+  const agentsRaw=(agRes.status===200&&agRes.data.agents)?agRes.data.agents:[];
+  const agents=agentsRaw.filter(a=>a.owner===openId); // 仅该用户归属的智能体
+  CURRENT_USER.unionId=cfg.unionId||null;
+  CURRENT_USER.displayName=cfg.displayName||openId;
+  CURRENT_USER_CFG=cfg; CURRENT_USER_HASKEY=hasApiKey; CURRENT_USER_AGENTS=agents;
+  CURRENT_AUTO_MAP={}; autos.forEach(a=>{CURRENT_AUTO_MAP[a.id]=a;});
+  renderUserPage(bodyEl, {openId, cfg, hasApiKey, autos, agents, readOnly});
+};
+
+function renderUserPage(bodyEl, data){
+  const {openId, cfg, hasApiKey, autos, agents, readOnly}=data;
+  const ro=readOnly;
+  let html='';
+  html+=`<div class="sub-card"><div class="sub-h">Provider 配置 ${ro?'<span class="muted">(只读)</span>':'（可编辑）'}</div>`;
+  html+= ro? providerKvHTML(cfg,hasApiKey) : providerFormHTML(cfg);
+  html+=`</div>`;
+  html+=`<div class="sub-card"><div class="sub-h">自动化设置 ${ro?'<span class="muted">(只读)</span>':'（勾选 = 作为该自动化收件人）'}</div>`;
+  html+= automationHTML(openId, autos, ro, CURRENT_USER.unionId);
+  html+=`</div>`;
+  html+=`<div class="sub-card"><div class="sub-h">智能体配置 ${ro?'<span class="muted">(只读)</span>':''}</div>`;
+  html+= agentsHTML(agents, ro);
+  html+=`</div>`;
+  bodyEl.innerHTML=html;
+  if(!ro){
+    const sp=$('ueSaveProvider'); if(sp) sp.onclick=()=>saveUserProvider(openId);
+    const sa=$('ueSaveAuto'); if(sa) sa.onclick=()=>saveUserAutomation();
+  }
+}
+
+function providerKvHTML(c, hasApiKey){
+  const rows=[['显示名称',c.displayName||'-'],['Provider',c.provider||'-'],['Base URL',c.baseUrl||'-'],['默认模型',c.model||'-'],['模型列表',(Array.isArray(c.models)&&c.models.length)?c.models.join(', '):'-'],['助手名称',c.botName||'-'],['自定义指令',c.systemPrompt||'-'],['API Key',hasApiKey?'已配置':'未配置']];
+  return '<table class="kv-table"><tbody>'+rows.map(([k,v])=>`<tr><th>${esc(k)}</th><td>${esc(String(v))}</td></tr>`).join('')+'</tbody></table>';
+}
+
+function providerFormHTML(c){
+  const pc=providerTypeOptionsHTML(c.provider||'', c.baseUrl||'');
+  const modelsText=Array.isArray(c.models)?c.models.join('\n'):'';
+  return `
+    <div class="row"><div style="flex:1"><label>显示名称</label><input id="ue_displayName" value="${esc(c.displayName||'')}"/></div>
+    <div style="flex:1"><label>Provider</label><select id="ue_provider">${pc}</select></div></div>
+    <label>Base URL</label><input id="ue_baseUrl" value="${esc(c.baseUrl||'')}"/>
+    <label>API Key（留空=不修改；勾选可清除已存 Key）</label>
+    <div class="row" style="gap:8px;align-items:center"><input id="ue_apiKey" type="password" placeholder="sk-..." autocomplete="off" style="flex:1"/>
+    <label style="font-weight:400"><input type="checkbox" id="ue_clearKey" style="width:auto;margin-right:6px"/>清除已存 Key</label></div>
+    <div class="row" style="align-items:flex-start"><div style="flex:1"><label>模型列表（每行一个）</label><textarea id="ue_models" rows="3">${esc(modelsText)}</textarea></div>
+    <div style="flex:1"><label>默认模型</label><input id="ue_model" value="${esc(c.model||'')}"/></div></div>
+    <label>助手名称 (Bot Name)</label><input id="ue_botName" value="${esc(c.botName||'')}"/>
+    <label>自定义指令 (System Prompt)</label><textarea id="ue_systemPrompt" maxlength="4000">${esc(c.systemPrompt||'')}</textarea>
+    <div id="ueProviderStatus" class="status"></div>
+    <button class="btn" id="ueSaveProvider">保存 Provider 配置</button>`;
+}
+
+async function saveUserProvider(openId){
+  const body={
+    displayName:$('ue_displayName').value.trim(),
+    provider:$('ue_provider').value,
+    baseUrl:$('ue_baseUrl').value.trim(),
+    model:$('ue_model').value.trim(),
+    models:$('ue_models').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    botName:$('ue_botName').value.trim(),
+    systemPrompt:$('ue_systemPrompt').value,
+  };
+  if(!body.models.length)delete body.models;
+  const key=$('ue_apiKey').value; if(key)body.apiKey=key;
+  if($('ue_clearKey').checked)body.clearApiKey=true;
+  const st=$('ueProviderStatus');
+  try{
+    const r=await api('PUT','/api/admin/config/'+encodeURIComponent(openId),body);
+    if(r.status===200){st.className='status ok';st.textContent='✅ 已保存';toast('已保存 Provider 配置');loadUsers();}
+    else{st.className='status err';st.textContent='❌ '+(r.data&&r.data.error||r.status);}
+  }catch(e){st.className='status err';st.textContent='❌ '+e.message;}
+}
+
+function automationHTML(openId, autos, ro, unionId){
+  if(!autos.length) return '<div class="muted">暂无自动化任务</div>';
+  const items=autos.map(a=>{
+    const recs=a.pushRecipients||[];
+    const isRec=recs.some(r=>r.openId===openId||(unionId&&r.unionId===unionId));
+    const cb=ro?'':`<label class="auto-cb"><input type="checkbox" class="ue-auto-cb" data-aid="${esc(a.id)}" ${isRec?'checked':''}/> 作为收件人</label>`;
+    return `<div class="auto-item">
+      ${cb}
+      <div class="auto-meta"><span class="auto-name">${esc(a.name||a.id)}</span> <span class="muted">${esc(describeCron(a.cron))}</span> ${a.enabled===false?'<span class="pill">已停用</span>':'<span class="pill ok">启用</span>'}</div>
+    </div>`;
+  }).join('');
+  return `<div class="auto-list">${items}</div>`+(ro?'':`<button class="btn" id="ueSaveAuto" style="margin-top:12px;">保存自动化设置</button>
+    <div class="hint" style="margin-top:6px;">勾选后该用户会在对应自动化执行时收到飞书推送；取消则不再接收。</div>`);
+}
+
+async function saveUserAutomation(){
+  const {openId, unionId, displayName}=CURRENT_USER;
+  const cbs=[...document.querySelectorAll('.ue-auto-cb')];
+  let okCount=0, fail=0;
+  for(const cb of cbs){
+    const aid=cb.dataset.aid;
+    const a=CURRENT_AUTO_MAP[aid];
+    if(!a)continue;
+    const recs=a.pushRecipients||[];
+    const exists=recs.some(r=>r.openId===openId||(unionId&&r.unionId===unionId));
+    const want=cb.checked;
+    let newRecs;
+    if(want&&!exists) newRecs=[...recs,{openId, unionId:unionId||'', name:displayName||openId}];
+    else if(!want&&exists) newRecs=recs.filter(r=>!(r.openId===openId||(unionId&&r.unionId===unionId)));
+    else continue;
+    const r=await api('PATCH','/api/admin/automations/'+encodeURIComponent(aid),{pushRecipients:newRecs});
+    if(r.status===200)okCount++; else fail++;
+  }
+  if(fail) toast('部分保存失败('+fail+')'); else toast('已保存 '+okCount+' 项自动化设置');
+  const autoRes=await api('GET','/api/admin/automations');
+  const autos=(autoRes.status===200&&autoRes.data.automations)?autoRes.data.automations:[];
+  CURRENT_AUTO_MAP={}; autos.forEach(a=>{CURRENT_AUTO_MAP[a.id]=a;});
+  renderUserPage($('userEditBody'), {openId, cfg:CURRENT_USER_CFG, hasApiKey:CURRENT_USER_HASKEY, autos, agents:CURRENT_USER_AGENTS, readOnly:false});
+}
+
+function agentsHTML(agents, ro){
+  if(!agents.length) return '<div class="muted">该用户暂无专属智能体。组织共享智能体对所有登录用户生效，无需在此列出。</div>';
+  const items=agents.map(a=>`<div class="agent-item"><span class="agent-name">${esc((a.emoji||'')+' '+(a.name||a.id))}</span><span class="muted">${esc(a.description||'')}</span></div>`).join('');
+  return `<div class="agent-list">${items}</div><div class="hint" style="margin-top:8px;">智能体的创建与编辑请在左侧「智能体配置」菜单完成；此处仅展示该用户归属（owner）的智能体。</div>`;
+}
+
+// ====================== 权限配置（菜单授权） ======================
+async function loadPermissions(){
+  const res=await api('GET','/api/admin/permissions');
+  if(res.status!==200){$('permBody').innerHTML='<tr><td colspan="4" class="empty">加载失败</td></tr>';return;}
+  const {grantable, baseDisplayMenus, users, adminOpenIds}=res.data;
+  $('permBase').innerHTML = (baseDisplayMenus||[]).map(m=>`<span class="tag neutral">${esc(m.label)}（默认开启）</span>`).join('');
+  $('permCols').innerHTML=grantable.map(g=>`<th>${esc(g.label)}</th>`).join('');
+  const colCount=3+grantable.length;
+  if(!users.length){$('permBody').innerHTML=`<tr><td colspan="${colCount}" class="empty">暂无用户</td></tr>`;return;}
+  $('permBody').innerHTML=users.map(u=>{
+    const admin=adminOpenIds.includes(u.openId);
+    const cells=grantable.map(g=>{
+      const checked=u.menus.includes(g.key);
+      const cb=admin?'<span class="muted">—</span>':`<input type="checkbox" class="perm-cb" data-uid="${esc(u.openId)}" data-key="${esc(g.key)}" ${checked?'checked':''}/>`;
+      return `<td>${cb}</td>`;
+    }).join('');
+    return `<tr>
+      <td>${esc(u.displayName||'(未命名)')}</td>
+      <td class="muted" style="font-size:11px;">${esc(u.openId)}</td>
+      ${cells}
+      <td><button class="btn sm" onclick="savePermission('${esc(u.openId)}')" ${admin?'disabled':''}>保存</button></td>
+    </tr>`;
+  }).join('');
+}
+async function savePermission(openId){
+  const cbs=[...document.querySelectorAll('.perm-cb')].filter(cb=>cb.dataset.uid===openId && cb.checked);
+  const menus=cbs.map(cb=>cb.dataset.key);
+  const res=await api('PUT','/api/admin/permissions/'+encodeURIComponent(openId),{menus});
+  if(res.status===200)toast('已保存「'+(openId||'')+'」的菜单授权');
+  else toast('保存失败：'+(res.data&&res.data.error||res.status));
+}
 
 window.editUser=async function(openId){
   CURRENT=openId;
@@ -2152,7 +2427,7 @@ function autoRunsHTML(a){
   </div>`;
   return rows+pager;
 }
-function autoRow(a){
+function autoRow(a, readOnly){
   const desc=describeCron(a.cron)+(a.idleOnly?' · 闲时执行':'')+` · 最长 ${Number.isFinite(a.maxSteps)?a.maxSteps:10} 步`;
   const lastRun=a.lastRunAt?`<span class="muted">最近 ${esc(fmtLocal(a.lastRunAt,false))}</span> ${statusPill(a.lastRunStatus||'')}`:'<span class="muted">尚未运行</span>';
   const recName=(uid)=>{
@@ -2161,9 +2436,20 @@ function autoRow(a){
     const u=AUTO_USERS.find(x=>x.openId===uid);
     return u?`${esc(u.displayName||uid)}`:esc(uid);
   };
-  const pushToText=(a.pushTo||[]).map(uid=>recName(uid)).join('、 ')||'<span class="muted">未设置</span>';
-  const agentText=(a.agentId&&AUTO_AGENTS.find(x=>x.id===a.agentId))?esc((AUTO_AGENTS.find(x=>x.id===a.agentId).emoji||'🤖')+' '+(AUTO_AGENTS.find(x=>x.id===a.agentId).name||a.agentId)):'<span class="muted">（未关联，用收件人模型）</span>';
+  const pushToText=(a.pushRecipients&&a.pushRecipients.length)?a.pushRecipients.map(r=>esc(r.name||r.unionId||r.openId)).join('、 '):((a.pushTo||[]).map(uid=>recName(uid)).join('、 ')||'<span class="muted">未设置</span>');
+  const agentText=(a.agentId&&AUTO_AGENTS.find(x=>x.id===a.agentId))?esc((AUTO_AGENTS.find(x=>x.id===a.agentId).emoji||'🤖')+' '+(AUTO_AGENTS.find(x=>x.id===a.agentId).name||a.agentId)):(a.agentName?esc(a.agentName):'<span class="muted">（未关联，用收件人模型）</span>');
   const enabled=a.enabled!==false;
+  const actions = readOnly ? '' : `
+    <div class="auto-actions">
+      <label class="switch" title="${enabled?'点击关闭':'点击启用'}">
+        <input type="checkbox" ${enabled?'checked':''} data-action="toggle"/>
+        <span class="slider"></span>
+      </label>
+      <button class="btn sm ghost" data-action="refresh" title="刷新此任务状态、运行记录、最近一次结果">↻ 刷新</button>
+      <button class="btn sm" data-action="run">运行</button>
+      <button class="btn sm ghost" data-action="edit">编辑</button>
+      <button class="btn sm danger" data-action="del">删除</button>
+    </div>`;
   return `
   <div class="auto-item" data-id="${esc(a.id)}">
     <div class="auto-main">
@@ -2176,23 +2462,15 @@ function autoRow(a){
       ${lastRun}
       <div class="runs">${autoRunsHTML(a)}</div>
     </div>
-    <div class="auto-actions">
-      <label class="switch" title="${enabled?'点击关闭':'点击启用'}">
-        <input type="checkbox" ${enabled?'checked':''} data-action="toggle"/>
-        <span class="slider"></span>
-      </label>
-      <button class="btn sm ghost" data-action="refresh" title="刷新此任务状态、运行记录、最近一次结果">↻ 刷新</button>
-      <button class="btn sm" data-action="run">运行</button>
-      <button class="btn sm ghost" data-action="edit">编辑</button>
-      <button class="btn sm danger" data-action="del">删除</button>
-    </div>
+    ${actions}
   </div>`;
 }
 
 function renderAutoList(){
-  const list=AUTO_LIST;
-  if(!list.length){$('autoList').innerHTML='<div class="empty">暂无自动化任务。点击右上角「+ 新建自动化任务」创建第一条定时任务。</div>';return;}
-  $('autoList').innerHTML=list.map(autoRow).join('');
+  const list=AUTO_LIST||[];
+  if(!list.length){$('autoList').innerHTML=`<div class="empty">${AUTO_READONLY?'你暂不是任何自动化任务的收件人。':'暂无自动化任务。点击右上角「+ 新建自动化任务」创建第一条定时任务。'}</div>`;return;}
+  $('autoList').innerHTML=list.map(a=>autoRow(a, AUTO_READONLY)).join('');
+  if(AUTO_READONLY)return; // 只读：不绑定任何编辑/运行/删除操作
   $('autoList').querySelectorAll('.auto-item').forEach(el=>{
     const id=el.dataset.id;
     el.querySelector('[data-action="toggle"]').onchange=(e)=>toggleAuto(id,e.target.checked);
@@ -2205,17 +2483,28 @@ function renderAutoList(){
   });
 }
 
+let AUTO_READONLY=false; // 普通用户（被授权但非管理员）查看自动化任务时为只读，且不显示「新建」
 async function loadAutomation(){
-  const [u,res,ag]=await Promise.all([
-    api('GET','/api/admin/users'),
-    api('GET','/api/admin/automations'),
-    api('GET','/api/admin/agents').catch(()=>({data:{agents:[]}})),
-  ]);
-  if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
-  AUTO_USERS=(u.data&&u.data.users)||[];
-  AUTO_AGENTS=(ag.data&&ag.data.agents)||[];
-  const list=res.data.automations||[];
-  AUTO_LIST=list;
+  const isAdmin=document.body.classList.contains('is-admin');
+  if(isAdmin){
+    const [u,res,ag]=await Promise.all([
+      api('GET','/api/admin/users'),
+      api('GET','/api/admin/automations'),
+      api('GET','/api/admin/agents').catch(()=>({data:{agents:[]}})),
+    ]);
+    if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
+    AUTO_USERS=(u.data&&u.data.users)||[];
+    AUTO_AGENTS=(ag.data&&ag.data.agents)||[];
+    AUTO_LIST=res.data.automations||[];
+    AUTO_READONLY=false;
+  }else{
+    // 普通用户：仅可见「以自己为收件人」的自动化任务（只读），不调用管理员接口避免 403
+    const res=await api('GET','/api/my/automations');
+    if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
+    AUTO_LIST=res.data.automations||[];
+    AUTO_READONLY=true;
+  }
+  const nb=$('autoNewBtn'); if(nb) nb.style.display=AUTO_READONLY?'none':'';
   renderAutoList();
 }
 
@@ -2583,6 +2872,7 @@ $('statsRange').onchange=()=>loadStats();
   $('sbRole').textContent=d.role==='admin'?'管理员':'成员';
   if(d.avatar)$('sbAvatar').src=d.avatar;
   if(d.role==='admin')document.body.classList.add('is-admin');
+  if(d.menus) applyMenuPermissions(d.menus);
   $('sbLogout').onclick=()=>location.href='/logout';
   // 默认显示：URL 决定默认 view
   switchView(DEFAULT_VIEW);
@@ -2614,6 +2904,12 @@ $('statsRange').onchange=()=>loadStats();
     await loadStats();
     await loadAgents();
     await loadProviders();
+    await loadPermissions();
+  }else{
+    // 被授权「Provider 池 / 自动化任务 / 智能体配置」菜单的普通用户：加载对应视图（只读 / 受限），避免点菜单空白
+    if((CURRENT_MENUS||[]).includes('providers')) await loadProviders();
+    if((CURRENT_MENUS||[]).includes('automation')) await loadAutomation();
+    if((CURRENT_MENUS||[]).includes('agents')) await loadAgents();
   }
   // 智能体 select 变化 → 清空当前会话 + 重载该智能体的会话列表
   $('agentSelect').onchange=()=>{

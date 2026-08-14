@@ -1,4 +1,4 @@
-import { getConfig, decryptApiKey } from '../config/userConfigStore.js';
+import { getConfig, decryptApiKey, getOrgDefault } from '../config/userConfigStore.js';
 import { getProvider, ProviderError } from '../providers/index.js';
 import { TokenBucket, RateLimitError } from './rateLimiter.js';
 import { track } from '../admin/stats.js';
@@ -18,14 +18,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 按 open_id 路由到用户自配模型：解析配置 → 信封解密 Key → 选适配器 → 限流 → 重试 → 降级
 export async function routeChat(openId, messages, opts = {}) {
-  const cfg = getConfig(openId);
+  let cfg = getConfig(openId);
   if (!cfg) {
-    throw new ProviderError(
-      '该飞书用户尚未配置模型（请在个人设置页配置 Provider / API Key / Model）',
-      { provider: 'gateway', status: 404 }
-    );
+    // 无个人配置 → 回退到组织默认模板（不含 API Key，仍需个人补全；仅当确有模板时才放行）
+    const org = getOrgDefault();
+    if (!org) {
+      throw new ProviderError(
+        '该飞书用户尚未配置模型（请在个人设置页配置 Provider / API Key / Model）',
+        { provider: 'gateway', status: 404 }
+      );
+    }
+    cfg = org;
   }
-  const apiKey = decryptApiKey(openId); // ollama 为 null
+  const apiKey = decryptApiKey(openId); // 个人无配置（继承组织默认）时为 null
   return doRoute({ cfg, apiKey, openId, displayName: cfg.displayName || '', messages, opts });
 }
 
@@ -158,6 +163,10 @@ export async function testInlineProvider(inlineCfg) {
 // 连通性测试：配置保存前/后一键验证（个人用户侧）
 export async function testConnection(openId, inlineCfg) {
   let cfg = getConfig(openId);
+  if (!cfg) {
+    const org = getOrgDefault();
+    if (org) cfg = org;
+  }
   if (inlineCfg && inlineCfg.provider) {
     const storedApiKey = decryptApiKey(openId);
     cfg = { ...(cfg || {}), ...inlineCfg };

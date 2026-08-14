@@ -33,20 +33,29 @@ function persist() {
   writeFileSync(STORE, JSON.stringify(cache, null, 2));
 }
 
-// 对外返回时剔除密文，仅暴露「是否已绑定 / 是否已配置模型」
+// 对外返回时剔除密文，仅暴露「是否已绑定 / 是否已配置模型 / owner」
 function strip(a) {
   if (!a) return a;
   const { feishuAppSecretEnc, apiKeyEnc, ...rest } = a;
   return {
     ...rest,
+    owner: a.owner || null,
     feishuAppBound: !!a.feishuAppId,
     hasApiKey: !!a.apiKeyEnc,
   };
 }
 
-export function listAgents() {
+// 列出智能体：
+//   - 不传 owner（管理员全量视图）：返回全部
+//   - 传 owner（登录用户视角）：返回「owner===该用户」+「owner 为空（组织共享）」两类，
+//     实现「每个用户只能看/用自己的智能体，组织共享智能体所有人可用」，管理员仍能看全部。
+export function listAgents(owner) {
   const db = load();
-  return Object.values(db.agents)
+  let arr = Object.values(db.agents);
+  if (owner) {
+    arr = arr.filter((a) => a.owner === owner || !a.owner);
+  }
+  return arr
     .map(strip)
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
@@ -66,6 +75,8 @@ export function saveAgent(input, id) {
   const db = load();
   const now = new Date().toISOString();
   const existing = (id && db.agents[id]) || {};
+  // owner：创建时可指定（管理员可为某用户建专属智能体，或留空 = 组织共享）；未提供则沿用既有 owner。
+  const owner = input.owner !== undefined ? (input.owner || null) : (existing.owner || null);
   const a = {
     id: existing.id || id || randomUUID(),
     name: clamp(input.name, 60) || '未命名智能体',
@@ -80,6 +91,8 @@ export function saveAgent(input, id) {
     baseUrl: input.baseUrl ? clamp(input.baseUrl, 400) : (existing.baseUrl || null),
     // 可选：引用 Provider 池条目（管理员维护的可复用 provider/model 组合）
     providerPoolId: input.providerPoolId !== undefined ? (input.providerPoolId || null) : (existing.providerPoolId || null),
+    // 归属用户（per-user 隔离）；为空 = 组织共享，所有登录用户可见可用
+    owner,
     // 飞书绑定信息保留（除非显式改）
     feishuAppId: input.feishuAppId !== undefined ? input.feishuAppId : existing.feishuAppId,
     feishuAppBound: existing.feishuAppBound || false,

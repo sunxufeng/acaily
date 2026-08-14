@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname } from 'node:path';
-import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds, setUnionId } from '../config/userConfigStore.js';
+import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds, setUnionId, getOrgDefault, setOrgDefault } from '../config/userConfigStore.js';
 import { createSession, appendMessage, getHistory, listSessions } from '../config/conversationStore.js';
 import { Retriever } from '../rag/retriever.js';
 import { EmbeddingService } from '../rag/embeddings.js';
@@ -41,6 +41,7 @@ import {
 import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } from '../automation/scheduler.js';
 import { initRunner } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
+import { getPermissions, setPermissions, resolveMenus, listPermissions, GRANTABLE_MENUS, BASE_MENUS, BASE_DISPLAY_MENUS } from '../config/permissionStore.js';
 import { createFeishuApp, enableBotCapability, validateFeishuCredentials } from '../feishu/appMgmt.js';
 import { listProviders, getProvider, saveProvider, deleteProvider, getProviderApiKey } from '../config/providerPoolStore.js';
 import { searchContacts, resolveContact, listAllContacts } from '../feishu/contacts.js';
@@ -556,14 +557,21 @@ const server = createServer(async (req, res) => {
     if (method === 'GET' && pathname === '/api/me') {
       const s = requireSessionApi(req, res);
       if (!s) return;
-      return sendJson(res, 200, { openId: s.openId, name: s.name, avatar: s.avatar, email: s.email, role: s.role });
+      return sendJson(res, 200, {
+        openId: s.openId,
+        name: s.name,
+        avatar: s.avatar,
+        email: s.email,
+        role: s.role,
+        menus: resolveMenus(s.openId, s.role),
+      });
     }
 
     // 可用模型清单（供浏览器插件「切换模型」下拉填充）
     if (method === 'GET' && pathname === '/api/models') {
       const s = requireSessionApi(req, res);
       if (!s) return;
-      const cfg = getConfig(s.openId);
+      const cfg = getConfig(s.openId) || getOrgDefault();
       if (!cfg) return sendJson(res, 404, { error: '尚未配置模型' });
       const list = Array.isArray(cfg.models) && cfg.models.length ? cfg.models : (cfg.model ? [cfg.model] : []);
       return sendJson(res, 200, { provider: cfg.provider, model: cfg.model, models: list });
@@ -573,7 +581,40 @@ const server = createServer(async (req, res) => {
     if (method === 'GET' && pathname === '/api/agents') {
       const s = requireSessionApi(req, res);
       if (!s) return;
-      return sendJson(res, 200, { agents: listAgents() });
+      // 管理员看全部；普通用户只看「自己的 + 组织共享（owner 为空）」
+      const agents = s.role === 'admin' ? listAgents() : listAgents(s.openId);
+      return sendJson(res, 200, { agents });
+    }
+    // 普通用户视角：仅返回「以该用户为收件人」的自动化任务（只读），供被授权「自动化任务」菜单的用户查看
+    if (method === 'GET' && pathname === '/api/my/automations') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const all = await listAutomations();
+      const myCfg = getConfig(s.openId);
+      const unionId = (myCfg && myCfg.unionId) || null;
+      const mine = all
+        .filter((a) => {
+          const recs = a.pushRecipients || [];
+          return recs.some((r) => r.openId === s.openId || (unionId && r.unionId === unionId));
+        })
+        .map((a) => ({
+          id: a.id,
+          title: a.title,
+          name: a.name,
+          description: a.description,
+          cron: a.cron,
+          enabled: a.enabled !== false,
+          idleOnly: !!a.idleOnly,
+          maxSteps: a.maxSteps,
+          agentId: a.agentId,
+          agentName: a.agentName,
+          pushRecipients: a.pushRecipients || [],
+          lastStatus: a.lastStatus,
+          lastRunStatus: a.lastRunStatus,
+          lastRunAt: a.lastRunAt,
+          runs: a.runs || [],
+        }));
+      return sendJson(res, 200, { automations: mine });
     }
 
     // ---- 智能体管理（管理员） ----
@@ -652,8 +693,10 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 405, { error: '方法不允许' });
       }
       // 集合：GET 列表 / POST 新建
+      // GET 支持 ?owner=openId（成员管理里查看「某用户的智能体」）；不带则返回全部（管理员全量视图）
       if (method === 'GET') {
-        return sendJson(res, 200, { agents: listAgents() });
+        const owner = url.searchParams.get('owner');
+        return sendJson(res, 200, { agents: listAgents(owner || undefined) });
       }
       if (method === 'POST') {
         const body = await readBody(req);
@@ -734,7 +777,12 @@ const server = createServer(async (req, res) => {
       const s = requireSessionApi(req, res);
       if (!s) return;
       const cfg = getConfig(s.openId);
-      if (!cfg) return sendJson(res, 404, { error: '尚未配置', hasApiKey: false });
+      if (!cfg) {
+        // 个人尚未配置 → 若管理员下发过组织默认模板，则继承之（inherited 标记前端回填默认值）。
+        const org = getOrgDefault();
+        if (org) return sendJson(res, 200, { config: org, inherited: true, hasApiKey: false });
+        return sendJson(res, 404, { error: '尚未配置', hasApiKey: false });
+      }
       const { _apiKeyEnc, ...safe } = cfg;
       return sendJson(res, 200, { config: safe, hasApiKey: !!_apiKeyEnc });
     }
@@ -971,6 +1019,40 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { users: listUsers(), adminOpenIds: listAdmins() });
     }
 
+    // 权限配置（菜单授权）：列出可授权菜单 + 各用户的授权情况
+    if (method === 'GET' && pathname === '/api/admin/permissions') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const users = listUsers() || [];
+      const openIds = users.map((u) => u.openId);
+      const displayNames = {};
+      users.forEach((u) => { displayNames[u.openId] = u.displayName || ''; });
+      return sendJson(res, 200, {
+        grantable: GRANTABLE_MENUS,
+        baseMenus: BASE_MENUS,
+        baseDisplayMenus: BASE_DISPLAY_MENUS,
+        users: listPermissions(openIds, displayNames),
+        adminOpenIds: listAdmins(),
+      });
+    }
+    // 设置某用户的授权菜单
+    if (method === 'PUT' && pathname.startsWith('/api/admin/permissions/')) {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const openId = decodeURIComponent(pathname.slice('/api/admin/permissions/'.length));
+      if (listAdmins().includes(openId)) {
+        return sendJson(res, 400, { error: '管理员拥有全部菜单，无需单独授权' });
+      }
+      try {
+        const body = await readBody(req);
+        const menus = setPermissions(openId, body.menus || []);
+        await record({ actor: s.openId, action: 'admin.permissions.set', target: openId, meta: { menus } });
+        return sendJson(res, 200, { ok: true, menus });
+      } catch (e) {
+        return sendJson(res, 400, { error: e.message });
+      }
+    }
+
     // 收件人候选：合并「组织搜索(观澜通讯录) + 地址簿 + 已知用户」。
     // 管理员据此把任意组织成员加入自动化收件人，或指定某个智能体发给具体人。
     if (method === 'GET' && pathname === '/api/admin/contacts/search') {
@@ -1092,6 +1174,9 @@ const server = createServer(async (req, res) => {
       try {
         const body = await readBody(req);
         const { openId: _ign, ...pushCfg } = body;
+        // 1) 先固化组织默认模板（不含 API Key），供新登录用户继承
+        const orgTpl = setOrgDefault(pushCfg);
+        // 2) 再把配置逐个下发到已存在配置的个人用户（API Key 留空则保留各自现有密钥）
         const ids = listOpenIds();
         let affected = 0;
         const skipped = [];
@@ -1109,7 +1194,7 @@ const server = createServer(async (req, res) => {
           target: 'model-config',
           meta: { affected, skipped: skipped.length, provider: pushCfg.provider },
         });
-        return sendJson(res, 200, { ok: true, affected, skipped: skipped.length });
+        return sendJson(res, 200, { ok: true, affected, skipped: skipped.length, orgDefault: !!orgTpl });
       } catch (e) {
         return sendJson(res, 400, { error: e.message });
       }

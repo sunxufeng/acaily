@@ -111,3 +111,49 @@ export function decryptApiKey(openId) {
   if (!cfg || !cfg._apiKeyEnc) return null;
   return decryptSecret(cfg._apiKeyEnc);
 }
+
+// ============== 组织默认配置（全员下发模板） ==============
+// 管理员在「组织默认配置」页执行一键下发时，除把配置写进各用户条目外，
+// 还会把这份「不含 API Key 的基础配置」持久化为组织默认模板。
+// 新登录、尚未自行配置的个人用户在 GET /api/config/me 时会继承该模板，
+// 因此「普通用户登录后也能看到组织下发的配置」，只需补全自己的 API Key。
+const ORG_DEFAULT_FILE =
+  process.env.ACAILY_ORG_DEFAULT_STORE || join(__dirname, '../../data/orgDefault.json');
+
+let orgCache = null;
+
+function loadOrg() {
+  if (orgCache) return orgCache;
+  if (existsSync(ORG_DEFAULT_FILE)) {
+    try {
+      orgCache = JSON.parse(readFileSync(ORG_DEFAULT_FILE, 'utf8'));
+    } catch {
+      orgCache = {};
+    }
+  } else {
+    orgCache = {};
+  }
+  return orgCache;
+}
+
+function persistOrg() {
+  mkdirSync(dirname(ORG_DEFAULT_FILE), { recursive: true });
+  writeFileSync(ORG_DEFAULT_FILE, JSON.stringify(orgCache, null, 2));
+}
+
+export function getOrgDefault() {
+  const db = loadOrg();
+  return db.default || null;
+}
+
+// 保存组织默认模板：剥离 apiKey 明文/密文（密钥是 per-user 的，不能沉淀为组织模板），
+// 仅保留 provider / baseUrl / model / 采样参数等基础项。
+export function setOrgDefault(cfg) {
+  if (!cfg || typeof cfg !== 'object') return null;
+  const { apiKey, _apiKeyEnc, clearApiKey, openId, ...rest } = cfg;
+  const tpl = { ...rest, updatedAt: new Date().toISOString() };
+  const db = loadOrg();
+  db.default = tpl;
+  persistOrg();
+  return tpl;
+}
