@@ -585,6 +585,41 @@ const server = createServer(async (req, res) => {
       const agents = s.role === 'admin' ? listAgents() : listAgents(s.openId);
       return sendJson(res, 200, { agents });
     }
+    // 普通用户（被授权「智能体配置」菜单）管理「自己的」智能体：仅可创建/编辑/删除 owner===自己 的，组织共享（owner 为空）或他人智能体不可改
+    if (pathname === '/api/agents' || pathname.startsWith('/api/agents/')) {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      if (s.role === 'admin') return; // 管理员走 /api/admin/agents
+      const m = pathname.match(/^\/api\/agents\/([^/]+)$/);
+      if (m) {
+        const id = decodeURIComponent(m[1]);
+        if (method === 'PUT' || method === 'DELETE') {
+          const ag = getAgent(id);
+          if (!ag) return sendJson(res, 404, { error: '智能体不存在' });
+          if (!ag.owner) return sendJson(res, 403, { error: '组织共享智能体需由管理员修改' });
+          if (ag.owner !== s.openId) return sendJson(res, 403, { error: '只能修改自己的智能体' });
+          if (method === 'DELETE') {
+            const ok = deleteAgent(id);
+            await record({ actor: s.openId, action: 'agent.delete', target: id });
+            return sendJson(res, ok ? 200 : 404, { ok });
+          }
+          const body = await readBody(req);
+          const saved = saveAgent({ ...body, owner: s.openId }, id); // 锁定 owner，禁止越权改他人
+          await record({ actor: s.openId, action: 'agent.update', target: id, meta: { name: saved.name } });
+          return sendJson(res, 200, { agent: saved });
+        }
+        return sendJson(res, 405, { error: '方法不允许' });
+      }
+      if (method === 'POST') {
+        const body = await readBody(req);
+        if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
+        body.owner = s.openId; // 普通用户只能创建属于自己的智能体
+        const ag = saveAgent(body);
+        await record({ actor: s.openId, action: 'agent.create', target: ag.id, meta: { name: ag.name } });
+        return sendJson(res, 200, { agent: ag });
+      }
+      return sendJson(res, 405, { error: '方法不允许' });
+    }
     // 普通用户视角：仅返回「以该用户为收件人」的自动化任务（只读），供被授权「自动化任务」菜单的用户查看
     if (method === 'GET' && pathname === '/api/my/automations') {
       const s = requireSessionApi(req, res);

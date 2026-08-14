@@ -1348,20 +1348,31 @@ async function loadAgents(){
   if(status!==200){body.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>';return;}
   const list=data.agents||[];
   currentAgentCache={}; list.forEach(a=>currentAgentCache[a.id]=a);
-  const nb=$('agentNewBtn'); if(nb) nb.style.display=isAdmin?'':'none';
-  if(!list.length){body.innerHTML=`<tr><td colspan="6" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体（你尚未创建，可见组织共享智能体）'}</td></tr>`;return;}
+  // 非管理员也可新建（创建的是属于自己的智能体）；只读查看的菜单里新建按钮无意义，故仅授权用户可见
+  const nb=$('agentNewBtn'); if(nb) nb.style.display='';
+  if(!list.length){body.innerHTML=`<tr><td colspan="6" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体。点击右上角「新建智能体」创建属于你自己的智能体；管理员共享的组织智能体会显示在此。'}</td></tr>`;return;}
   body.innerHTML=list.map(a=>{
+    const mine=(!isAdmin && a.owner===CURRENT_OPENID);
     const ownerTag=(a.owner)
-      ? '<span class="tag">我的</span>'
+      ? (mine?'<span class="tag">我的</span>':'<span class="tag neutral">共享</span>')
       : (isAdmin?'<span class="tag neutral">组织</span>':'');
-    const ops=isAdmin?`
+    let ops;
+    if(isAdmin){
+      ops=`
       <button class="btn ghost sm" data-chat="${esc(a.id)}" title="用该智能体开启新对话">开启对话</button>
       <button class="btn ghost sm" data-edit="${esc(a.id)}">编辑</button>
       <button class="btn ghost sm" data-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
-      <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>
-    `:`
-      <button class="btn ghost sm" data-view-agent="${esc(a.id)}" title="查看智能体（只读）">查看</button>
-    `;
+      <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>`;
+    } else if(mine){
+      // 自己的智能体：可编辑、删除（绑定飞书为管理员能力，对普通用户隐藏）
+      ops=`
+      <button class="btn ghost sm" data-chat="${esc(a.id)}" title="用该智能体开启新对话">开启对话</button>
+      <button class="btn ghost sm" data-edit="${esc(a.id)}">编辑</button>
+      <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>`;
+    } else {
+      // 组织共享 / 他人智能体：只读查看
+      ops=`<button class="btn ghost sm" data-view-agent="${esc(a.id)}" title="查看智能体（只读）">查看</button>`;
+    }
     return `<tr>
     <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
     <td><b>${esc(a.name)}</b> ${ownerTag}</td>
@@ -1493,6 +1504,12 @@ function agentEditHTML(a,isNew){
 let agentEditingId=null;
 function openAgentEdit(id, readOnly){
   agentEditingId=id||null;
+  const isAdmin=document.body.classList.contains('is-admin');
+  // 普通用户：仅当智能体「属于自己」才可编辑；组织共享（owner 空）/他人智能体强制只读
+  if(!isAdmin && id && !readOnly){
+    const a=currentAgentCache[id];
+    if(!a || !a.owner || a.owner!==CURRENT_OPENID) readOnly=true;
+  }
   $('agentEditTitle').textContent=(id?(readOnly?'查看智能体':'编辑智能体'):'新建智能体');
   $('agentEditBody').innerHTML=agentEditHTML(id?currentAgentCache[id]:null, !id);
   // 注入常见大模型预置到「类型」下拉；若已选池条目则按池的 (type, baseUrl) 二次定位。
@@ -1621,7 +1638,12 @@ async function saveAgentEdit(){
     apiKey:poolId?null:($('aApiKey').value||null),
   };
   const saveBtn=$('agentEditSave');saveBtn.disabled=true;saveBtn.textContent='保存中…';
-  const {status}=await api(agentEditingId?'PUT':'POST',agentEditingId?`/api/admin/agents/${encodeURIComponent(agentEditingId)}`:'/api/admin/agents',payload);
+  const isAdmin=document.body.classList.contains('is-admin');
+  // 普通用户走 /api/agents（按 owner 强制只能改自己的）；管理员走 /api/admin/agents
+  const url=isAdmin
+    ? (agentEditingId?`/api/admin/agents/${encodeURIComponent(agentEditingId)}`:'/api/admin/agents')
+    : (agentEditingId?`/api/agents/${encodeURIComponent(agentEditingId)}`:'/api/agents');
+  const {status}=await api(agentEditingId?'PUT':'POST',url,payload);
   saveBtn.disabled=false;saveBtn.textContent='保存';
   if(status===200){toast('已保存');await loadAgents();await loadChatAgents();switchView('agents');}
   else toast('保存失败（'+status+'）');
@@ -1702,7 +1724,9 @@ $('agentBody').addEventListener('click',e=>{
   else if(t.dataset.bind){openBindFeishuModal(t.dataset.bind);}
   else if(t.dataset.del){
     const id=t.dataset.del;
-    if(confirm('确定删除该智能体？')){api('DELETE',`/api/admin/agents/${encodeURIComponent(id)}`).then(r=>{if(r.status===200){toast('已删除');loadAgents();loadChatAgents();}else toast('删除失败');});}
+    const isAdmin=document.body.classList.contains('is-admin');
+    const url=isAdmin?`/api/admin/agents/${encodeURIComponent(id)}`:`/api/agents/${encodeURIComponent(id)}`;
+    if(confirm('确定删除该智能体？')){api('DELETE',url).then(r=>{if(r.status===200){toast('已删除');loadAgents();loadChatAgents();}else toast('删除失败：'+(r.data&&r.data.error||r.status));});}
   }
 });
 
@@ -2872,6 +2896,7 @@ $('statsRange').onchange=()=>loadStats();
   $('sbRole').textContent=d.role==='admin'?'管理员':'成员';
   if(d.avatar)$('sbAvatar').src=d.avatar;
   if(d.role==='admin')document.body.classList.add('is-admin');
+  window.CURRENT_OPENID=d.openId;
   if(d.menus) applyMenuPermissions(d.menus);
   $('sbLogout').onclick=()=>location.href='/logout';
   // 默认显示：URL 决定默认 view
