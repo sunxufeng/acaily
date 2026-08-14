@@ -2293,7 +2293,6 @@ window.openUserPage=async function(openId, readOnly){
   CURRENT_USER={openId, readOnly, unionId:null, displayName:''};
   const titleEl=readOnly?$('userViewTitle'):$('userEditTitle');
   const bodyEl=readOnly?$('userViewBody'):$('userEditBody');
-  titleEl.textContent=(readOnly?'成员详情：':'编辑成员：')+openId;
   bodyEl.innerHTML='<div class="muted">加载中…</div>';
   switchView(readOnly?'user-view':'user-edit');
   const [cfgRes, autoRes, agAllRes, agMineRes, userRes]=await Promise.all([
@@ -2307,15 +2306,21 @@ window.openUserPage=async function(openId, readOnly){
   const hasApiKey=!!(cfgRes.data&&cfgRes.data.hasApiKey);
   const autos=(autoRes.status===200&&autoRes.data.automations)?autoRes.data.automations:[];
   const agentsAll=(agAllRes.status===200&&agAllRes.data.agents)?agAllRes.data.agents:[];
-  // 该成员在成员页可见的：自己专属（owner===openId）+ 组织共享（owner 为空）。与 rerenderUserAgentSection 保持一致。
-  const agents=(agMineRes.status===200&&agMineRes.data.agents)?agMineRes.data.agents:[];
+  // 成员编辑页只列「该成员专属（owner===openId）」的智能体；组织共享（owner 为空）属于组织级资源，
+  // 不在单个成员页重复挂载，避免「看到他人（如管理员）的智能体」。与 rerenderUserAgentSection 保持一致。
+  const agentsAllMine=(agMineRes.status===200&&agMineRes.data.agents)?agMineRes.data.agents:[];
+  const agents=agentsAllMine.filter(a=>a.owner===openId);
   // 供「成员编辑页内」的自动化列表 + 弹窗收件人/智能体选择使用
   AUTO_LIST=autos;
   AUTO_AGENTS=agentsAll;
   AUTO_USERS=(userRes.status===200&&userRes.data&&userRes.data.users)?userRes.data.users:[];
   AUTO_READONLY=false;
   CURRENT_USER.unionId=cfg.unionId||null;
-  CURRENT_USER.displayName=cfg.displayName||openId;
+  // 显示名优先取「通讯录/用户目录」里的真实姓名（即便该成员尚未配置模型也能拿到正确名字），
+  // 其次取个人配置里的 displayName，最后回退 openId。避免未配置模型的成员在编辑页只显示 openId。
+  const dirUser=AUTO_USERS.find(u=>u.openId===openId);
+  CURRENT_USER.displayName=(dirUser&&dirUser.displayName)||cfg.displayName||openId;
+  titleEl.textContent=(readOnly?'成员详情：':'编辑成员：')+CURRENT_USER.displayName;
   CURRENT_USER_CFG=cfg; CURRENT_USER_HASKEY=hasApiKey; CURRENT_USER_AGENTS=agents;
   renderUserPage(bodyEl, {openId, cfg, hasApiKey, autos, agents, readOnly});
 };
@@ -2517,9 +2522,9 @@ function agentsHTML(agents, ro){
       </td>
     </tr>`;
   }).join('');
-  const empty = agents.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无智能体（专属或组织共享）。</tr>';
+  const empty = agents.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有成员生效，不在此重复列出。</tr>';
   const createBtn = ro ? '' : '<button class="btn sm" id="uaNewAgent" style="margin-top:10px;">+ 代该成员新建智能体</button>';
-  const hint = ro ? '' : '<div class="hint" style="margin-top:6px;">管理员可在此直接编辑 / 删除 / 绑定飞书，或代该成员新建智能体（owner 归属该成员）。标记为「组织共享」的智能体对所有成员生效，删除会影响全员。</div>';
+  const hint = ro ? '' : '<div class="hint" style="margin-top:6px;">管理员可在此直接编辑 / 删除 / 绑定飞书，或代该成员新建智能体（owner 归属该成员）。</div>';
   return `<div class="table-wrap"><table>
     <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
     <tbody id="userAgentBody">${rows}${empty}</tbody>
@@ -2531,7 +2536,8 @@ async function rerenderUserAgentSection(){
   if(!forId) return;
   const res=await api('GET','/api/admin/agents?owner='+encodeURIComponent(forId));
   if(res.status!==200) return;
-  const list=res.data.agents||[];
+  // 成员编辑页只列该成员专属（owner===forId）的智能体；组织共享不在此重复挂载。
+  const list=(res.data.agents||[]).filter(a=>a.owner===forId);
   CURRENT_USER_AGENTS=list;
   const bodyEl=$('userAgentBody');
   // 简化：直接重渲整个 card 区（保留 providers/automation 不变，需要从缓存恢复）
@@ -2552,7 +2558,7 @@ async function rerenderUserAgentSection(){
       </td>
     </tr>`;
     }).join('');
-    const empty = list.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无智能体（专属或组织共享）。</tr>';
+    const empty = list.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有成员生效，不在此重复列出。</tr>';
     bodyEl.innerHTML = rows + empty;
     wireUserAgentSection();
   }
