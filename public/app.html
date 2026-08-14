@@ -1228,21 +1228,33 @@ async function loadChatModels(){
     const sel=$('modelSelect'); if(!sel)return;
     const saved=(()=>{try{return localStorage.getItem('acaily_model')||''}catch(e){return''}})();
     const opts=['<option value="">默认模型</option>'];
-    if(status===200&&data.models){data.models.forEach(m=>{if(m)opts.push(`<option value="${esc(m)}"${m===saved?' selected':''}>${esc(m)}</option>`);});}
+    if(status===200&&data.models&&data.models.length){
+      data.models.forEach(m=>{if(m)opts.push(`<option value="${esc(m)}"${m===saved?' selected':''}>${esc(m)}</option>`);});
+    }else{
+      // 个人与组织都未配置模型：提示去「我的 Provider」配置（不回退到管理员模型）
+      opts.push('<option value="" disabled>未配置模型，请到「我的 Provider」设置</option>');
+    }
     sel.innerHTML=opts.join('');
-  }catch(e){}
+  }catch(e){
+    const sel=$('modelSelect'); if(sel) sel.innerHTML='<option value="">默认模型</option><option value="" disabled>未配置模型，请到「我的 Provider」设置</option>';
+  }
 }
 async function loadChatAgents(){
   try{
     const {status,data}=await api('GET','/api/agents');
     const sel=$('agentSelect'); if(!sel)return;
     const saved=(()=>{try{return localStorage.getItem('acaily_agent')||''}catch(e){return''}})();
+    const isAdmin=document.body.classList.contains('is-admin');
+    // 普通用户只看自己的智能体（排除管理员创建的组织共享智能体）；管理员看全部
+    const list=(status===200&&data.agents)?data.agents.filter(a=>isAdmin||a.owner===CURRENT_OPENID):[];
     const opts=['<option value="">默认助手</option>'];
-    if(status===200&&data.agents){
-      data.agents.forEach(a=>{
+    if(list.length){
+      list.forEach(a=>{
         if(!currentAgentCache[a.id]) currentAgentCache[a.id]=a;
         opts.push(`<option value="${esc(a.id)}"${a.id===saved?' selected':''}>${esc((a.emoji||'')+' '+(a.name||''))}</option>`);
       });
+    }else if(!isAdmin){
+      opts.push('<option value="" disabled>你还没有创建智能体（组织共享智能体不在对话中显示）</option>');
     }
     sel.innerHTML=opts.join('');
   }catch(e){}
