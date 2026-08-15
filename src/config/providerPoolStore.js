@@ -10,35 +10,28 @@
 //                  通过「分发」克隆一条到目标用户个人空间（owner=openId, parentId=源 id）。
 // - owner=openId：个人 Provider。「我的 Provider」页 CRUD + 停用。
 //                  可能 parentId 指向某个组织共享 Provider（admin 再次分发会刷新其配置）。
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { encryptSecret, decryptSecret } from '../crypto/kms.js';
+import { createJsonStore } from './jsonStore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STORE = process.env.ACAILY_PROVIDER_POOL_STORE || join(__dirname, '../../data/providers.json');
 
-let cache = null;
-
+// 进程内缓存 + 按 mtime/size 自动失效：外部手工改 providers.json 后无需重启即生效
+const store = createJsonStore(STORE, { providers: {} });
 function load() {
-  if (cache) return cache;
-  if (existsSync(STORE)) {
-    try {
-      cache = JSON.parse(readFileSync(STORE, 'utf8'));
-    } catch {
-      cache = { providers: {} };
-    }
-  } else {
-    cache = { providers: {} };
-  }
-  if (!cache.providers) cache.providers = {};
-  return cache;
+  const c = store.load();
+  if (!c.providers) c.providers = {};
+  return c;
 }
-
 function persist() {
-  mkdirSync(dirname(STORE), { recursive: true });
-  writeFileSync(STORE, JSON.stringify(cache, null, 2));
+  store.persist();
+}
+// 管理端「放弃外部改动 / 强制重载」时用
+export function invalidateProviderPool() {
+  store.invalidate();
 }
 
 // 对外暴露：剔除 apiKeyEnc，仅暴露 hasKey

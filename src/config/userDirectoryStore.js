@@ -2,30 +2,26 @@
 // 与 userConfigStore（模型配置）解耦——目录只管「谁登录过、叫什么」，
 // 因此即便用户未配置任何模型，管理员也能在用户列表里看到他。
 // 同时不影响 userConfigStore 的「组织默认配置继承」逻辑（该逻辑依赖 getConfig 返回 null）。
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createJsonStore } from './jsonStore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STORE = process.env.ACAILY_USER_DIR_STORE || join(__dirname, '../../data/userDirectory.json');
 
-let cache = null;
+// 进程内缓存 + 按 mtime/size 自动失效：外部手工改 userDirectory.json 后无需重启即生效
+const store = createJsonStore(STORE, { users: {} });
 // 进程内去重：每个 openId 在一个进程生命周期内最多落盘一次（避免每次鉴权都写文件）
 const _seen = new Set();
 
 function load() {
-  if (cache) return cache;
-  if (existsSync(STORE)) {
-    try { cache = JSON.parse(readFileSync(STORE, 'utf8')); } catch { cache = { users: {} }; }
-  } else {
-    cache = { users: {} };
-  }
-  return cache;
+  const c = store.load();
+  if (!c.users) c.users = {};
+  return c;
 }
 
 function persist() {
-  mkdirSync(dirname(STORE), { recursive: true });
-  writeFileSync(STORE, JSON.stringify(cache, null, 2));
+  store.persist();
 }
 
 // 完整记录（OAuth 回调时调用）：首次登录建档，之后更新姓名/头像/邮箱与 lastSeen

@@ -1,28 +1,22 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateUserModelConfig } from './schema.js';
 import { encryptSecret, decryptSecret } from '../crypto/kms.js';
 import { listDirectory } from './userDirectoryStore.js';
+import { createJsonStore } from './jsonStore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STORE = process.env.ACAILY_CONFIG_STORE || join(__dirname, '../../data/configs.json');
 
-let cache = null;
-
+// 进程内缓存 + 按 mtime/size 自动失效：外部手工改 configs.json 后无需重启即生效
+const cfgStore = createJsonStore(STORE, { users: {} });
 function load() {
-  if (cache) return cache;
-  if (existsSync(STORE)) {
-    cache = JSON.parse(readFileSync(STORE, 'utf8'));
-  } else {
-    cache = { users: {} };
-  }
-  return cache;
+  const c = cfgStore.load();
+  if (!c.users) c.users = {};
+  return c;
 }
-
 function persist() {
-  mkdirSync(dirname(STORE), { recursive: true });
-  writeFileSync(STORE, JSON.stringify(cache, null, 2));
+  cfgStore.persist();
 }
 
 // 读取用户配置（已加密的 apiKey 以 _apiKeyEnc 信封形式存储，不以明文暴露）
@@ -141,25 +135,13 @@ export function decryptApiKey(openId) {
 const ORG_DEFAULT_FILE =
   process.env.ACAILY_ORG_DEFAULT_STORE || join(__dirname, '../../data/orgDefault.json');
 
-let orgCache = null;
-
+// 组织默认配置模板：同样带 mtime/size 自动失效
+const orgStore = createJsonStore(ORG_DEFAULT_FILE, {});
 function loadOrg() {
-  if (orgCache) return orgCache;
-  if (existsSync(ORG_DEFAULT_FILE)) {
-    try {
-      orgCache = JSON.parse(readFileSync(ORG_DEFAULT_FILE, 'utf8'));
-    } catch {
-      orgCache = {};
-    }
-  } else {
-    orgCache = {};
-  }
-  return orgCache;
+  return orgStore.load();
 }
-
 function persistOrg() {
-  mkdirSync(dirname(ORG_DEFAULT_FILE), { recursive: true });
-  writeFileSync(ORG_DEFAULT_FILE, JSON.stringify(orgCache, null, 2));
+  orgStore.persist();
 }
 
 export function getOrgDefault() {
