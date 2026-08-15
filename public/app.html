@@ -3062,24 +3062,30 @@ function autoRow(a, readOnly){
   </div>`;
 }
 
+function autoCanManage(a){
+  if(document.body.classList.contains('is-admin')) return true;
+  return !!(a && a.owner===CURRENT_OPENID);
+}
 function renderAutoList(){
   const list=AUTO_LIST||[];
   if(!list.length){$('autoList').innerHTML=`<div class="empty">${AUTO_READONLY?'你暂不是任何自动化任务的收件人。':'暂无自动化任务。点击右上角「+ 新建自动化任务」创建第一条定时任务。'}</div>`;return;}
-  $('autoList').innerHTML=list.map(a=>autoRow(a, AUTO_READONLY)).join('');
-  if(AUTO_READONLY)return; // 只读：不绑定任何编辑/运行/删除操作
+  $('autoList').innerHTML=list.map(a=>autoRow(a, !autoCanManage(a))).join('');
+  // 仅给「可管理」的任务绑定操作（非管理员只能操作自己创建的；作为收件人的他人任务为只读）
   $('autoList').querySelectorAll('.auto-item').forEach(el=>{
     const id=el.dataset.id;
-    el.querySelector('[data-action="toggle"]').onchange=(e)=>toggleAuto(id,e.target.checked);
-    el.querySelector('[data-action="refresh"]').onclick=()=>refreshAuto(id);
-    el.querySelector('[data-action="run"]').onclick=()=>runAuto(id);
-    el.querySelector('[data-action="edit"]').onclick=()=>editAuto(id);
-    el.querySelector('[data-action="del"]').onclick=()=>deleteAuto(id);
+    const a=AUTO_LIST.find(x=>x.id===id);
+    if(a && !autoCanManage(a)) return;
+    const tg=el.querySelector('[data-action="toggle"]'); if(tg) tg.onchange=(e)=>toggleAuto(id,e.target.checked);
+    const rf=el.querySelector('[data-action="refresh"]'); if(rf) rf.onclick=()=>refreshAuto(id);
+    const rn=el.querySelector('[data-action="run"]'); if(rn) rn.onclick=()=>runAuto(id);
+    const ed=el.querySelector('[data-action="edit"]'); if(ed) ed.onclick=()=>editAuto(id);
+    const dl=el.querySelector('[data-action="del"]'); if(dl) dl.onclick=()=>deleteAuto(id);
     const prev=el.querySelector('[data-run-prev]'); if(prev)prev.onclick=()=>{AUTO_RUN_PAGE[id]=Math.max(0,(AUTO_RUN_PAGE[id]||0)-1);renderAutoList();};
     const next=el.querySelector('[data-run-next]'); if(next)next.onclick=()=>{AUTO_RUN_PAGE[id]=(AUTO_RUN_PAGE[id]||0)+1;renderAutoList();};
   });
 }
 
-let AUTO_READONLY=false; // 普通用户（被授权但非管理员）查看自动化任务时为只读，且不显示「新建」
+let AUTO_READONLY=false; // 非管理员进入自动化任务时为「自服务」：可管理自己创建的任务；作为收件人的他人任务按行只读（见 autoCanManage）
 async function loadAutomation(){
   const isAdmin=document.body.classList.contains('is-admin');
   if(isAdmin){
@@ -3094,11 +3100,15 @@ async function loadAutomation(){
     AUTO_LIST=res.data.automations||[];
     AUTO_READONLY=false;
   }else{
-    // 普通用户：仅可见「以自己为收件人」的自动化任务（只读），不调用管理员接口避免 403
-    const res=await api('GET','/api/my/automations');
+    // 普通用户：可见「自己创建」或「以自己为收件人」的自动化任务；可自建与管理自己的任务（收件人锁定为自己）
+    const [res, ag]=await Promise.all([
+      api('GET','/api/my/automations'),
+      api('GET','/api/agents').catch(()=>({data:{agents:[]}})),
+    ]);
     if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
     AUTO_LIST=res.data.automations||[];
-    AUTO_READONLY=true;
+    AUTO_AGENTS=(ag.data&&ag.data.agents)||[];
+    AUTO_READONLY=false; // 非管理员可管理自己的任务（操作按钮按 owner 逐行放开）
   }
   const nb=$('autoNewBtn'); if(nb) nb.style.display=AUTO_READONLY?'none':'';
   renderAutoList();
@@ -3116,7 +3126,8 @@ async function runAuto(id){
 }
 // 局部刷新单个自动化任务：只取该任务的当前状态、运行记录、最近结果；保留其它任务的本地状态不动
 async function refreshAuto(id){
-  const res=await api('GET','/api/admin/automations');
+  const isAdmin=document.body.classList.contains('is-admin');
+  const res=await api('GET', isAdmin?'/api/admin/automations':'/api/my/automations');
   if(res.status!==200){toast('刷新失败：'+(res.data.error||res.status));return;}
   const fresh=res.data.automations||[];
   AUTO_LIST=fresh;
@@ -3139,6 +3150,7 @@ async function editAuto(id){
 }
 function openAutomationEdit(a, presetRecipient){
   AUTO_EDITING=a?a.id:null;
+  const isAdmin=document.body.classList.contains('is-admin');
   $('autoEditTitle').textContent=a?'编辑自动化任务：'+a.title:'新建自动化任务';
   let freq='daily',hour=9,minute=35,weeklyDay=1,monthlyDay=1;
   if(a&&a.cron){const p=a.cron.trim().split(/\s+/);if(p.length===5){
@@ -3163,6 +3175,8 @@ function openAutomationEdit(a, presetRecipient){
   } else {
     AUTO_PUSH = [];
   }
+  // 普通用户创建/编辑自动化任务：收件人强制锁定为自己（后端同样强制，前端只做展示）
+  if(!isAdmin){ AUTO_PUSH=[{ openId:CURRENT_OPENID, unionId:'', name:me_name||'我' }]; }
   const agentOptions=(AUTO_AGENTS||[]).map(ag=>`<option value="${esc(ag.id)}" ${a&&a.agentId===ag.id?'selected':''}>${esc((ag.emoji||'🤖')+' '+(ag.name||ag.id))}</option>`).join('');
   const agentSelect=`<select id="a_agent"><option value="">（不关联，结果用收件人模型生成）</option>${agentOptions}</select>`;
   $('autoEditBody').innerHTML=`
@@ -3197,6 +3211,7 @@ function openAutomationEdit(a, presetRecipient){
       <input type="checkbox" id="a_idle" ${a&&a.idleOnly?'checked':''} style="width:auto;margin-right:6px;"/>
       闲时执行（00:00-06:00）：开启后任务在空闲窗口执行，结果照常推送
     </label>
+    ${isAdmin?`
     <label>推送给 <span class="req">*</span> <span class="muted" style="font-weight:400;">（运行结果将推送到以下飞书用户，可指定上方智能体身份发送）</span></label>
     <div class="recipient-picker">
       <div class="rp-control">
@@ -3211,7 +3226,10 @@ function openAutomationEdit(a, presetRecipient){
         <div id="a_search_results" class="user-pick-list"></div>
       </div>
       <div id="a_push_chips" class="chip-row"></div>
-    </div>
+    </div>`:`
+    <label>推送给</label>
+    <div class="hint" style="margin-bottom:6px;">你创建的自动化任务仅能推送给你本人（管理员可在「成员管理」中为你指定其他收件人）。</div>
+    <div class="chip-row"><span class="chip">${esc(me_name||'我')}（我自己）</span></div>`}
     <div class="hint">预览 cron：<code id="a_cron_prev"></code></div>
     <div id="autoEditStatus" class="status"></div>`;
   switchView('automation-edit');
@@ -3269,6 +3287,7 @@ function openAutomationEdit(a, presetRecipient){
     all.checked = list.length>0 && selCount===list.length;
     all.indeterminate = selCount>0 && selCount<list.length;
   };
+  if(isAdmin){
   const searchBox=$('a_search');
   const statusBox=$('a_search_status');
   let searchTimer=null;
@@ -3309,6 +3328,7 @@ function openAutomationEdit(a, presetRecipient){
     }
   });
   renderChips();
+  }
 }
 
 $('autoNewBtn').onclick=()=>newAuto();

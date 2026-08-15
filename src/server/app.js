@@ -644,6 +644,7 @@ const server = createServer(async (req, res) => {
         })
         .map((a) => ({
           id: a.id,
+          owner: a.owner,
           title: a.title,
           name: a.name,
           description: a.description,
@@ -1482,15 +1483,27 @@ const server = createServer(async (req, res) => {
       }
       return sendJson(res, 200, { automations: scoped, activeJobs: activeJobCount() });
     }
+    // 普通用户自建自动化任务时，收件人强制锁定为自己（不能推送给他人）
+    const selfRecipient = (s) => {
+      const cfg = getConfig(s.openId);
+      return { openId: s.openId, unionId: (cfg && cfg.unionId) || null, name: s.name || '我' };
+    };
     if (method === 'POST' && pathname === '/api/admin/automations') {
-      const s = requireAdminApi(req, res);
+      const s = requireSessionApi(req, res);
       if (!s) return;
+      const isAdmin = s.role === 'admin';
       try {
         const body = await readBody(req);
-        body.owner = s.openId; // 记录创建者（系统管理员）
+        body.owner = s.openId; // 创建者
+        if (!isAdmin) {
+          // 普通用户：收件人强制为自己，禁止推送给他人
+          const me = selfRecipient(s);
+          body.pushRecipients = [me];
+          body.pushTo = [me.unionId || me.openId];
+        }
         const auto = await createAutomation(body);
         if (auto.enabled !== false) scheduleOne(auto);
-        await record({ actor: s.openId, action: 'automation.create', target: auto.id, meta: { title: auto.title, cron: auto.cron, pushTo: auto.pushTo.length } });
+        await record({ actor: s.openId, action: 'automation.create', target: auto.id, meta: { title: auto.title, cron: auto.cron, selfService: !isAdmin } });
         return sendJson(res, 200, { ok: true, automation: auto });
       } catch (e) {
         return sendJson(res, 400, { error: e.message });
@@ -1498,11 +1511,22 @@ const server = createServer(async (req, res) => {
     }
     // 路径参数路由：/api/admin/automations/:id[/action]
     if (method === 'PATCH' && pathname.startsWith('/api/admin/automations/')) {
-      const s = requireAdminApi(req, res);
+      const s = requireSessionApi(req, res);
       if (!s) return;
       const id = decodeURIComponent(pathname.slice('/api/admin/automations/'.length));
+      const existing = await getAutomation(id);
+      if (!existing) return sendJson(res, 404, { error: '自动化任务不存在' });
+      if (s.role !== 'admin' && existing.owner !== s.openId) {
+        return sendJson(res, 403, { error: '只能修改自己创建的自动化任务' });
+      }
       try {
         const body = await readBody(req);
+        if (s.role !== 'admin') {
+          // 普通用户：收件人强制为自己
+          const me = selfRecipient(s);
+          body.pushRecipients = [me];
+          body.pushTo = [me.unionId || me.openId];
+        }
         const auto = await updateAutomation(id, body);
         // 变更后重新调度：cron / enabled 改了都要重排；其它字段改了也重排最稳
         if (auto.enabled !== false) scheduleOne(auto); else unscheduleOne(id);
@@ -1513,18 +1537,28 @@ const server = createServer(async (req, res) => {
       }
     }
     if (method === 'DELETE' && pathname.startsWith('/api/admin/automations/')) {
-      const s = requireAdminApi(req, res);
+      const s = requireSessionApi(req, res);
       if (!s) return;
       const id = decodeURIComponent(pathname.slice('/api/admin/automations/'.length));
+      const existing = await getAutomation(id);
+      if (!existing) return sendJson(res, 404, { error: '自动化任务不存在' });
+      if (s.role !== 'admin' && existing.owner !== s.openId) {
+        return sendJson(res, 403, { error: '只能删除自己创建的自动化任务' });
+      }
       const ok = await deleteAutomation(id);
       if (ok) unscheduleOne(id);
       await record({ actor: s.openId, action: 'automation.delete', target: id });
       return sendJson(res, 200, { ok });
     }
     if (method === 'POST' && /^\/api\/admin\/automations\/[^/]+\/run$/.test(pathname)) {
-      const s = requireAdminApi(req, res);
+      const s = requireSessionApi(req, res);
       if (!s) return;
       const id = decodeURIComponent(pathname.slice('/api/admin/automations/'.length, -'/run'.length));
+      const existing = await getAutomation(id);
+      if (!existing) return sendJson(res, 404, { error: '自动化任务不存在' });
+      if (s.role !== 'admin' && existing.owner !== s.openId) {
+        return sendJson(res, 403, { error: '只能运行自己创建的自动化任务' });
+      }
       try {
         await triggerNow(id);
         await record({ actor: s.openId, action: 'automation.manual_run', target: id });
