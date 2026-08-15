@@ -901,6 +901,55 @@ const server = createServer(async (req, res) => {
       await record({ actor: s.openId, action: 'my.provider.test', target: b.providerId || inline.provider, meta: { ok: r.ok, model: inline.model } });
       return sendJson(res, 200, r);
     }
+    // ---- 我的智能体：自助绑定飞书（本人 owner 即可，无需管理员） ----
+    // 普通用户把自己的智能体绑定到一个飞书自建应用：手动填 App ID/Secret，或借主应用自动创建。
+    // 必须放在任何 /api/my/agents/:id 通用匹配之前，否则 bind-feishu 会被当 id 截走。
+    const myAgentBindMatch = pathname.match(/^\/api\/my\/agents\/([^/]+)\/bind-feishu(?:-manual)?$/);
+    if (myAgentBindMatch) {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      if (method !== 'POST') return sendJson(res, 405, { error: '方法不允许' });
+      const id = decodeURIComponent(myAgentBindMatch[1]);
+      const ag = getAgent(id);
+      if (!ag) return sendJson(res, 404, { error: '智能体不存在' });
+      if (ag.owner !== s.openId) return sendJson(res, 403, { error: '只能绑定你自己拥有的智能体' });
+      const isManualBind = myAgentBindMatch[0].endsWith('/bind-feishu-manual');
+      try {
+        let boundAppId, boundAppSecret;
+        if (isManualBind) {
+          // 用户自行在飞书开放平台创建的自建应用，把 app_id + app_secret 填进来，先校验再落库
+          const body = await readBody(req);
+          const appId = (body && body.appId ? String(body.appId) : '').trim();
+          const appSecret = (body && body.appSecret ? String(body.appSecret) : '').trim();
+          if (!appId || !appSecret) return sendJson(res, 400, { error: '请填写 app_id 和 app_secret' });
+          const v = await validateFeishuCredentials({ appId, appSecret });
+          if (!v.ok) return sendJson(res, 400, { error: '凭据无效：' + (v.msg || '未知错误'), code: v.code });
+          boundAppId = appId;
+          boundAppSecret = appSecret;
+        } else {
+          // 借主应用权限自动创建一个飞书自建应用并绑定
+          const created = await createFeishuApp({ name: ag.name, description: ag.description });
+          if (!created.ok) return sendJson(res, 502, { error: '创建飞书应用失败：' + (created.msg || '未知错误'), code: created.code });
+          boundAppId = created.appId;
+          boundAppSecret = created.appSecret;
+        }
+        const updated = saveAgent({ feishuAppId: boundAppId, feishuAppSecret: boundAppSecret }, id);
+        let botNote = '';
+        try {
+          const bot = await enableBotCapability(boundAppId);
+          botNote = bot.ok ? '（机器人能力已启用）' : `（启用机器人能力提示：${bot.msg || ''}）`;
+        } catch (e) { botNote = `（启用机器人能力失败：${e.message}）`; }
+        await record({ actor: s.openId, action: 'my.agent.bind_feishu', target: id, meta: { appId: boundAppId, mode: isManualBind ? 'manual' : 'auto' } });
+        // 绑定成功后热启动该智能体飞书应用的长连接
+        try {
+          startOneAgentConnection({ id, name: ag.name, appId: boundAppId, appSecret: boundAppSecret }, processFeishuMessage);
+        } catch (e) { console.warn('[agent] 热启动长连接失败:', e.message); }
+        return sendJson(res, 200, { ok: true, agent: updated, appId: boundAppId, mode: isManualBind ? 'manual' : 'auto', botNote });
+      } catch (e) {
+        return sendJson(res, 502, { error: '绑定飞书应用异常：' + e.message });
+      }
+    }
+
     // 我的 Provider 单条：GET / PUT / DELETE / toggle 停用
     const myProvMatch = pathname.match(/^\/api\/my\/providers\/([^/]+)$/);
     if (myProvMatch) {

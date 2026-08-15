@@ -383,7 +383,7 @@
             </div>
             <button class="btn" id="agentNewBtn">+ 新建智能体</button>
           </div>
-          <div id="agentBindHint" class="hint" style="display:none;margin-bottom:8px;">未绑定的智能体请联系系统管理员协助绑定（需飞书自建应用凭证）。</div>
+          <div id="agentBindHint" class="hint" style="display:none;margin-bottom:8px;">未绑定的智能体：点「绑定飞书」，填入你在飞书开放平台创建的自建应用 App ID / App Secret 即可自助绑定，无需管理员。</div>
           <div class="table-wrap">
             <table>
               <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:260px;">操作</th></tr></thead>
@@ -1301,10 +1301,11 @@ async function loadAgents(){
       <button class="btn ghost sm" data-bind="${esc(a.id)}">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
       <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>`;
     } else if(mine){
-      // 自己的智能体：可编辑、删除（绑定飞书为管理员能力，对普通用户隐藏）
+      // 自己的智能体：可编辑、删除、自助绑定飞书（填 App ID/Secret 即绑，无需管理员）
       ops=`
       <button class="btn ghost sm" data-chat="${esc(a.id)}" title="用该智能体开启新对话">开启对话</button>
       <button class="btn ghost sm" data-edit="${esc(a.id)}">编辑</button>
+      <button class="btn ghost sm" data-bind="${esc(a.id)}" data-bind-mine="1">${a.feishuAppBound?'查看绑定':'绑定飞书'}</button>
       <button class="btn ghost sm danger" data-del="${esc(a.id)}">删除</button>`;
     } else {
       // 组织共享 / 他人智能体：只读查看
@@ -1598,9 +1599,9 @@ async function saveAgentEdit(){
   }
   else toast('保存失败（'+status+'）');
 }
-let _bindAgentCtx = null; // { id }
-function openBindFeishuModal(id){
-  _bindAgentCtx = { id };
+let _bindAgentCtx = null; // { id, mine }
+function openBindFeishuModal(id, mine){
+  _bindAgentCtx = { id, mine: !!mine };
   // 切到「手动绑定」tab 为默认（被 99991672 限制时它能直接绕过）
   switchBindMode('manual');
   $('bindAppId').value='';
@@ -1620,11 +1621,12 @@ function switchBindMode(mode){
   $('bindManualPane').style.display = isManual ? '' : 'none';
 }
 async function bindAgentFeishuAuto(){
-  const id = _bindAgentCtx && _bindAgentCtx.id;
-  if(!id) return;
+  const ctx = _bindAgentCtx; if(!ctx||!ctx.id) return;
+  const base = ctx.mine ? '/api/my/agents' : '/api/admin/agents';
+  const id = ctx.id;
   const errEl = $('bindAutoErr'); if(errEl) errEl.textContent='';
   $('bindAutoBtn').disabled = true; $('bindAutoBtn').textContent = '请求中…';
-  const {status,data}=await api('POST',`/api/admin/agents/${encodeURIComponent(id)}/bind-feishu`);
+  const {status,data}=await api('POST',`${base}/${encodeURIComponent(id)}/bind-feishu`);
   $('bindAutoBtn').disabled = false; $('bindAutoBtn').textContent = '直接创建并绑定';
   if(status===200){
     $('bindFeishuMask').classList.remove('show');
@@ -1641,15 +1643,16 @@ async function bindAgentFeishuAuto(){
   }
 }
 async function bindAgentFeishuManual(){
-  const id = _bindAgentCtx && _bindAgentCtx.id;
-  if(!id) return;
+  const ctx = _bindAgentCtx; if(!ctx||!ctx.id) return;
+  const base = ctx.mine ? '/api/my/agents' : '/api/admin/agents';
+  const id = ctx.id;
   const appId = $('bindAppId').value.trim();
   const appSecret = $('bindAppSecret').value.trim();
   const errEl = $('bindManualErr');
   errEl.textContent='';
   if(!appId || !appSecret){ errEl.textContent='请填写 app_id 和 app_secret'; return; }
   $('bindManualBtn').disabled=true; $('bindManualBtn').textContent='校验中…';
-  const {status,data}=await api('POST',`/api/admin/agents/${encodeURIComponent(id)}/bind-feishu-manual`,{appId,appSecret});
+  const {status,data}=await api('POST',`${base}/${encodeURIComponent(id)}/bind-feishu-manual`,{appId,appSecret});
   $('bindManualBtn').disabled=false; $('bindManualBtn').textContent='校验并绑定';
   if(status===200){
     $('bindFeishuMask').classList.remove('show');
@@ -1673,7 +1676,7 @@ $('agentBody').addEventListener('click',e=>{
   if(t.dataset.chat){startAgentChat(t.dataset.chat);}
   else if(t.dataset.edit){openAgentEdit(t.dataset.edit);}
   else if(t.dataset.viewAgent){openAgentEdit(t.dataset.viewAgent, true);} // 普通用户只读查看
-  else if(t.dataset.bind){openBindFeishuModal(t.dataset.bind);}
+  else if(t.dataset.bind){openBindFeishuModal(t.dataset.bind, t.dataset.bindMine==='1');}
   else if(t.dataset.del){
     const id=t.dataset.del;
     const isAdmin=document.body.classList.contains('is-admin');
