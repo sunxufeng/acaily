@@ -1511,14 +1511,18 @@ function setupMdImport(scope){
     }
   });
 }
+let agentProviderPoolCache=[]; // 缓存池条目，供选择后本地带出（避免再请求 admin 接口）
 async function loadProviderPoolIntoAgentForm(){
   const sel=$('aProviderPool'); if(!sel)return;
+  const isAdmin=document.body.classList.contains('is-admin');
   try{
-    const {status,data}=await api('GET','/api/providers');
+    // 普通用户只拉「我的 Provider」（本人自建 + 上级分发的副本），不暴露组织共享池；
+    // 管理员拉全量池（/api/providers）。
+    const url = isAdmin ? '/api/providers' : '/api/my/providers';
+    const {status,data}=await api('GET', url);
+    agentProviderPoolCache = (status===200 && Array.isArray(data.providers)) ? data.providers : [];
     let opts=['<option value="">（不选池，下方手填）</option>'];
-    if(status===200 && data.providers && data.providers.length){
-      data.providers.forEach(p=>{opts.push(`<option value="${esc(p.id)}">${esc(p.name||p.type)} (${esc(p.type)} · ${esc((p.models||[])[0]||'无')})</option>`);});
-    }
+    agentProviderPoolCache.forEach(p=>{opts.push(`<option value="${esc(p.id)}">${esc(p.name||p.type)} (${esc(p.type)} · ${esc((p.models||[])[0]||'无')})</option>`);});
     sel.innerHTML=opts.join('');
     // 若当前编辑的智能体已绑定池，预选
     if(agentEditingId && currentAgentCache[agentEditingId] && currentAgentCache[agentEditingId].providerPoolId){
@@ -1537,29 +1541,27 @@ function applyProviderPoolToAgentForm(){
     $('aModel').style.display='';
     return;
   }
-  // 拉池条目详情（直接用已加载列表缓存）
-  api('GET','/api/admin/providers/'+encodeURIComponent(id)).then(({status,data})=>{
-    if(status!==200||!data.provider)return;
-    const p=data.provider;
-    $('aProvider').value=p.type||'openai';
-    $('aBaseUrl').value=p.baseUrl||'';
-    $('aKeyHint').textContent = p.hasKey ? '（API Key 将沿用池里的密钥）' : '（池条目未配置 API Key，需下方手填）';
-    $('aApiKey').placeholder=p.hasKey?'沿用池密钥，留空不修改':'该池条目尚未配置 API Key';
-    // 切换 Model 为下拉
-    const ms=$('aModelSel'); const mi=$('aModel');
-    const cur=mi.value;
-    if(p.models && p.models.length){
-      ms.innerHTML='<option value="">（自定义）</option>'+p.models.map(m=>`<option value="${esc(m)}" ${m===cur?'selected':''}>${esc(m)}</option>`).join('');
-      ms.value=cur;
-      ms.style.display='';
-      ms.onchange=()=>{if(ms.value){mi.value=ms.value;mi.style.display='none';ms.style.display='';}else{mi.style.display='';ms.style.display='none';}};
-      // 若原 model 在池里，隐藏 input
-      if(p.models.includes(cur)){mi.style.display='none';}else{mi.style.display='';}
-    } else {
-      ms.style.display='none';
-      mi.style.display='';
-    }
-  });
+  // 直接从已加载的池列表本地带出（普通用户也能用，不再请求 admin 接口导致 403）
+  const p = agentProviderPoolCache.find(x=>x.id===id);
+  if(!p) return;
+  $('aProvider').value=p.type||'openai';
+  $('aBaseUrl').value=p.baseUrl||'';
+  $('aKeyHint').textContent = p.hasKey ? '（API Key 将沿用池里的密钥）' : '（池条目未配置 API Key，需下方手填）';
+  $('aApiKey').placeholder=p.hasKey?'沿用池密钥，留空不修改':'该池条目尚未配置 API Key';
+  // 切换 Model 为下拉，并默认选中池中第一个模型（新建时无需再手填）
+  const ms=$('aModelSel'); const mi=$('aModel');
+  const cur=mi.value;
+  if(p.models && p.models.length){
+    const defModel = cur || p.models[0];
+    ms.innerHTML='<option value="">（自定义）</option>'+p.models.map(m=>`<option value="${esc(m)}" ${m===defModel?'selected':''}>${esc(m)}</option>`).join('');
+    ms.value=defModel;
+    ms.style.display='';
+    ms.onchange=()=>{if(ms.value){mi.value=ms.value;mi.style.display='none';ms.style.display='';}else{mi.style.display='';ms.style.display='none';}};
+    if(p.models.includes(defModel)){mi.style.display='none';}else{mi.style.display='';}
+  } else {
+    ms.style.display='none';
+    mi.style.display='';
+  }
 }
 async function saveAgentEdit(){
   const poolId=$('aProviderPool').value||null;
