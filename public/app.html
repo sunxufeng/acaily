@@ -3091,7 +3091,7 @@ async function loadAutomation(){
   if(isAdmin){
     const [u,res,ag]=await Promise.all([
       api('GET','/api/admin/users'),
-      api('GET','/api/admin/automations'),
+      api('GET','/api/admin/automations?forOpenId='+encodeURIComponent(CURRENT_OPENID)),
       api('GET','/api/admin/agents').catch(()=>({data:{agents:[]}})),
     ]);
     if(res.status!==200){$('autoList').innerHTML='<div class="empty">加载失败：'+(res.data.error||res.status)+'</div>';return;}
@@ -3127,7 +3127,7 @@ async function runAuto(id){
 // 局部刷新单个自动化任务：只取该任务的当前状态、运行记录、最近结果；保留其它任务的本地状态不动
 async function refreshAuto(id){
   const isAdmin=document.body.classList.contains('is-admin');
-  const res=await api('GET', isAdmin?'/api/admin/automations':'/api/my/automations');
+  const res=await api('GET', isAdmin?('/api/admin/automations?forOpenId='+encodeURIComponent(CURRENT_OPENID)):'/api/my/automations');
   if(res.status!==200){toast('刷新失败：'+(res.data.error||res.status));return;}
   const fresh=res.data.automations||[];
   AUTO_LIST=fresh;
