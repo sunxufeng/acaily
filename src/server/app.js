@@ -737,10 +737,14 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 405, { error: '方法不允许' });
       }
       // 集合：GET 列表 / POST 新建
-      // GET 支持 ?owner=openId（成员管理里查看「某用户的智能体」）；不带则返回全部（管理员全量视图）
+      // GET 支持 ?owner=openId（成员管理里查看「某用户的智能体」）；
+      // 不带 owner 时，管理员个人「智能体配置」视图仅展示「组织共享（owner 为空）+ 本人创建」的智能体，
+      // 不混入其他成员的个人智能体（如 Arete 的「飞龙」），避免他人私有配置出现在管理员清单里。
       if (method === 'GET') {
         const owner = url.searchParams.get('owner');
-        return sendJson(res, 200, { agents: listAgents(owner || undefined) });
+        if (owner) return sendJson(res, 200, { agents: listAgents(owner) });
+        const agents = listAgents().filter(a => !a.owner || a.owner === admin.openId);
+        return sendJson(res, 200, { agents });
       }
       if (method === 'POST') {
         const body = await readBody(req);
