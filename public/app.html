@@ -1277,15 +1277,17 @@ let currentAgentCache={};
 async function loadAgents(){
   const isAdmin=document.body.classList.contains('is-admin');
   const hintEl=$('agentBindHint'); if(hintEl) hintEl.style.display=isAdmin?'none':'';
-  // 普通用户走 /api/agents（已按 owner 过滤：自己的 + 组织共享）；管理员走 /api/admin/agents
+  // 管理员走 /api/admin/agents（全部）；普通用户走 /api/agents（后端已按 owner 过滤为「仅自己」）
   const {status,data}=await api('GET', isAdmin?'/api/admin/agents':'/api/agents');
   const body=$('agentBody'); if(!body)return;
   if(status!==200){body.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>';return;}
-  const list=data.agents||[];
+  let list=data.agents||[];
+  // 兜底：即便后端返回了非本人智能体，前端也只展示「自己的」，杜绝看到他人配置
+  if(!isAdmin) list=list.filter(a=>a.owner===CURRENT_OPENID);
   currentAgentCache={}; list.forEach(a=>currentAgentCache[a.id]=a);
   // 非管理员也可新建（创建的是属于自己的智能体）；只读查看的菜单里新建按钮无意义，故仅授权用户可见
   const nb=$('agentNewBtn'); if(nb) nb.style.display='';
-  if(!list.length){body.innerHTML=`<tr><td colspan="6" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体。点击右上角「新建智能体」创建属于你自己的智能体；管理员共享的组织智能体会显示在此。'}</td></tr>`;return;}
+  if(!list.length){body.innerHTML=`<tr><td colspan="6" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体。点击右上角「新建智能体」创建属于你自己的智能体。'}</td></tr>`;return;}
   body.innerHTML=list.map(a=>{
     const mine=(!isAdmin && a.owner===CURRENT_OPENID);
     const ownerTag=(a.owner)

@@ -587,8 +587,9 @@ const server = createServer(async (req, res) => {
     if (method === 'GET' && pathname === '/api/agents') {
       const s = requireSessionApi(req, res);
       if (!s) return;
-      // 管理员看全部；普通用户只看「自己的 + 组织共享（owner 为空）」
-      const agents = s.role === 'admin' ? listAgents() : listAgents(s.openId);
+      // 管理员看全部；普通用户只看「自己的」——组织共享（owner 为空）由管理员管理，
+      // 不对普通用户暴露其配置，避免越权看到他人的智能体。
+      const agents = s.role === 'admin' ? listAgents() : listAgents(s.openId).filter((a) => a.owner === s.openId);
       return sendJson(res, 200, { agents });
     }
     // 普通用户（被授权「智能体配置」菜单）管理「自己的」智能体：仅可创建/编辑/删除 owner===自己 的，组织共享（owner 为空）或他人智能体不可改
