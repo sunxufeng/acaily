@@ -659,9 +659,11 @@ const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','u
 // 普通用户（已授权 provider 菜单）也要用它来编辑自己的个人 Provider 以及组织下发的副本。
 // agents / agent-edit（智能体配置 / 编辑）同理：已授权 agents 菜单的普通用户也要能进入。
 // 真正的写权限由后端按 owner 校验（/api/agents 仅本人 + 组织共享、/api/admin/agents 仅管理员），前端只负责显隐。
-const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','provider-org','audit','automation','automation-edit','stats','provider-distribute','permissions']);
+const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','provider-org','audit','stats','provider-distribute','permissions']);
 // 受权限菜单 → 进入该 view 所需的菜单授权 key（非管理员必须持有，否则前端拦截；后端再做 owner 校验）
-const MENU_REQUIRED={ agents:'agents', 'agent-edit':'agents', provider:'provider', 'provider-edit':'provider' };
+// agents / agent-edit 需 agents 菜单；provider / provider-edit 需 provider 菜单；automation / automation-edit 需 automation 菜单。
+// 自动化视图对普通用户为只读（仅见以自己为收件人的任务），故放出 ADMIN_ONLY 后用 MENU_REQUIRED 控制准入。
+const MENU_REQUIRED={ agents:'agents', 'agent-edit':'agents', provider:'provider', 'provider-edit':'provider', automation:'automation', 'automation-edit':'automation' };
 const VIEW_TITLES={
   chat:['对话','与你的专属 AI 助手对话'],
   provider:['我的 Provider','维护个人 Provider 列表：可新建 / 编辑 / 停用 / 删除；管理员分发的副本也在此显示'],
