@@ -24,6 +24,15 @@ function persist() {
   store.persist();
 }
 
+// 取更完整的显示名：两者都非空时取较长的，避免飞书 OAuth 的简短名覆盖已维护的全名
+function bestName(a, b) {
+  const x = (a || '').trim();
+  const y = (b || '').trim();
+  if (!x) return y;
+  if (!y) return x;
+  return y.length >= x.length ? y : x;
+}
+
 // 完整记录（OAuth 回调时调用）：首次登录建档，之后更新姓名/头像/邮箱与 lastSeen
 export function recordLogin(openId, info = {}) {
   if (!openId) return;
@@ -32,7 +41,7 @@ export function recordLogin(openId, info = {}) {
   const prev = db.users[openId] || {};
   db.users[openId] = {
     openId,
-    displayName: info.name || prev.displayName || '',
+    displayName: bestName(info.name, prev.displayName),
     avatar: info.avatar || prev.avatar || '',
     email: info.email || prev.email || '',
     firstSeen: prev.firstSeen || now,

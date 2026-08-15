@@ -84,10 +84,19 @@ export function listOpenIds() {
   return Object.keys(load().users);
 }
 
+// 取「更完整」的显示名：两者都非空时取较长的（避免飞书 OAuth 的简短名覆盖管理员/用户手动维护的全名，
+// 例如「Arete Developer」被目录里的「Arete」截断）。长度相同则偏向配置里的（管理员可维护）。
+function bestDisplayName(dir, cfg) {
+  const a = (dir || '').trim();
+  const b = (cfg || '').trim();
+  if (!a) return b;
+  if (!b) return a;
+  return b.length >= a.length ? b : a;
+}
+
 // 管理后台用：列出全部用户配置摘要（不含 apiKey 明文/密文）
 // 合并「用户目录」：把仅登录过、尚未配置模型的用户也列入（displayName 取自目录，hasApiKey=false）。
-// 显示名解析优先级：通讯录目录 > 个人配置里的 displayName。
-// 通讯录来自飞书 OAuth，名字最权威；configs.json 里的 displayName 仅为兼容历史记录。
+// 显示名解析：目录名与个人配置名取「更完整」的一个（见 bestDisplayName），不再让目录无条件覆盖配置。
 export function listUsers() {
   const db = load();
   // 通讯录 → openId → displayName 索引
@@ -97,7 +106,7 @@ export function listUsers() {
   }
   const cfgUsers = Object.entries(db.users).map(([openId, c]) => ({
     openId,
-    displayName: dirMap[openId] || c.displayName || '',
+    displayName: bestDisplayName(dirMap[openId], c.displayName),
     provider: c.provider || '',
     model: c.model || '',
     botName: c.botName || '',

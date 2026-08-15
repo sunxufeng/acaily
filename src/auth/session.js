@@ -190,5 +190,11 @@ export async function fetchFeishuUserInfo(accessToken) {
   });
   const j = await r.json();
   if (j.code !== 0) throw new Error(`飞书用户信息失败 code=${j.code} msg=${j.msg}`);
-  return j.data; // { open_id, name, avatar_url, email, ... }
+  const d = j.data || {};
+  // 飞书 authen/v1/user_info 同时返回 name（本地名）与 en_name（英文名）；
+  // 二者取「更完整」的一个（长度更长），避免像「Arete Developer」被截断成「Arete」。
+  const n1 = (d.name || '').trim();
+  const n2 = (d.en_name || '').trim();
+  const fullName = n1.length >= n2.length ? n1 : n2;
+  return { open_id: d.open_id, name: fullName, avatar_url: d.avatar_url, email: d.email, union_id: d.union_id };
 }
