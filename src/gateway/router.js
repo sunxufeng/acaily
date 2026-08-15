@@ -49,12 +49,18 @@ export async function routeChatConfig(cfg, apiKey, messages, opts = {}) {
   if (cfg.providerPoolId) {
     const pool = getPoolProvider(cfg.providerPoolId);
     if (pool) {
+      // 池未指定模型时，回落到池的第一个模型（保存表单常把 model 留空交给池提供默认）
+      const fallbackModel =
+        (!cfg.model || !String(cfg.model).trim()) && pool.models && pool.models.length
+          ? pool.models[0]
+          : cfg.model;
       cfg = {
         ...cfg,
         type: pool.type || cfg.provider,
         provider: cfg.provider || pool.type || null,
         baseUrl: pool.baseUrl || cfg.baseUrl,
         models: pool.models || [],
+        model: fallbackModel,
       };
       apiKey = getPoolApiKey(cfg.providerPoolId) || apiKey;
     }

@@ -257,7 +257,7 @@ async function processFeishuMessage(openId, text, image, file, chatId, agentId, 
     await sendText(openId, '⚠️ 该智能体不存在或已被删除。', creds);
     return;
   }
-  if (isAgent && !agent.provider && !userCfg) {
+  if (isAgent && !agent.provider && !agent.providerPoolId && !userCfg) {
     await sendText(
       openId,
       `⚠️ 智能体「${agent.name || ''}」尚未配置模型，且你个人也未配置模型，暂时无法回复。\n\n` +
