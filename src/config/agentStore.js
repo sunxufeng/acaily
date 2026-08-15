@@ -2,35 +2,24 @@
 // 每个智能体包含人设三段（identity / user / soul）+ 可选绑定飞书应用。
 // 绑定飞书应用的 app_secret 以信封密文（_enc）落库，不以明文暴露。
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { encryptSecret, decryptSecret } from '../crypto/kms.js';
+import { createJsonStore } from './jsonStore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STORE = process.env.ACAILY_AGENT_STORE || join(__dirname, '../../data/agents.json');
 
-let cache = null;
-
+// 进程内缓存 + 按 mtime/size 自动失效：外部手工改 agents.json 后无需重启即生效
+const store = createJsonStore(STORE, { agents: {} });
 function load() {
-  if (cache) return cache;
-  if (existsSync(STORE)) {
-    try {
-      cache = JSON.parse(readFileSync(STORE, 'utf8'));
-    } catch {
-      cache = { agents: {} };
-    }
-  } else {
-    cache = { agents: {} };
-  }
-  if (!cache.agents) cache.agents = {};
-  return cache;
+  const c = store.load();
+  if (!c.agents) c.agents = {};
+  return c;
 }
-
 function persist() {
-  mkdirSync(dirname(STORE), { recursive: true });
-  writeFileSync(STORE, JSON.stringify(cache, null, 2));
+  store.persist();
 }
 
 // 对外返回时剔除密文，仅暴露「是否已绑定 / 是否已配置模型 / owner」

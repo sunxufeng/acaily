@@ -3,9 +3,9 @@
 // 基础菜单（仅「对话」）普通用户默认拥有、不可取消；管理员永远拥有全部。
 // 注：「Provider」页默认不对普通用户开放，需管理员在「权限配置」中单独授权；
 //     普通用户登录后只看到「对话」，避免暴露模型/密钥配置。
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createJsonStore } from './jsonStore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STORE = process.env.ACAILY_PERMISSIONS_STORE || join(__dirname, '../../data/permissions.json');
@@ -23,24 +23,15 @@ export const BASE_DISPLAY_MENUS = [
   { key: 'chat', label: '对话' },
 ];
 
-let cache = null;
+// 进程内缓存 + 按 mtime/size 自动失效：外部手工改 permissions.json 后无需重启即生效
+const store = createJsonStore(STORE, { permissions: {} });
 function load() {
-  if (cache) return cache;
-  if (existsSync(STORE)) {
-    try {
-      cache = JSON.parse(readFileSync(STORE, 'utf8'));
-    } catch {
-      cache = { permissions: {} };
-    }
-  } else {
-    cache = { permissions: {} };
-  }
-  if (!cache.permissions) cache.permissions = {};
-  return cache;
+  const c = store.load();
+  if (!c.permissions) c.permissions = {};
+  return c;
 }
 function persist() {
-  mkdirSync(dirname(STORE), { recursive: true });
-  writeFileSync(STORE, JSON.stringify(cache, null, 2));
+  store.persist();
 }
 
 export function getPermissions(openId) {
