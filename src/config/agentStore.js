@@ -82,6 +82,8 @@ export function saveAgent(input, id) {
     providerPoolId: input.providerPoolId !== undefined ? (input.providerPoolId || null) : (existing.providerPoolId || null),
     // 归属用户（per-user 隔离）；为空 = 组织共享，所有登录用户可见可用
     owner,
+    // 创建者 openId：组织共享（owner 为空）智能体由此归属「维护人」，使其在成员管理中可见
+    createdBy: existing.createdBy || input.createdBy || null,
     // 飞书绑定信息保留（除非显式改）
     feishuAppId: input.feishuAppId !== undefined ? input.feishuAppId : existing.feishuAppId,
     feishuAppBound: existing.feishuAppBound || false,

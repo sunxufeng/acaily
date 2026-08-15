@@ -621,6 +621,7 @@ const server = createServer(async (req, res) => {
         const body = await readBody(req);
         if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
         body.owner = s.openId; // 普通用户只能创建属于自己的智能体
+        body.createdBy = s.openId; // 记录创建者，便于成员管理归属
         const ag = saveAgent(body);
         await record({ actor: s.openId, action: 'agent.create', target: ag.id, meta: { name: ag.name } });
         return sendJson(res, 200, { agent: ag });
@@ -749,7 +750,7 @@ const server = createServer(async (req, res) => {
       if (method === 'POST') {
         const body = await readBody(req);
         if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
-        const ag = saveAgent(body);
+        const ag = saveAgent({ ...body, createdBy: body.createdBy || admin.openId });
         await record({ actor: admin.openId, action: 'agent.create', target: ag.id, meta: { name: ag.name } });
         return sendJson(res, 200, { agent: ag });
       }

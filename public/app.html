@@ -2445,7 +2445,9 @@ window.openUserPage=async function(openId, readOnly){
   // 成员编辑页只列「该成员专属（owner===openId）」的智能体；组织共享（owner 为空）属于组织级资源，
   // 不在单个成员页重复挂载，避免「看到他人（如管理员）的智能体」。与 rerenderUserAgentSection 保持一致。
   const agentsAllMine=(agMineRes.status===200&&agMineRes.data.agents)?agMineRes.data.agents:[];
-  const agents=agentsAllMine.filter(a=>a.owner===openId);
+  // 成员编辑页列「该成员专属（owner===openId）」+「其创建的组织共享（owner 为空且 createdBy===openId）」智能体；
+  // 后者归属维护人（如管理员孙旭峰维护的组织共享智能体），避免「看到他人智能体」的前提下让其本人可见。
+  const agents=agentsAllMine.filter(a=>a.owner===openId || (!a.owner && a.createdBy===openId));
   // 供「成员编辑页内」的自动化列表 + 弹窗收件人/智能体选择使用
   AUTO_LIST=autos;
   AUTO_AGENTS=agentsAll;
@@ -2672,8 +2674,8 @@ async function rerenderUserAgentSection(){
   if(!forId) return;
   const res=await api('GET','/api/admin/agents?owner='+encodeURIComponent(forId));
   if(res.status!==200) return;
-  // 成员编辑页只列该成员专属（owner===forId）的智能体；组织共享不在此重复挂载。
-  const list=(res.data.agents||[]).filter(a=>a.owner===forId);
+  // 成员编辑页列该成员专属（owner===forId）+ 其创建的组织共享（owner 为空且 createdBy===forId）智能体。
+  const list=(res.data.agents||[]).filter(a=>a.owner===forId || (!a.owner && a.createdBy===forId));
   CURRENT_USER_AGENTS=list;
   const bodyEl=$('userAgentBody');
   // 简化：直接重渲整个 card 区（保留 providers/automation 不变，需要从缓存恢复）
