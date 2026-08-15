@@ -874,6 +874,32 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 400, { error: e.message });
       }
     }
+    // 个人 Provider 测试连通：普通用户验证自己空间内的 Provider（含组织下发的副本）。
+    // 必须放在 myProvMatch 正则之前，否则 "/test" 会被当 provider id 截走 → 404。
+    // 与 /api/admin/providers/test 同构，但 providerId 必须归属本人，避免越权读取他人密钥。
+    if (pathname === '/api/my/providers/test' && method === 'POST') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      const b = await readBody(req);
+      const inline = {
+        provider: b.provider || '',
+        baseUrl: b.baseUrl || '',
+        apiKey: b.apiKey || null,
+        model: b.model || '',
+        chatCompletionsPath: b.chatCompletionsPath || '',
+        timeout: b.timeout || 30,
+      };
+      if (b.providerId) {
+        const r0 = getProviderRaw(b.providerId);
+        if (!r0 || r0.owner !== s.openId) return sendJson(res, 403, { error: '无权测试该 Provider' });
+        if (!inline.apiKey) {
+          try { inline.apiKey = getProviderApiKey(b.providerId) || null; } catch (_) {}
+        }
+      }
+      const r = await testInlineProvider(inline);
+      await record({ actor: s.openId, action: 'my.provider.test', target: b.providerId || inline.provider, meta: { ok: r.ok, model: inline.model } });
+      return sendJson(res, 200, r);
+    }
     // 我的 Provider 单条：GET / PUT / DELETE / toggle 停用
     const myProvMatch = pathname.match(/^\/api\/my\/providers\/([^/]+)$/);
     if (myProvMatch) {
