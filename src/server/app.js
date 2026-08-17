@@ -363,8 +363,9 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
   let agentModel = null;
   let agentCfg = null;       // 智能体自有模型配置（provider/baseUrl/model）
   let agentApiKey = null;    // 智能体自有 API Key（明文，已解密）
+  let ag = null;
   if (context?.agentId) {
-    const ag = getAgent(context.agentId);
+    ag = getAgent(context.agentId);
     if (ag) {
       agentPersona = buildAgentSystemPrompt(ag);
       agentModel = ag.model || null;
