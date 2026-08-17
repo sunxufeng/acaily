@@ -156,8 +156,8 @@
             <button class="btn" id="myProvNewBtn">+ 新建 Provider</button>
           </div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
-            <tbody id="myProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
+            <table><thead><tr><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
+            <tbody id="myProvBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody></table>
           </div>
         </div>
       </section>
@@ -296,8 +296,8 @@
             <button class="btn" id="orgProvNewBtn">+ 新建组织 Provider</button>
           </div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th style="width:42px;">图标</th><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:380px;">操作</th></tr></thead>
-              <tbody id="orgProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
+            <table><thead><tr><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:380px;">操作</th></tr></thead>
+              <tbody id="orgProvBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody></table>
           </div>
         </div>
       </section>
@@ -2002,13 +2002,12 @@ async function loadMyProviders(){
   // 复用下拉依旧可读取 /api/config/me（best-effort）
   try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
   const {status,data}=await api('GET','/api/my/providers');
-  if(status!==200){body.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>';return;}
+  if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
   const list=data.providers||[];
   myProvCache={}; list.forEach(p=>myProvCache[p.id]=p);
   myProvCacheList=list;
-  if(!list.length){body.innerHTML='<tr><td colspan="9" class="empty">暂无 Provider，点击右上角「+ 新建 Provider」创建属于你的 Provider；管理员分发的副本也会出现在这里。</td></tr>';return;}
+  if(!list.length){body.innerHTML='<tr><td colspan="8" class="empty">暂无 Provider，点击右上角「+ 新建 Provider」创建属于你的 Provider；管理员分发的副本也会出现在这里。</td></tr>';return;}
   body.innerHTML=list.map(p=>`<tr>
-    <td style="text-align:center;font-size:20px;">${esc(p.emoji||'🧩')}</td>
     <td><b>${esc(p.name)}</b> ${rowOriginTag(p)}</td>
     <td><span class="tag">${esc(p.type)}</span></td>
     <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
@@ -2037,13 +2036,12 @@ async function loadOrgProviders(){
   // 复用下拉依旧可读 /api/config/me，让 admin 在新建条目时也能复用自身 /api/config/me
   try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
   const {status,data}=await api('GET','/api/admin/providers');
-  if(status!==200){body.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>';return;}
+  if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
   const list=data.providers||[];
   orgProvCache={}; list.forEach(p=>orgProvCache[p.id]=p);
   orgProvCacheList=list;
-  if(!list.length){body.innerHTML='<tr><td colspan="9" class="empty">暂无组织共享 Provider，点击右上角「+ 新建组织 Provider」创建第一条；后续可分发给指定成员。</td></tr>';return;}
+  if(!list.length){body.innerHTML='<tr><td colspan="8" class="empty">暂无组织共享 Provider，点击右上角「+ 新建组织 Provider」创建第一条；后续可分发给指定成员。</td></tr>';return;}
   body.innerHTML=list.map(p=>`<tr>
-    <td style="text-align:center;font-size:20px;">${esc(p.emoji||'🧩')}</td>
     <td><b>${esc(p.name)}</b></td>
     <td><span class="tag">${esc(p.type)}</span></td>
     <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
@@ -2134,7 +2132,7 @@ function provFormHTML(p, scope){
     reuseList.forEach(pp=>{
       reuseExtraMap['pool:'+pp.id] = pp.extra || {};
       const ml=(pp.models||[]).slice(0,2).join(', ');
-      reuseOptions.push(`<option value="pool:${esc(pp.id)}" data-type="${esc(pp.type||'')}" data-base="${esc(pp.baseUrl||'')}" data-models="${esc((pp.models||[]).join(','))}">🧩 ${esc(pp.name||'')} (${esc(pp.type||'')}${ml?' · '+esc(ml):''})</option>`);
+      reuseOptions.push(`<option value="pool:${esc(pp.id)}" data-type="${esc(pp.type||'')}" data-base="${esc(pp.baseUrl||'')}" data-models="${esc((pp.models||[]).join(','))}">${esc(pp.name||'')} (${esc(pp.type||'')}${ml?' · '+esc(ml):''})</option>`);
     });
   }
   // 用预设清单生成类型下拉（value=协议 type）；按已存的 (type, baseUrl) 自动选回预设
@@ -2145,8 +2143,7 @@ function provFormHTML(p, scope){
       <span class="desc">选完后会自动填入「类型 / Base URL / 模型列表」；API Key 留空避免被覆盖</span>
     </div>
     <label>复用来源<select id="pReuse">${reuseOptions.join('')}</select></label>
-    <div class="row"><label>名称<input id="pName" value="${esc(p.name||'')}" placeholder="如：组织默认 OpenAI"/></label>
-    <label style="width:96px;">图标<input id="pEmoji" value="${esc(p.emoji||'🧩')}" maxlength="4"/></label></div>
+    <div class="row"><label>名称<input id="pName" value="${esc(p.name||'')}" placeholder="如：组织默认 OpenAI"/></label></div>
     <div class="row">
       <label>类型<select id="pType">${typeOpts}</select></label>
       <label>Base URL<input id="pBaseUrl" value="${esc(p.baseUrl||'')}" placeholder="https://api.openai.com/v1"/></label>
@@ -2352,7 +2349,6 @@ async function saveProviderEdit(){
   if(customHeaders) extra.customHeaders=customHeaders;
   const payload={
     name:$('pName').value.trim()||'未命名 Provider',
-    emoji:$('pEmoji').value.trim()||'🧩',
     type:$('pType').value,
     baseUrl:$('pBaseUrl').value.trim(),
     models:$('pModels').value.split('\n').map(s=>s.trim()).filter(Boolean),
@@ -2407,7 +2403,7 @@ function renderDistributeBody(src){
     <div class="row" style="align-items:flex-end;gap:10px;flex-wrap:wrap;">
       <div style="flex:1;min-width:200px;">
         <label>源 Provider</label>
-        <div><b>${esc(src.emoji||'🧩')} ${esc(src.name)}</b> · ${esc(src.type)} · ${esc((src.models||[]).slice(0,2).join(', '))}${src.models&&src.models.length>2?' …':''}</div>
+        <div><b>${esc(src.name)}</b> · ${esc(src.type)} · ${esc((src.models||[]).slice(0,2).join(', '))}${src.models&&src.models.length>2?' …':''}</div>
         <div class="muted small">分发后，每个目标成员的「我的 Provider」列表里会增加一份副本（标「来自组织」），成员可自由修改。</div>
       </div>
     </div>
