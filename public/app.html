@@ -1398,6 +1398,46 @@ const AGENT_DEFAULTS={
 改了这份文件，告诉用户。这是你的内核，改动应该双方知晓。
 
 这份文件随你生长。你越了解自己，它就越像你。`,
+  // 新建智能体时 4 个新 Tab 的默认模板：技能 / 节奏 / 记忆 / 工具
+  skill:`# SKILL.md - 你能做什么
+
+把你的能力写下来。擅长的、不擅长的、还有待学的。
+
+- **擅长：**
+- **不擅长：**
+- **待学：**
+
+能力清单随使用演进。做完一件事，回头补一条。`,
+  heartbeat:`# HEARTBEAT.md - 你的节奏
+
+你的工作节奏是什么样的？什么时候主动，什么时候安静。
+
+- **自检频率：** 多久回头看一眼上下文 / 任务进展？
+- **主动推送：** 什么情况下主动给用户递消息？什么情况下闭嘴？
+- **静默期：** 一天里有没有不要打扰的时段？
+- **节庆 / 异常：** 周末、深夜、紧急情况怎么处理？
+
+把节奏定下来，模型就有据可依。`,
+  memory:`# MEMORY.md - 你要长期记住的事
+
+记那些跨对话还要用到的东西：用户的偏好、项目的背景、和用户达成的约定。
+
+不要记一次性的事——那些用完就忘。
+
+- **用户偏好：**
+- **项目背景：**
+- **约定：**
+
+这份文件是给未来的你看的。写得简洁，重点突出。`,
+  tools:`# TOOLS.md - 你的工具箱
+
+你能调用的工具 / 系统能力，以及怎么用。
+
+- **可用工具：**
+- **使用注意：**
+- **不适用场景：**
+
+工具是手段，不是目的。拿不准的时候，回到 SKILL.md。`,
 };
 function agentEditHTML(a,isNew){
   a=a||{};
@@ -1407,27 +1447,47 @@ function agentEditHTML(a,isNew){
     <label style="width:96px;">图标<input id="aEmoji" value="${esc(a.emoji||'🤖')}" maxlength="4"/></label></div>
 
     <div class="tabs" id="agentTabs">
-      <button type="button" class="tab active" data-tab="desc">简介</button>
-      <button type="button" class="tab" data-tab="identity">智能体档案</button>
-      <button type="button" class="tab" data-tab="user">用户档案</button>
-      <button type="button" class="tab" data-tab="soul">行为准则</button>
+      <button type="button" class="tab active" data-tab="skill">Skill</button>
+      <button type="button" class="tab" data-tab="desc">Agent</button>
+      <button type="button" class="tab" data-tab="heartbeat">Heartbeat</button>
+      <button type="button" class="tab" data-tab="identity">Identity</button>
+      <button type="button" class="tab" data-tab="memory">Memory</button>
+      <button type="button" class="tab" data-tab="soul">Soul</button>
+      <button type="button" class="tab" data-tab="tools">Tools</button>
+      <button type="button" class="tab" data-tab="user">User</button>
     </div>
     <div class="tab-panels">
-      <div class="tab-panel active" data-panel="desc">
-        <div class="field-label">简介（Markdown）</div>
+      <div class="tab-panel active" data-panel="skill">
+        <div class="field-label">技能 Skill（Markdown）</div>
+        ${mdEditBlock('aSkill', a.skill||def('skill'), 10, '这个智能体掌握哪些技能 / 能做什么 / 不擅长什么')}
+      </div>
+      <div class="tab-panel" data-panel="desc">
+        <div class="field-label">简介 Agent（Markdown）</div>
         ${mdEditBlock('aDesc', a.description||'', 5, '一句话简介（支持 **加粗** / 列表 / 链接 等 Markdown）。点「导入 MD」可载入 .md 文件。')}
       </div>
-      <div class="tab-panel" data-panel="identity">
-        <div class="field-label">智能体档案（Markdown）</div>
-        ${mdEditBlock('aIdentity', def('identity'), 12, '这个智能体是谁 / 背景 / 角色定位')}
+      <div class="tab-panel" data-panel="heartbeat">
+        <div class="field-label">节奏 Heartbeat（Markdown）</div>
+        ${mdEditBlock('aHeartbeat', a.heartbeat||def('heartbeat'), 10, '这个智能体的节奏 / 自检习惯，例如「每 3 轮自检一次」「周末降低主动推送」')}
       </div>
-      <div class="tab-panel" data-panel="user">
-        <div class="field-label">用户档案（Markdown）</div>
-        ${mdEditBlock('aUser', def('user'), 12, '面对的用户是谁 / 用户诉求')}
+      <div class="tab-panel" data-panel="identity">
+        <div class="field-label">身份 Identity（Markdown）</div>
+        ${mdEditBlock('aIdentity', a.identity||def('identity'), 12, '这个智能体是谁 / 背景 / 角色定位')}
+      </div>
+      <div class="tab-panel" data-panel="memory">
+        <div class="field-label">记忆 Memory（Markdown）</div>
+        ${mdEditBlock('aMemory', a.memory||def('memory'), 10, '需要长期记住的事：用户偏好、项目背景、约定……')}
       </div>
       <div class="tab-panel" data-panel="soul">
-        <div class="field-label">行为准则（Markdown）</div>
-        ${mdEditBlock('aSoul', def('soul'), 12, '语气 / 价值观 / 禁忌')}
+        <div class="field-label">灵魂 Soul（Markdown）</div>
+        ${mdEditBlock('aSoul', a.soul||def('soul'), 12, '语气 / 价值观 / 禁忌')}
+      </div>
+      <div class="tab-panel" data-panel="tools">
+        <div class="field-label">工具 Tools（Markdown）</div>
+        ${mdEditBlock('aTools', a.tools||def('tools'), 10, '智能体可调用的工具 / 怎么用 / 注意事项')}
+      </div>
+      <div class="tab-panel" data-panel="user">
+        <div class="field-label">用户 User（Markdown）</div>
+        ${mdEditBlock('aUser', a.user||def('user'), 12, '面对的用户是谁 / 用户诉求')}
       </div>
     </div>
 
@@ -1572,9 +1632,13 @@ async function saveAgentEdit(){
     name:$('aName').value.trim()||'未命名智能体',
     emoji:$('aEmoji').value.trim()||'🤖',
     description:$('aDesc').value.trim(),
+    skill:$('aSkill').value,
+    heartbeat:$('aHeartbeat').value,
     identity:$('aIdentity').value,
-    user:$('aUser').value,
+    memory:$('aMemory').value,
     soul:$('aSoul').value,
+    tools:$('aTools').value,
+    user:$('aUser').value,
     providerPoolId: poolId || null,
     provider:poolId?null:($('aProvider').value||null),
     model:$('aModel').value.trim()||null,

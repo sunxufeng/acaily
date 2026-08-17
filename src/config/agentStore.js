@@ -1,5 +1,7 @@
 // 智能体（Agent）配置存储：文件型 JSON 仓库（与 userConfigStore 同构）。
-// 每个智能体包含人设三段（identity / user / soul）+ 可选绑定飞书应用。
+// 每个智能体包含人设多段（identity / user / soul / skill / heartbeat / memory / tools）+ 可选绑定飞书应用。
+// 其中 identity/user/soul 是核心人设三段，skill/heartbeat/memory/tools 是新增的「哲学信息」扩展段，
+// 编辑页 8 个 Tab 对应，运行时全部按 Tab 顺序拼进 system prompt。
 // 绑定飞书应用的 app_secret 以信封密文（_enc）落库，不以明文暴露。
 
 import { dirname, join } from 'node:path';
@@ -74,6 +76,11 @@ export function saveAgent(input, id) {
     identity: clamp(input.identity, 4000),
     user: clamp(input.user, 4000),
     soul: clamp(input.soul, 4000),
+    // 新增 4 段「哲学信息」：技能 / 心跳 / 记忆 / 工具，均为 Markdown 文本。
+    skill: clamp(input.skill, 4000),
+    heartbeat: clamp(input.heartbeat, 4000),
+    memory: clamp(input.memory, 8000), // 记忆可能持续累积，放宽到 8k
+    tools: clamp(input.tools, 4000),
     model: input.model ? clamp(input.model, 80) : (existing.model || null),
     // 智能体自有模型配置（回复时使用，不依赖终端用户个人配置）
     provider: input.provider ? clamp(input.provider, 40) : (existing.provider || null),

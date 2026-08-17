@@ -122,13 +122,19 @@ function injectIdentityPrompt(openId, baseSys) {
   );
 }
 
-// 由智能体配置构造 systemPrompt（人设三段 + 名称/简介）
+// 由智能体配置构造 systemPrompt（人设多段 + 名称/简介）
+// 注入顺序与编辑页 Tab 一致：Skill → Agent(desc) → Heartbeat → Identity → Memory → Soul → Tools → User。
+// 空段自动跳过，避免空 header 污染 prompt。
 function buildAgentSystemPrompt(agent) {
   const parts = [`你正在以智能体「${agent.name}」${agent.emoji || ''} 的身份与用户对话。`];
+  if (agent.skill) parts.push(`【技能 SKILL】\n${agent.skill}`);
   if (agent.description) parts.push(`简介：${agent.description}`);
+  if (agent.heartbeat) parts.push(`【节奏 HEARTBEAT】\n${agent.heartbeat}`);
   if (agent.identity) parts.push(`【身份 IDENTITY】\n${agent.identity}`);
-  if (agent.user) parts.push(`【用户 USER】\n${agent.user}`);
+  if (agent.memory) parts.push(`【记忆 MEMORY】\n${agent.memory}`);
   if (agent.soul) parts.push(`【灵魂 SOUL】\n${agent.soul}`);
+  if (agent.tools) parts.push(`【工具 TOOLS】\n${agent.tools}`);
+  if (agent.user) parts.push(`【用户 USER】\n${agent.user}`);
   return parts.join('\n\n');
 }
 
