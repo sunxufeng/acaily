@@ -386,8 +386,8 @@
           <div id="agentBindHint" class="hint" style="display:none;margin-bottom:8px;">未绑定的智能体：点「绑定飞书」，填入你在飞书开放平台创建的自建应用 App ID / App Secret 即可自助绑定，无需管理员。</div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:260px;">操作</th></tr></thead>
-              <tbody id="agentBody"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+              <thead><tr><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:260px;">操作</th></tr></thead>
+              <tbody id="agentBody"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -1282,14 +1282,14 @@ async function loadAgents(){
   // 管理员走 /api/admin/agents（全部）；普通用户走 /api/agents（后端已按 owner 过滤为「仅自己」）
   const {status,data}=await api('GET', isAdmin?'/api/admin/agents':'/api/agents');
   const body=$('agentBody'); if(!body)return;
-  if(status!==200){body.innerHTML='<tr><td colspan="6" class="empty">加载失败</td></tr>';return;}
+  if(status!==200){body.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>';return;}
   let list=data.agents||[];
   // 兜底：即便后端返回了非本人智能体，前端也只展示「自己的」，杜绝看到他人配置
   if(!isAdmin) list=list.filter(a=>a.owner===CURRENT_OPENID);
   currentAgentCache={}; list.forEach(a=>currentAgentCache[a.id]=a);
   // 非管理员也可新建（创建的是属于自己的智能体）；只读查看的菜单里新建按钮无意义，故仅授权用户可见
   const nb=$('agentNewBtn'); if(nb) nb.style.display='';
-  if(!list.length){body.innerHTML=`<tr><td colspan="6" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体。点击右上角「新建智能体」创建属于你自己的智能体。'}</td></tr>`;return;}
+  if(!list.length){body.innerHTML=`<tr><td colspan="5" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体。点击右上角「新建智能体」创建属于你自己的智能体。'}</td></tr>`;return;}
   body.innerHTML=list.map(a=>{
     const mine=(!isAdmin && a.owner===CURRENT_OPENID);
     const ownerTag=(a.owner)
@@ -1314,7 +1314,6 @@ async function loadAgents(){
       ops=`<button class="btn ghost sm" data-view-agent="${esc(a.id)}" title="查看智能体（只读）">查看</button>`;
     }
     return `<tr>
-    <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
     <td><b>${esc(a.name)}</b> ${ownerTag}</td>
     <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
     <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
@@ -1443,8 +1442,7 @@ function agentEditHTML(a,isNew){
   a=a||{};
   const def=k=>(isNew?(a[k]||AGENT_DEFAULTS[k]||''):(a[k]||''));
   return `<div class="agent-edit-form">
-    <div class="row"><label>名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
-    <label style="width:96px;">图标<input id="aEmoji" value="${esc(a.emoji||'🤖')}" maxlength="4"/></label></div>
+    <label>名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
 
     <div class="tabs" id="agentTabs">
       <button type="button" class="tab active" data-tab="skill">Skill</button>
@@ -1467,7 +1465,10 @@ function agentEditHTML(a,isNew){
       </div>
       <div class="tab-panel" data-panel="heartbeat">
         <div class="field-label">心跳定时调度 Heartbeat（复用自动化任务引擎）</div>
-        <label class="checkbox-inline"><input type="checkbox" id="aHbEnabled"/> 启用心跳（定时自检 / 主动推送）</label>
+        <div class="hb-enable-row">
+          <input type="checkbox" id="aHbEnabled"/>
+          <label for="aHbEnabled">启用心跳（定时自检 / 主动推送）</label>
+        </div>
         <div class="row">
           <label>动作
             <select id="aHbAction">
@@ -1618,7 +1619,7 @@ async function loadAgentToolToggles(a, readOnly){
   // 未配置 toolList（selected 为空）= 放开全部内置工具 → 默认全勾选
   box.innerHTML=AGENT_TOOL_CACHE.map(t=>{
     const on=selected.size?selected.has(t.name):true;
-    return `<label class="tool-toggle"><input type="checkbox" data-tool="${esc(t.name)}" ${on?'checked':''} ${readOnly?'disabled':''}/> <b>${esc(t.name)}</b> <span class="muted">${esc(t.description||'')}</span></label>`;
+    return `<label class="tool-toggle"><input type="checkbox" data-tool="${esc(t.name)}" ${on?'checked':''} ${readOnly?'disabled':''}/><span class="tool-toggle-body"><b>${esc(t.name)}</b><span class="tool-desc">${esc(t.description||'')}</span></span></label>`;
   }).join('');
 }
 // 读出勾选的工具名；与全选等价时返回空数组（=放开全部）
@@ -1818,7 +1819,7 @@ async function saveAgentEdit(){
   const poolId=$('aProviderPool').value||null;
   const payload={
     name:$('aName').value.trim()||'未命名智能体',
-    emoji:$('aEmoji').value.trim()||'🤖',
+    emoji:'🤖',
     description:$('aDesc').value.trim(),
     skill:$('aSkill').value,
     identity:$('aIdentity').value,
@@ -2903,7 +2904,6 @@ function agentsHTML(agents, ro){
   const rows = agents.map(a=>{
     const isOrg=!a.owner; // 组织共享（owner 为空）：对所有成员可见，删除会影响全员
     return `<tr data-agent-id="${esc(a.id)}">
-      <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
       <td><b>${esc(a.name)}</b> <span class="tag ${isOrg?'warn':'ok'}">${isOrg?'组织共享':'该成员'}</span></td>
       <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
       <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
@@ -2915,11 +2915,11 @@ function agentsHTML(agents, ro){
       </td>
     </tr>`;
   }).join('');
-  const empty = agents.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有成员生效，不在此重复列出。</tr>';
+  const empty = agents.length ? '' : '<tr><td colspan="5" class="empty">该成员暂无专属智能体。组织共享智能体对所有成员生效，不在此重复列出。</tr>';
   const createBtn = ro ? '' : '<button class="btn sm" id="uaNewAgent" style="margin-top:10px;">+ 代该成员新建智能体</button>';
   const hint = ro ? '' : '<div class="hint" style="margin-top:6px;">管理员可在此直接编辑 / 删除 / 绑定飞书，或代该成员新建智能体（owner 归属该成员）。</div>';
   return `<div class="table-wrap"><table>
-    <thead><tr><th style="width:42px;">图标</th><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
+    <thead><tr><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
     <tbody id="userAgentBody">${rows}${empty}</tbody>
   </table></div>${createBtn}${hint}`;
 }
@@ -2939,7 +2939,6 @@ async function rerenderUserAgentSection(){
     const rows=list.map(a=>{
       const isOrg=!a.owner;
       return `<tr data-agent-id="${esc(a.id)}">
-      <td style="font-size:20px;text-align:center;">${esc(a.emoji||'🤖')}</td>
       <td><b>${esc(a.name)}</b> <span class="tag ${isOrg?'warn':'ok'}">${isOrg?'组织共享':'该成员'}</span></td>
       <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
       <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
@@ -2951,7 +2950,7 @@ async function rerenderUserAgentSection(){
       </td>
     </tr>`;
     }).join('');
-    const empty = list.length ? '' : '<tr><td colspan="6" class="empty">该成员暂无专属智能体。组织共享智能体对所有成员生效，不在此重复列出。</tr>';
+    const empty = list.length ? '' : '<tr><td colspan="5" class="empty">该成员暂无专属智能体。组织共享智能体对所有成员生效，不在此重复列出。</tr>';
     bodyEl.innerHTML = rows + empty;
     wireUserAgentSection();
   }
