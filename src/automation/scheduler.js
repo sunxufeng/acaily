@@ -3,11 +3,43 @@
 // 增删改时按 id 增量调度。handler 把执行交给 runner。
 
 import { Cron } from 'croner';
+import fs from 'node:fs';
+import path from 'node:path';
 import { listAutomations, getAutomation } from './store.js';
 import { runAutomation } from './runner.js';
 
 const jobs = new Map(); // id -> Cron instance
-const deferred = new Map(); // id -> Timeout（idleOnly 模式的延时执行）
+
+// 闲时执行（idleOnly）待办队列：持久化到磁盘，避免内存 setTimeout 在服务重启/崩溃时丢失。
+// 结构：[{ id: automationId, runAt: 目标执行时间戳(ms) }]
+const STORE_PATH = process.env.ACAILY_AUTOMATION_STORE || '/opt/acaily/data/automations.json';
+const DATA_DIR = path.dirname(STORE_PATH);
+const PENDING_FILE = path.join(DATA_DIR, 'pendingIdle.json');
+
+let pending = loadPending();
+let sweepTimer = null;
+
+function loadPending() {
+  try {
+    const arr = JSON.parse(fs.readFileSync(PENDING_FILE, 'utf8') || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+function savePending() {
+  try {
+    fs.writeFileSync(PENDING_FILE, JSON.stringify(pending, null, 2));
+  } catch (e) {
+    console.error('[automation] 保存闲时待办失败:', e.message);
+  }
+}
+function addPending(id, runAt) {
+  if (!pending.find((p) => p.id === id)) {
+    pending.push({ id, runAt });
+    savePending();
+  }
+}
 
 // 启动时调用：把全部 enabled 的自动化挂上 cron
 export async function scheduleAll() {
@@ -19,6 +51,9 @@ export async function scheduleAll() {
       scheduled++;
     }
   }
+  startSweep();
+  // 启动即补跑已过期的闲时任务（容忍重启：即使重启发生在 9:00~次日00:00 之间也不丢）
+  await sweepPendingIdle();
   return { total: autos.length, scheduled };
 }
 
@@ -41,43 +76,68 @@ export function unscheduleOne(id) {
     try { job.stop(); } catch {}
     jobs.delete(id);
   }
-  const t = deferred.get(id);
-  if (t) {
-    clearTimeout(t);
-    deferred.delete(id);
-  }
+  // 注意：不要在 unschedule 时清除 pending，否则重启/编辑自动化会丢失待执行的闲时任务。
+  // pending 只在该任务被禁用/删除时（onFire / 删除接口）才清除。
+}
+
+// 显式清除某任务的闲时待办（禁用/删除时使用）
+export function removePending(id) {
+  const before = pending.length;
+  pending = pending.filter((p) => p.id !== id);
+  if (pending.length !== before) savePending();
 }
 
 // 触发：执行前再读一次 store（避免 runner 拿到旧 enabled 状态），然后交给 runner
 async function onFire(id) {
   const auto = await getAutomation(id);
-  if (!auto) return unscheduleOne(id);
-  if (auto.enabled === false) return;
+  if (!auto) {
+    removePending(id);
+    return unscheduleOne(id);
+  }
+  if (auto.enabled === false) {
+    removePending(id);
+    return;
+  }
   if (auto.idleOnly) {
     const hr = new Date().getHours();
-    if (hr >= 6 || hr < 0) {
-      // 当前不在 00:00-06:00 窗口 → 延后到下一个 00:00
-      const delay = msUntilNextMidnight();
-      const t = setTimeout(() => {
-        deferred.delete(id);
-        // 时间到了再读一次配置（可能已被关停/删除）
-        getAutomation(id).then((cur) => {
-          if (!cur || cur.enabled === false) return;
-          runAutomation(cur).catch((e) => console.error('[automation] idle-run error:', e.message));
-        });
-      }, delay);
-      deferred.set(id, t);
+    if (hr >= 6) {
+      // 当前不在 00:00-06:00 空闲窗口 → 记录待执行，等到下一个 00:00 由 sweeper 触发（落盘，不怕重启）
+      addPending(id, nextIdleWindowStart());
       return;
     }
   }
   runAutomation(auto).catch((e) => console.error('[automation] run error:', e.message));
 }
 
-function msUntilNextMidnight() {
+// 下一个空闲窗口起点（次日 00:00）
+function nextIdleWindowStart() {
   const now = new Date();
   const next = new Date(now);
-  next.setHours(24, 0, 0, 0);
-  return next.getTime() - now.getTime();
+  next.setHours(24, 0, 0, 0); // 今天 24:00 = 次日 00:00
+  return next.getTime();
+}
+
+// 周期/启动补跑：执行所有已到点的闲时待办
+async function sweepPendingIdle() {
+  if (!pending.length) return;
+  const now = Date.now();
+  const due = pending.filter((p) => p.runAt <= now);
+  if (!due.length) return;
+  // 先移除，避免重复触发（即使本次执行较慢也不会被下次 sweep 再跑）
+  pending = pending.filter((p) => p.runAt > now);
+  savePending();
+  for (const p of due) {
+    const auto = await getAutomation(p.id);
+    if (!auto || auto.enabled === false) continue;
+    await runAutomation(auto).catch((e) => console.error('[automation] idle-run error:', e.message));
+  }
+}
+
+function startSweep() {
+  if (sweepTimer) return;
+  sweepTimer = setInterval(() => {
+    sweepPendingIdle().catch(() => {});
+  }, 60_000);
 }
 
 // 给 API 层「立即运行」按钮用：异步执行，不阻塞 HTTP 响应

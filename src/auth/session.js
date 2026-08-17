@@ -138,12 +138,16 @@ export function getOauthState(req) {
 export function getFeishuAuthorizeUrl(state) {
   const appId = process.env.FEISHU_APP_ID;
   const redirect = getRedirectUri();
-  return (
+  let url =
     `${FEISHU_HOST}/open-apis/authen/v1/authorize` +
     `?app_id=${encodeURIComponent(appId)}` +
     `&redirect_uri=${encodeURIComponent(redirect)}` +
-    `&state=${encodeURIComponent(state)}`
-  );
+    `&state=${encodeURIComponent(state)}`;
+  // 可选：申请用户身份权限（如以用户视角读取其私聊/所在群需要 im:chat im:message im:resource）。
+  // 默认不传，保持现有登录行为；启用前须先在飞书开放平台为应用开启对应权限并发布版本。
+  const scope = process.env.FEISHU_OAUTH_SCOPE;
+  if (scope) url += `&scope=${encodeURIComponent(scope)}`;
+  return url;
 }
 
 export async function exchangeCodeForToken(code) {

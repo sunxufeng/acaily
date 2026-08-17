@@ -142,8 +142,10 @@ export async function downloadFile(messageId, fileKey, creds) {
 
 // 列出机器人所在的群聊（需要 im:chat 权限）。p2p 私聊不在此列表，
 // 私聊历史需用消息事件里的 chat_id 直接读取。
-export async function listBotChats({ pageSize = 100, creds } = {}) {
-  const token = await getTenantToken(creds);
+// userAccessToken：若传入，则以「用户身份」列出该用户所在的所有会话（含私聊 p2p 与群），
+// 这正是凌云自动化以创建者视角读取其私聊/群聊所需的能力。
+export async function listBotChats({ pageSize = 100, creds, userAccessToken } = {}) {
+  const token = userAccessToken || (await getTenantToken(creds));
   if (!token) return { error: '未配置飞书凭据' };
   const url = `${FEISHU_HOST}/open-apis/im/v1/chats?user_id_type=open_id&page_size=${Math.min(100, pageSize)}`;
   const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
@@ -153,8 +155,8 @@ export async function listBotChats({ pageSize = 100, creds } = {}) {
   return {
     chats: items.map((c) => ({
       chat_id: c.chat_id,
-      name: c.name || '(未命名群)',
-      chat_type: c.chat_type, // 'group'
+      name: c.name || (c.chat_type === 'p2p' ? '(私聊)' : '(未命名群)'),
+      chat_type: c.chat_type, // 'group' | 'p2p'
       member_count: c.member_count,
       owner_open_id: c.owner_id,
     })),
@@ -210,8 +212,9 @@ function extractMessageText(msg) {
 // container_id_type 合法值为 chat（群聊）或 p2p（私聊），注意不是 chat_id！
 // 同时解析 text 与 post（富文本）类型；并带回类型分布，便于区分
 // 「API 真的没返回消息」还是「返回了但被类型过滤掉」。
-export async function getChatMessages({ chatId, pageSize = 50, days, containerType = 'chat', creds } = {}) {
-  const token = await getTenantToken(creds);
+// userAccessToken：若传入，则以「用户身份」读取该用户所在会话（私聊/群）的消息。
+export async function getChatMessages({ chatId, pageSize = 50, days, containerType = 'chat', creds, userAccessToken } = {}) {
+  const token = userAccessToken || (await getTenantToken(creds));
   if (!token) return { error: '未配置飞书凭据' };
   if (!chatId) return { error: '缺少 chat_id' };
   // 防御：合法值只允许 chat / p2p，避免再次踩 invalid container_id_type 的坑

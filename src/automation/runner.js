@@ -4,7 +4,7 @@
 //   2. 把结果推送给 pushTo 中所有 open_id
 //   3. 落 run 日志到 store + 审计
 
-import { getConfig, getUnionId, setUnionId } from '../config/userConfigStore.js';
+import { getConfig, getUnionId, setUnionId, getUserAccessToken } from '../config/userConfigStore.js';
 import { routeChat, routeChatConfig } from '../gateway/router.js';
 import { sendMarkdown, sendText, resolveUnionId } from '../feishu/client.js';
 import { record as auditRecord } from '../audit/auditLog.js';
@@ -84,6 +84,18 @@ function buildSystemPrompt(openId, baseAgent) {
 }
 
 // 把 agent 输出渲染成飞书卡片正文，加标题与时间戳
+// 创建者身份锁定：无论智能体是否自带模型，都把「服务的飞书用户」固定为创建者（creator），
+// 防止模型在自动总结场景误把别人的任务算到创建者头上。与 buildSystemPrompt 内的锁定口径一致。
+function creatorIdentityLock(openId) {
+  const cfg = getConfig(openId);
+  const name = (cfg && cfg.displayName) || '';
+  if (!name) return '';
+  return (
+    `\n\n【当前用户身份锁定】你正以飞书用户「${name}」（open_id: ${openId}）的身份服务。` +
+    `身份已由系统固定为 ${name}，请以它为准整理「我的」任务，` +
+    `且不要把其他成员的任务算到 ${name} 头上。`
+  );
+}
 function buildPushText(auto, answer) {
   const now = new Date();
   const ts = now.toISOString().slice(0, 16).replace('T', ' ');
@@ -161,6 +173,16 @@ export async function runAutomation(auto, { manual = false } = {}) {
 
   // 关联智能体：优先用其自有模型 + 人设；智能体没配模型时回退到 caller 的个人配置
   const linkedAgent = auto.agentId ? getAgent(auto.agentId) : null;
+
+  // 以「创建者视角」读取会话：凌云等自动化应总结「创建该智能体的用户」的私聊与所在群，
+  // 而不是机器人所在的会话。解析创建者的 user_access_token；无令牌则回退到机器人视角。
+  const creator = (linkedAgent && (linkedAgent.createdBy || linkedAgent.owner)) || caller;
+  let creatorUserToken = null;
+  try {
+    creatorUserToken = await getUserAccessToken(creator);
+  } catch (e) {
+    console.warn(`[automation] 解析创建者 ${creator} 的用户令牌失败:`, e.message);
+  }
   let useAgentModel = false;
   let agentCfg = null;
   let agentApiKey = null;
@@ -240,15 +262,29 @@ export async function runAutomation(auto, { manual = false } = {}) {
     const autoMaxSteps = Number.isFinite(auto.maxSteps) && auto.maxSteps > 0 ? auto.maxSteps : 10;
     // 按关联智能体的 toolList 裁剪工具（无关联智能体则放开全部内置工具）
     const runtime = deps.makeRuntime ? deps.makeRuntime(linkedAgent) : agent;
+    // 系统提示：agent 自带模型走人设（agentPersona），普通模型走 buildSystemPrompt。
+    // 两条路径都补上「创建者身份锁定」，确保自动总结只算创建者本人的任务（不依赖提示词里是否点名）。
+    let systemPrompt;
+    if (useAgentModel) {
+      systemPrompt = (agentPersona || '') + creatorIdentityLock(creator);
+    } else {
+      systemPrompt = buildSystemPrompt(creator, agent);
+    }
     const r = await runtime.run(auto.description, {
       chat: (messages) =>
         useAgentModel
           ? routeChatConfig(agentCfg, agentApiKey, messages, { model: linkedAgent.model || null })
           : routeChat(caller, messages),
       history: [],
-      systemPrompt: useAgentModel ? agentPersona : buildSystemPrompt(caller, agent),
+      systemPrompt,
       maxSteps: autoMaxSteps,
-      context: { openId: caller, automationId: auto.id, automationTitle: auto.title, agentId: linkedAgent ? linkedAgent.id : null },
+      context: {
+        openId: creator,
+        userAccessToken: creatorUserToken || undefined,
+        automationId: auto.id,
+        automationTitle: auto.title,
+        agentId: linkedAgent ? linkedAgent.id : null,
+      },
     });
     answer = r.answer || '';
   } catch (e) {

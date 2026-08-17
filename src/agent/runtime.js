@@ -40,6 +40,16 @@ TOOL: <工具名>(<JSON 参数>)
 【截止时间判定】以消息正文里**明确写出的时间表述**为准（如「周五前」「8/10 截止」）；**不要依赖消息创建时间戳**，也不要因时间戳异常而拒绝判断——缺失明确时间时标注「无明确截止时间」即可。
 重要边界（务必如实告知用户）：机器人只能读取它所在的会话；用户与其它人的私聊、未加入的群无法读取。如用户要求读取这类内容，请说明限制，并建议把机器人拉进对应群聊，或让用户把聊天记录发给你（复制/导出文件均可）。`;
 
+// 无论 system prompt 是否自带工具协议（智能体人设模式通常不含），统一在运行时注入
+// TOOL: 调用协议，确保模型知道如何发起工具调用（否则绑定 provider 的智能体在自动化场景下
+// 会直接输出结论、从不调用工具）。
+const TOOL_PROTOCOL = `【工具调用协议】
+当你需要读取飞书会话、查询实时信息或执行动作时，请在回答中输出一行工具调用声明，然后停止（等待工具返回结果后再继续）：
+  TOOL: <工具名>(<JSON 参数>)
+参数必须是合法 JSON 对象。例如读取会话列表：TOOL: feishu_my_chats({})
+例如读取某群历史：TOOL: feishu_chat_history({"chat_id":"oc_xxx","limit":50,"days":7})
+如果没有合适的工具可用，再直接给出自然语言回答。`;
+
 // 从模型输出里剥离工具声明行（避免把 TOOL: ... 透传给用户）
 export function stripToolLines(text) {
   if (!text) return text;
@@ -204,7 +214,7 @@ export class AgentRuntime {
     // 再注入上下文，确保即使模型不调用工具也能基于真实数据作答。
     const realtimeObs = await preExecRealtimeTools(this.tools, userInput, context, history);
     const messages = [
-      { role: 'system', content: `${sys}\n\n可用工具:\n${this.toolListText()}` },
+      { role: 'system', content: `${sys}\n\n${TOOL_PROTOCOL}\n\n可用工具:\n${this.toolListText()}` },
       ...(realtimeObs
         ? [
             {

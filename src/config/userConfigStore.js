@@ -84,6 +84,92 @@ export function listOpenIds() {
   return Object.keys(load().users);
 }
 
+// ============== 用户态飞书令牌（user_access_token）持久化 ==============
+// 用于「以用户身份」读取其私聊 / 所在群的对话（如凌云自动化以创建者视角总结任务）。
+// access / refresh / expires_at 以信封密文存储（与 apiKey 同一套 KMS 密文体系）。
+// 飞书 refresh_token 长期有效（直至用户撤销授权），故刷新后尽量保留既有 refresh_token。
+
+// 写入 / 覆盖某 open_id 的用户令牌。tok = { accessToken, refreshToken?, expiresAt? }
+export function setUserToken(openId, tok) {
+  if (!openId || !tok || !tok.accessToken) return;
+  const db = load();
+  const prev = db.users[openId] || {};
+  let prevBlob = null;
+  if (prev._feishuTokenEnc) {
+    try {
+      prevBlob = JSON.parse(decryptSecret(prev._feishuTokenEnc));
+    } catch {
+      prevBlob = null;
+    }
+  }
+  const blob = {
+    accessToken: tok.accessToken,
+    refreshToken: tok.refreshToken || (prevBlob && prevBlob.refreshToken) || null,
+    expiresAt: tok.expiresAt || 0,
+  };
+  db.users[openId] = {
+    ...prev,
+    _feishuTokenEnc: encryptSecret(JSON.stringify(blob)),
+    updatedAt: new Date().toISOString(),
+  };
+  persist();
+}
+
+// 读取解密后的令牌对象（含 accessToken / refreshToken / expiresAt），无则 null
+export function getUserToken(openId) {
+  const cfg = getConfig(openId);
+  if (!cfg || !cfg._feishuTokenEnc) return null;
+  try {
+    return JSON.parse(decryptSecret(cfg._feishuTokenEnc));
+  } catch {
+    return null;
+  }
+}
+
+// 用 refresh_token 换发新 access_token（飞书 v2 刷新端点，client 凭据用主应用 env）。
+export async function refreshUserToken(openId) {
+  const t = getUserToken(openId);
+  if (!t || !t.refreshToken) return null;
+  const clientId = process.env.FEISHU_APP_ID;
+  const clientSecret = process.env.FEISHU_APP_SECRET;
+  if (!clientId || !clientSecret) return null;
+  try {
+    const r = await fetch(`${'https://open.feishu.cn'}/open-apis/authen/v2/oauth/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: t.refreshToken,
+      }),
+    });
+    const j = await r.json();
+    if (j.code !== 0 || !j.data || !j.data.access_token) return null;
+    const d = j.data;
+    setUserToken(openId, {
+      accessToken: d.access_token,
+      refreshToken: d.refresh_token || t.refreshToken,
+      expiresAt: Date.now() + (Number(d.expires_in) || 7200) * 1000,
+    });
+    return d.access_token;
+  } catch {
+    return null;
+  }
+}
+
+// 取一个「当前可用」的用户令牌：未过期直接返回；临近过期或已过期则尝试刷新；
+// 无令牌 / 刷新失败返回 null（调用方据此提示用户重新授权）。
+export async function getUserAccessToken(openId) {
+  if (!openId) return null;
+  const t = getUserToken(openId);
+  if (!t || !t.accessToken) return null;
+  const slack = 5 * 60 * 1000; // 提前 5 分钟刷新，避免临界过期
+  if (t.expiresAt && Date.now() < t.expiresAt - slack) return t.accessToken;
+  const refreshed = await refreshUserToken(openId);
+  return refreshed || t.accessToken;
+}
+
 // 取「更完整」的显示名：两者都非空时取较长的（避免飞书 OAuth 的简短名覆盖管理员/用户手动维护的全名，
 // 例如「Arete Developer」被目录里的「Arete」截断）。长度相同则偏向配置里的（管理员可维护）。
 function bestDisplayName(dir, cfg) {

@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname } from 'node:path';
-import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds, setUnionId, getOrgDefault, setOrgDefault } from '../config/userConfigStore.js';
+import { setConfig, getConfig, deleteConfig, listUsers, listOpenIds, setUnionId, setUserToken, getOrgDefault, setOrgDefault } from '../config/userConfigStore.js';
 import { recordLogin, touchLogin } from '../config/userDirectoryStore.js';
 import { createSession, appendMessage, getHistory, listSessions } from '../config/conversationStore.js';
 import { Retriever } from '../rag/retriever.js';
@@ -40,7 +40,7 @@ import {
   buildCron,
   appendRun as appendAutomationRun,
 } from '../automation/store.js';
-import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } from '../automation/scheduler.js';
+import { scheduleAll, scheduleOne, unscheduleOne, removePending, triggerNow, activeJobCount } from '../automation/scheduler.js';
 import { initRunner, buildMemorySummaryPrompt } from '../automation/runner.js';
 import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey, appendMemory } from '../config/agentStore.js';
 import { getPermissions, setPermissions, resolveMenus, listPermissions, GRANTABLE_MENUS, BASE_MENUS, BASE_DISPLAY_MENUS } from '../config/permissionStore.js';
@@ -698,6 +698,17 @@ const server = createServer(async (req, res) => {
         const info = await fetchFeishuUserInfo(tok.access_token);
         const openId = info.open_id || tok.open_id;
         const role = ensureAdmin(openId) ? 'admin' : 'user';
+        // 持久化用户态令牌：使自动化（如凌云）能以该用户身份读取其私聊/所在群。
+        // refresh_token 飞书侧长期有效，刷新逻辑见 userConfigStore.getUserAccessToken。
+        try {
+          setUserToken(openId, {
+            accessToken: tok.access_token,
+            refreshToken: tok.refresh_token,
+            expiresAt: Date.now() + (Number(tok.expires_in) || 7200) * 1000,
+          });
+        } catch (e) {
+          console.error('[oauth] 持久化用户令牌失败:', e.message);
+        }
         // 记录到用户目录：即便尚未配置模型，管理员也能在用户列表看到该登录用户
         recordLogin(openId, { name: info.name || '', avatar: info.avatar_url || '', email: info.email || '' });
         setSessionCookie(res, {
@@ -1907,7 +1918,7 @@ const server = createServer(async (req, res) => {
         }
         const auto = await updateAutomation(id, body);
         // 变更后重新调度：cron / enabled 改了都要重排；其它字段改了也重排最稳
-        if (auto.enabled !== false) scheduleOne(auto); else unscheduleOne(id);
+        if (auto.enabled !== false) scheduleOne(auto); else { unscheduleOne(id); removePending(id); }
         await record({ actor: s.openId, action: 'automation.update', target: id, meta: { enabled: auto.enabled, cron: auto.cron } });
         return sendJson(res, 200, { ok: true, automation: auto });
       } catch (e) {
@@ -1924,7 +1935,7 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 403, { error: '只能删除自己创建的自动化任务' });
       }
       const ok = await deleteAutomation(id);
-      if (ok) unscheduleOne(id);
+      if (ok) { unscheduleOne(id); removePending(id); }
       await record({ actor: s.openId, action: 'automation.delete', target: id });
       return sendJson(res, 200, { ok });
     }
