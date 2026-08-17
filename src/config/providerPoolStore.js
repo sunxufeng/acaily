@@ -34,11 +34,14 @@ export function invalidateProviderPool() {
   store.invalidate();
 }
 
-// 对外暴露：剔除 apiKeyEnc，仅暴露 hasKey
+// 对外暴露：剔除 apiKeyEnc，仅暴露 hasKey；并派生连通状态（已配置且未停用）。
+// connected 是「显示用」的连通标记：已配置 API Key 且未停用 → 已连通；
+// 真正的可达性需要调用 /api/.../providers/test，本字段供列表直接渲染。
 function strip(p) {
   if (!p) return p;
   const { apiKeyEnc, ...rest } = p;
-  return { ...rest, hasKey: !!apiKeyEnc };
+  const hasKey = !!apiKeyEnc;
+  return { ...rest, hasKey, connected: hasKey && !rest.disabled };
 }
 
 const clamp = (s, n) => (s == null ? '' : String(s).slice(0, n));

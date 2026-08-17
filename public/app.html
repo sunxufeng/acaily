@@ -156,8 +156,8 @@
             <button class="btn" id="myProvNewBtn">+ 新建 Provider</button>
           </div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
-            <tbody id="myProvBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody></table>
+            <table><thead><tr><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>连通</th><th>状态</th><th>更新时间</th><th style="width:240px;">操作</th></tr></thead>
+            <tbody id="myProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
           </div>
         </div>
       </section>
@@ -296,8 +296,8 @@
             <button class="btn" id="orgProvNewBtn">+ 新建组织 Provider</button>
           </div>
           <div class="table-wrap" style="border:none;box-shadow:none;">
-            <table><thead><tr><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>状态</th><th>更新时间</th><th style="width:380px;">操作</th></tr></thead>
-              <tbody id="orgProvBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody></table>
+            <table><thead><tr><th>名称</th><th>类型</th><th>模型</th><th>Base URL</th><th>密钥</th><th>连通</th><th>状态</th><th>更新时间</th><th style="width:380px;">操作</th></tr></thead>
+              <tbody id="orgProvBody"><tr><td colspan="9" class="empty">加载中…</td></tr></tbody></table>
           </div>
         </div>
       </section>
@@ -1442,7 +1442,17 @@ function agentEditHTML(a,isNew){
   a=a||{};
   const def=k=>(isNew?(a[k]||AGENT_DEFAULTS[k]||''):(a[k]||''));
   return `<div class="agent-edit-form">
-    <label>名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
+    <div class="row" style="align-items:flex-end;gap:14px;">
+      <label style="flex:0 0 220px;">名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
+      <label style="flex:1;min-width:0;">Provider 池<select id="aProviderPool"><option value="">（不选池，使用默认）</option></select></label>
+    </div>
+    <!-- 模型配置其他字段全部隐藏：类型/Model/Base URL/API Key 全部由所选 Provider 池自动提供，不暴露手填 -->
+    <select id="aProvider" style="display:none;"></select>
+    <select id="aModelSel" style="display:none;"></select>
+    <input id="aModel" type="hidden" value="${esc(a.model||'')}"/>
+    <input id="aBaseUrl" type="hidden" value="${esc(a.baseUrl||'')}"/>
+    <input id="aApiKey" type="hidden" value=""/>
+    <span id="aKeyHint" style="display:none;"></span>
 
     <div class="tabs" id="agentTabs">
       <button type="button" class="tab active" data-tab="skill">Skill</button>
@@ -1542,15 +1552,6 @@ function agentEditHTML(a,isNew){
         ${mdEditBlock('aUser', a.user||def('user'), 12, '面对的用户是谁 / 用户诉求')}
       </div>
     </div>
-
-    <div class="card-h" style="margin-top:8px;"><h3>模型配置（可选）</h3><span class="desc">优先从「Provider 池」选择；选池条目后会自动填入类型 / Base URL / API Key，再自定义 Model。池为空时退化为下方手填字段。</span></div>
-    <label>Provider 池<select id="aProviderPool"><option value="">（不选池，下方手填）</option></select></label>
-    <div class="row">
-      <label>类型（来自池或手填）<select id="aProvider"><!-- 由 injectProviderPresets() 注入常见大模型 --></select></label>
-      <label>Model<select id="aModelSel" style="display:none;"></select><input id="aModel" value="${esc(a.model||'')}" placeholder="如 gpt-4o"/></label>
-    </div>
-    <label>Base URL<input id="aBaseUrl" value="${esc(a.baseUrl||'')}" placeholder="https://api.openai.com/v1（ollama 可留空）"/></label>
-    <label>API Key<span id="aKeyHint"></span><input id="aApiKey" type="password" value="" placeholder="留空不修改已存密钥（来自池时自动沿用）"/></label>
   </div>`;
 }
 let agentEditingId=null;
@@ -1773,7 +1774,7 @@ async function loadProviderPoolIntoAgentForm(){
     const url = isAdmin ? '/api/providers' : '/api/my/providers';
     const {status,data}=await api('GET', url);
     agentProviderPoolCache = (status===200 && Array.isArray(data.providers)) ? data.providers : [];
-    let opts=['<option value="">（不选池，下方手填）</option>'];
+    let opts=['<option value="">（不选池，使用默认）</option>'];
     agentProviderPoolCache.forEach(p=>{opts.push(`<option value="${esc(p.id)}">${esc(p.name||p.type)} (${esc(p.type)} · ${esc((p.models||[])[0]||'无')})</option>`);});
     sel.innerHTML=opts.join('');
     // 若当前编辑的智能体已绑定池，预选
@@ -1798,21 +1799,23 @@ function applyProviderPoolToAgentForm(){
   if(!p) return;
   $('aProvider').value=p.type||'openai';
   $('aBaseUrl').value=p.baseUrl||'';
-  $('aKeyHint').textContent = p.hasKey ? '（API Key 将沿用池里的密钥）' : '（池条目未配置 API Key，需下方手填）';
+  $('aKeyHint').textContent = p.hasKey ? '（API Key 将沿用池里的密钥）' : '（池条目未配置 API Key，请到 Provider 配置补密钥）';
   $('aApiKey').placeholder=p.hasKey?'沿用池密钥，留空不修改':'该池条目尚未配置 API Key';
-  // 切换 Model 为下拉，并默认选中池中第一个模型（新建时无需再手填）
+  // 模型配置已隐藏：默认模型直接写入隐藏输入 aModel，不暴露任何控件
   const ms=$('aModelSel'); const mi=$('aModel');
-  const cur=mi.value;
   if(p.models && p.models.length){
+    const cur=mi.value;
     const defModel = cur || p.models[0];
-    ms.innerHTML='<option value="">（自定义）</option>'+p.models.map(m=>`<option value="${esc(m)}" ${m===defModel?'selected':''}>${esc(m)}</option>`).join('');
-    ms.value=defModel;
-    ms.style.display='';
-    ms.onchange=()=>{if(ms.value){mi.value=ms.value;mi.style.display='none';ms.style.display='';}else{mi.style.display='';ms.style.display='none';}};
-    if(p.models.includes(defModel)){mi.style.display='none';}else{mi.style.display='';}
-  } else {
+    mi.value = defModel; // 保存时随 aModel 走
+    if(ms){
+      ms.innerHTML='<option value="">（自定义）</option>'+p.models.map(m=>`<option value="${esc(m)}" ${m===defModel?'selected':''}>${esc(m)}</option>`).join('');
+      ms.value=defModel;
+      ms.style.display='none';
+      ms.onchange=null;
+    }
+  } else if(ms){
     ms.style.display='none';
-    mi.style.display='';
+    ms.onchange=null;
   }
 }
 async function saveAgentEdit(){
@@ -2002,17 +2005,18 @@ async function loadMyProviders(){
   // 复用下拉依旧可读取 /api/config/me（best-effort）
   try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
   const {status,data}=await api('GET','/api/my/providers');
-  if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
+  if(status!==200){body.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>';return;}
   const list=data.providers||[];
   myProvCache={}; list.forEach(p=>myProvCache[p.id]=p);
   myProvCacheList=list;
-  if(!list.length){body.innerHTML='<tr><td colspan="8" class="empty">暂无 Provider，点击右上角「+ 新建 Provider」创建属于你的 Provider；管理员分发的副本也会出现在这里。</td></tr>';return;}
+  if(!list.length){body.innerHTML='<tr><td colspan="9" class="empty">暂无 Provider，点击右上角「+ 新建 Provider」创建属于你的 Provider；管理员分发的副本也会出现在这里。</td></tr>';return;}
   body.innerHTML=list.map(p=>`<tr>
     <td><b>${esc(p.name)}</b> ${rowOriginTag(p)}</td>
     <td><span class="tag">${esc(p.type)}</span></td>
     <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
     <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc((p.baseUrl||'').slice(0,40))}</td>
     <td>${p.hasKey?'<span class="tag ok">已配置</span>':'<span class="tag warn">未配置</span>'}</td>
+    <td>${p.connected?'<span class="tag ok">已连通</span>':'<span class="tag warn">未连通</span>'}</td>
     <td>${rowStatusTag(p)}</td>
     <td class="muted">${esc(fmtLocal(p.updatedAt,false).slice(0,10))}</td>
     <td class="ops">
@@ -2036,17 +2040,18 @@ async function loadOrgProviders(){
   // 复用下拉依旧可读 /api/config/me，让 admin 在新建条目时也能复用自身 /api/config/me
   try{const r=await api('GET','/api/config/me');currentMyCfg=(r.status===200&&r.data&&r.data.config)?r.data.config:null;}catch(e){currentMyCfg=null;}
   const {status,data}=await api('GET','/api/admin/providers');
-  if(status!==200){body.innerHTML='<tr><td colspan="8" class="empty">加载失败</td></tr>';return;}
+  if(status!==200){body.innerHTML='<tr><td colspan="9" class="empty">加载失败</td></tr>';return;}
   const list=data.providers||[];
   orgProvCache={}; list.forEach(p=>orgProvCache[p.id]=p);
   orgProvCacheList=list;
-  if(!list.length){body.innerHTML='<tr><td colspan="8" class="empty">暂无组织共享 Provider，点击右上角「+ 新建组织 Provider」创建第一条；后续可分发给指定成员。</td></tr>';return;}
+  if(!list.length){body.innerHTML='<tr><td colspan="9" class="empty">暂无组织共享 Provider，点击右上角「+ 新建组织 Provider」创建第一条；后续可分发给指定成员。</td></tr>';return;}
   body.innerHTML=list.map(p=>`<tr>
     <td><b>${esc(p.name)}</b></td>
     <td><span class="tag">${esc(p.type)}</span></td>
     <td class="muted">${esc((p.models||[]).join(' · ')||'—')}</td>
     <td class="muted" style="font-family:ui-monospace,monospace;font-size:12px;">${esc((p.baseUrl||'').slice(0,40))}</td>
     <td>${p.hasKey?'<span class="tag ok">已配置</span>':'<span class="tag warn">未配置</span>'}</td>
+    <td>${p.connected?'<span class="tag ok">已连通</span>':'<span class="tag warn">未连通</span>'}</td>
     <td>${rowStatusTag(p)}</td>
     <td class="muted">${esc(fmtLocal(p.updatedAt,false).slice(0,10))}</td>
     <td class="ops">
