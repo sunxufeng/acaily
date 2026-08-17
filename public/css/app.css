@@ -557,6 +557,16 @@ td .oid{font-size:11px;color:var(--muted);}
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--brand-soft,var(--surface-2));border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--text);}
 .chip-x{cursor:pointer;color:var(--text-2);font-weight:700;line-height:1;}
 .chip-x:hover{color:#e02424;}
+/* 智能体编辑：工具开关 / 心跳收件人候选 */
+.tool-toggles{display:flex;flex-direction:column;gap:6px;margin:6px 0;}
+.tool-toggle{display:flex;align-items:flex-start;gap:8px;padding:6px 10px;background:var(--surface-2,#f5f6f8);border:1px solid var(--border);border-radius:10px;font-size:13px;}
+.tool-toggle input{margin-top:3px;}
+.tool-toggle b{font-weight:600;}
+.checkbox-inline{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin:6px 0;}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:20px;margin:4px 0;}
+.cands{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;}
+.cand{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 4px;}
+.cand input{width:auto;margin:0;}
 
 /* ---------- 概览 / 使用统计（T9.0） ---------- */
 .welcome-card{padding:24px 28px;}

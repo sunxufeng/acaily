@@ -79,7 +79,9 @@ function normalizeRecipients(arr) {
 
 function normalizeCreateInput(input = {}) {
   const now = Date.now();
-  const id = randomUUID();
+  // 允许调用方预设 id（如「智能体心跳」派生任务使用 hb-<agentId> 做幂等 upsert），
+  // 否则生成新 uuid。
+  const id = input.id ? String(input.id).slice(0, 64) : randomUUID();
   const recipients = normalizeRecipients(input.pushRecipients);
   // owner：任务创建者 open_id（系统管理员创建填管理员 open_id；普通用户自建填自己）。
   // 用于「我的自动化」视图按归属过滤，避免把其他人的任务列出来。
@@ -101,6 +103,11 @@ function normalizeCreateInput(input = {}) {
     pushRecipients: recipients,
     maxSteps: Number.isFinite(+input.maxSteps) && +input.maxSteps > 0 ? Math.min(50, Math.floor(+input.maxSteps)) : 10,
     owner,
+    // 来源标记：普通自动化任务缺省为空；由「智能体心跳」派生落地的自动化填 source='heartbeat'，
+    // 用于「自动化任务菜单」按 owner/收件人过滤时不把心跳任务混进来（心跳是智能体专属，在智能体配置里管理）。
+    source: input.source ? String(input.source).slice(0, 20) : '',
+    // 执行结果动作：'push'（默认，把结果推送给收件人）/ 'memory'（把结果写回智能体的记忆，不发推送）。
+    actionType: input.actionType === 'memory' ? 'memory' : 'push',
     createdAt: now,
     updatedAt: now,
     runs: [],
@@ -118,13 +125,18 @@ function normalizeUpdateInput(input = {}) {
   if (Array.isArray(input.pushTo)) patch.pushTo = input.pushTo.filter(Boolean).slice(0, 32);
   if (Array.isArray(input.pushRecipients)) patch.pushRecipients = normalizeRecipients(input.pushRecipients);
   if (Number.isFinite(+input.maxSteps) && +input.maxSteps > 0) patch.maxSteps = Math.min(50, Math.floor(+input.maxSteps));
+  if (typeof input.source === 'string') patch.source = input.source.slice(0, 20);
+  if (input.actionType === 'memory' || input.actionType === 'push') patch.actionType = input.actionType;
   return patch;
 }
 
 export async function createAutomation(input) {
   const db = await load();
   const auto = normalizeCreateInput(input);
-  if (!auto.pushTo.length) throw new Error('pushTo 至少需要一个 open_id');
+  // 记忆型（actionType='memory'）的自动化不向任何人推送，允许 pushTo 为空；其余要求至少一个收件人。
+  if (auto.actionType !== 'memory' && !auto.pushTo.length) {
+    throw new Error('pushTo 至少需要一个 open_id（记忆型自动化除外）');
+  }
   if (!/^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/.test(auto.cron)) {
     throw new Error('cron 表达式格式错误（应为 5 字段，例如 "35 9 * * *"）');
   }
@@ -189,7 +201,7 @@ export async function updateRun(id, ts, patch) {
 }
 
 // 由前端「频率 + 时间」生成 5 字段 cron 表达式。
-// freq: 'daily' | 'weekly' | 'monthly'
+// freq: 'daily' | 'weekly' | 'monthly' | 'hourly'
 // hour/minute: 0-23 / 0-59
 // weeklyDay: 0-6（0=周日），仅 weekly 使用
 // monthlyDay: 1-31，仅 monthly 使用
@@ -201,6 +213,8 @@ export function buildCron({ freq, hour, minute, weeklyDay, monthlyDay }) {
       return `${m} ${h} * * ${Math.min(6, Math.max(0, +weeklyDay || 1))}`;
     case 'monthly':
       return `${m} ${h} ${Math.min(31, Math.max(1, +monthlyDay || 1))} * *`;
+    case 'hourly':
+      return `${m} * * * *`;
     case 'daily':
     default:
       return `${m} ${h} * * *`;

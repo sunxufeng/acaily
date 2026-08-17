@@ -37,11 +37,12 @@ import {
   createAutomation,
   updateAutomation,
   deleteAutomation,
+  buildCron,
   appendRun as appendAutomationRun,
 } from '../automation/store.js';
 import { scheduleAll, scheduleOne, unscheduleOne, triggerNow, activeJobCount } from '../automation/scheduler.js';
-import { initRunner } from '../automation/runner.js';
-import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey } from '../config/agentStore.js';
+import { initRunner, buildMemorySummaryPrompt } from '../automation/runner.js';
+import { listAgents, getAgent, saveAgent, deleteAgent, setFeishuBinding, listBoundAgents, getAgentApiKey, appendMemory } from '../config/agentStore.js';
 import { getPermissions, setPermissions, resolveMenus, listPermissions, GRANTABLE_MENUS, BASE_MENUS, BASE_DISPLAY_MENUS } from '../config/permissionStore.js';
 import { createFeishuApp, enableBotCapability, validateFeishuCredentials } from '../feishu/appMgmt.js';
 import { listProviders, listOrgProviders, listUserProviders, getProvider, getProviderRaw, saveProvider, deleteProvider, setProviderDisabled, distributeProvider, listProviderDistributions, getProviderApiKey } from '../config/providerPoolStore.js';
@@ -60,11 +61,170 @@ const tools = [
   ...feishuChatTools,
 ];
 
+// 工具注册表：name -> tool。供「智能体配置 / Tools 启用开关」按需裁剪可用工具。
+const TOOL_REGISTRY = new Map(tools.map((t) => [t.name, t]));
+const AVAILABLE_TOOLS = [...TOOL_REGISTRY.values()].map((t) => ({ name: t.name, description: t.description || '' }));
+
+// 由智能体配置解析「该智能体被允许使用的工具名列表」。
+// - 智能体显式给出非空的 toolList（且每项都在注册表内）→ 用其子集；
+// - 否则（普通用户对话 / 智能体未配置）→ 放开全部内置工具。
+export function getAllowedToolNames(agent) {
+  if (agent && Array.isArray(agent.toolList) && agent.toolList.length) {
+    const names = agent.toolList.filter((n) => TOOL_REGISTRY.has(n));
+    return names.length ? names : [...TOOL_REGISTRY.keys()];
+  }
+  return [...TOOL_REGISTRY.keys()];
+}
+
+// 按允许的工具名构造一个 AgentRuntime（每次调用新建，开销极小）。
+// 传入 agent 即按该智能体的 toolList 裁剪；传 null 放开全部。
+export function getRuntimeForAgent(agent) {
+  const names = getAllowedToolNames(agent);
+  const scoped = names.map((n) => TOOL_REGISTRY.get(n)).filter(Boolean);
+  return new AgentRuntime({ tools: scoped.length ? scoped : tools });
+}
+
 const agent = new AgentRuntime({ tools });
 
 // 自动化（T7.2）runner 依赖注入：让 runner 能复用 app.js 已建好的 agent 单例与函数，
 // 避免重复构造或循环引用。
-initRunner({ agent });
+initRunner({ agent, makeRuntime: getRuntimeForAgent });
+
+// ---- 智能体心跳（Heartbeat）→ 复用自动化任务引擎 ----
+// 智能体配置了 heartbeatConfig 时，由这里派生/维护一条 source='heartbeat' 的自动化任务，
+// 复用现有 cron 调度与执行。记忆型（actionType='memory'）不推送，结果写回智能体记忆。
+// 用确定性 id（hb-<agentId>）做幂等 upsert，删除时按该 id 清理，避免重复堆积。
+const HEARTBEAT_PROMPT_DEFAULT =
+  '请基于你的完整人设、技能与既有记忆，做一次自我回顾与状态梳理：\n' +
+  '（1）当前正在进行 / 待跟进的要事；\n' +
+  '（2）需要主动提醒用户的关键节点；\n' +
+  '（3）值得沉淀进长期记忆的新认知。\n' +
+  '若本心跳为「记忆型」，请直接产出可写入记忆的精简摘要。';
+
+const heartbeatAutoId = (agentId) => `hb-${agentId}`;
+
+// 同步一条心跳自动化：根据智能体最新配置创建 / 更新 / 关闭。
+// 返回派生自动化的 id（已关闭 / 未配置返回 null）。
+async function syncHeartbeatAutomation(agentId, cfg, owner, name) {
+  const id = heartbeatAutoId(agentId);
+  // 关闭或未配置 → 清理可能存在的旧心跳任务
+  if (!cfg || cfg.enabled === false) {
+    await deleteAutomation(id).catch(() => {});
+    unscheduleOne(id);
+    return null;
+  }
+  const actionType = cfg.actionType === 'memory' ? 'memory' : 'push';
+  // 推送型心跳：收件人不能为空 → 默认推给智能体 owner（普通用户自建时即本人）。
+  // 记忆型心跳不推送，允许无收件人。
+  let recipients = Array.isArray(cfg.recipients) ? cfg.recipients : [];
+  if (actionType === 'push' && recipients.length === 0 && owner) {
+    recipients = [{ openId: owner, unionId: '', name: owner }];
+  }
+  const cron = buildCron({
+    freq: cfg.freq || 'daily',
+    hour: cfg.hour,
+    minute: cfg.minute,
+    weeklyDay: cfg.weeklyDay,
+    monthlyDay: cfg.monthlyDay,
+  });
+  const description = (cfg.prompt && String(cfg.prompt).trim()) || HEARTBEAT_PROMPT_DEFAULT;
+  const pushTo = recipients
+    .map((r) => (typeof r === 'string' ? r : r.openId || r.unionId))
+    .filter(Boolean);
+  const payload = {
+    id,
+    title: `💗 心跳·${name || '智能体'}`,
+    description,
+    cron,
+    enabled: true,
+    idleOnly: false,
+    agentId,
+    agentName: name || '',
+    owner: owner || 'system',
+    source: 'heartbeat',
+    actionType,
+    pushRecipients: recipients,
+    pushTo,
+  };
+  const existing = await getAutomation(id);
+  let auto;
+  if (existing) {
+    await updateAutomation(id, payload);
+    auto = await getAutomation(id);
+  } else {
+    auto = await createAutomation(payload);
+  }
+  scheduleOne(auto); // 热更新调度
+  return id;
+}
+
+// 删除智能体时，连带移除其心跳自动化任务（调度 + 存储）。
+async function deleteHeartbeatAutomation(agentId) {
+  const id = heartbeatAutoId(agentId);
+  await deleteAutomation(id).catch(() => {});
+  unscheduleOne(id);
+}
+
+// 安全对齐：普通用户的智能体心跳收件人只能锁定为自己（push 型），
+// 与管理员自动化任务「收件人锁定本人」同一套约束。记忆型心跳不涉及收件人。
+function forceSelfHeartbeatRecipients(body, selfOpenId) {
+  const hb = body && body.heartbeatConfig;
+  if (!hb || hb.enabled === false) return;
+  if ((hb.actionType || 'push') !== 'push') return; // 记忆型无需收件人
+  const list = Array.isArray(hb.recipients) ? hb.recipients : [];
+  const hasOther = list.some((r) => (typeof r === 'string' ? r : r.openId || r.unionId) && (typeof r === 'string' ? r : r.openId || r.unionId) !== selfOpenId);
+  if (hasOther || list.length === 0) {
+    // 普通用户不能指定他人；为空时也默认推给自己。
+    hb.recipients = [{ openId: selfOpenId, unionId: '', name: '我' }];
+    body.heartbeatConfig = hb;
+  }
+}
+
+// 保存智能体后，按最新配置同步其心跳自动化（创建 / 更新 / 关闭）。
+async function syncAgentHeartbeat(ag) {
+  if (!ag) return;
+  await syncHeartbeatAutomation(ag.id, ag.heartbeatConfig, ag.owner || ag.createdBy, ag.name);
+}
+
+// 立即生成「记忆摘要」：以智能体人设 + 现有记忆为上下文，让模型产出可写回长期记忆的结构化摘要。
+// 用于 Memory Tab 的「立即生成记忆摘要」按钮，也供心跳 memory 动作复用同样的摘要口径。
+async function generateMemorySummary(ag) {
+  const runtime = getRuntimeForAgent(ag);
+  const persona = buildAgentSystemPrompt(ag);
+  const ctxMemory = (ag.memory || '').trim();
+  const userContent =
+    buildMemorySummaryPrompt() +
+    (ctxMemory
+      ? `\n\n=== 当前已有记忆（请在此基础上增量更新：去重、合并、淘汰过期项） ===\n${ctxMemory}`
+      : '');
+  const useAgentModel = !!(ag.provider || ag.providerPoolId);
+  const result = await runtime.run(userContent, {
+    chat: (messages) => {
+      if (useAgentModel) {
+        const agentCfg = {
+          id: ag.id,
+          name: ag.name,
+          provider: ag.provider,
+          model: ag.model,
+          baseUrl: ag.baseUrl,
+          displayName: ag.name,
+          providerPoolId: ag.providerPoolId || null,
+        };
+        const agentApiKey = ag.providerPoolId ? null : getAgentApiKey(ag.id);
+        return routeChatConfig(agentCfg, agentApiKey, messages, { model: ag.model || null });
+      }
+      // 无自有模型：回退到智能体 owner/创建者的个人模型配置
+      const ownerOpenId = ag.owner || ag.createdBy;
+      if (ownerOpenId) return routeChat(ownerOpenId, messages, { model: ag.model || null });
+      throw new Error('该智能体未配置模型，无法生成记忆摘要');
+    },
+    history: [],
+    systemPrompt: persona,
+    maxSteps: 6,
+    context: { openId: ag.owner || ag.createdBy || 'system', agentId: ag.id },
+  });
+  return (result.answer || '').trim();
+}
 
 // 知识库 RAG（T4）：共享检索器实例
 const retriever = new Retriever(new EmbeddingService());
@@ -133,7 +293,17 @@ function buildAgentSystemPrompt(agent) {
   if (agent.identity) parts.push(`【身份 IDENTITY】\n${agent.identity}`);
   if (agent.memory) parts.push(`【记忆 MEMORY】\n${agent.memory}`);
   if (agent.soul) parts.push(`【灵魂 SOUL】\n${agent.soul}`);
-  if (agent.tools) parts.push(`【工具 TOOLS】\n${agent.tools}`);
+  // 工具块：列出该智能体实际被允许使用的工具；附可选的「调用备注」(tools 字段)。
+  const allowed = getAllowedToolNames(agent);
+  if (allowed.length) {
+    const toolLines = allowed.map((n) => {
+      const t = TOOL_REGISTRY.get(n);
+      return `- ${n}: ${t ? t.description || '' : ''}`;
+    }).join('\n');
+    let block = `【工具 TOOLS】\n可用工具：\n${toolLines}`;
+    if (agent.tools) block += `\n\n工具调用说明 / 注意事项：\n${agent.tools}`;
+    parts.push(block);
+  }
   if (agent.user) parts.push(`【用户 USER】\n${agent.user}`);
   return parts.join('\n\n');
 }
@@ -213,7 +383,10 @@ async function handleAgent(openId, text, history, sessionId, image, context) {
     }
   }
 
-  const result = await agent.run(userContent, {
+  // 按「是否关联智能体」构造运行时：关联了智能体则按其 toolList 裁剪可用工具，
+  // 否则放开全部内置工具（普通用户对话）。
+  const runtime = getRuntimeForAgent(ag);
+  const result = await runtime.run(userContent, {
     // 智能体配置了自有模型 → 用其配置路由；否则回退到终端用户的个人配置（model 可被显式覆盖）
     chat: (messages) => {
       if (agentCfg) {
@@ -598,6 +771,37 @@ const server = createServer(async (req, res) => {
       const agents = s.role === 'admin' ? listAgents() : listAgents(s.openId).filter((a) => a.owner === s.openId);
       return sendJson(res, 200, { agents });
     }
+    // 工具注册表：返回所有内置工具（name + description），供「智能体配置 / Tools」页渲染启用开关。
+    if (method === 'GET' && pathname === '/api/tools') {
+      const s = requireSessionApi(req, res);
+      if (!s) return;
+      return sendJson(res, 200, { tools: AVAILABLE_TOOLS });
+    }
+    // 立即生成「记忆摘要」：智能体配置 / Memory Tab 的「立即生成记忆摘要」按钮。
+    // 管理员走 /api/admin/agents/:id/memory-summary；普通用户（owner）走 /api/agents/:id/memory-summary。
+    {
+      const mAdmin = pathname.match(/^\/api\/admin\/agents\/([^/]+)\/memory-summary$/);
+      const mUser = pathname.match(/^\/api\/agents\/([^/]+)\/memory-summary$/);
+      if ((mAdmin || mUser) && method === 'POST') {
+        const id = decodeURIComponent((mAdmin || mUser)[1]);
+        const s = mAdmin ? requireAdminApi(req, res) : requireSessionApi(req, res);
+        if (!s) return;
+        const ag = getAgent(id);
+        if (!ag) return sendJson(res, 404, { error: '智能体不存在' });
+        if (!mAdmin && (!ag.owner || ag.owner !== s.openId)) {
+          return sendJson(res, 403, { error: '只能对自己的智能体生成记忆摘要' });
+        }
+        try {
+          const summary = await generateMemorySummary(ag);
+          if (!summary) return sendJson(res, 200, { ok: false, memory: ag.memory, note: '模型未返回内容' });
+          const updated = saveAgent({ memory: appendMemory(ag.memory, summary) }, id);
+          await record({ actor: s.openId, action: 'agent.memory_summary', target: id });
+          return sendJson(res, 200, { ok: true, memory: updated.memory });
+        } catch (e) {
+          return sendJson(res, 400, { error: e.message });
+        }
+      }
+    }
     // 普通用户（被授权「智能体配置」菜单）管理「自己的」智能体：仅可创建/编辑/删除 owner===自己 的，组织共享（owner 为空）或他人智能体不可改
     if (pathname === '/api/agents' || pathname.startsWith('/api/agents/')) {
       const s = requireSessionApi(req, res);
@@ -613,11 +817,15 @@ const server = createServer(async (req, res) => {
           if (ag.owner !== s.openId) return sendJson(res, 403, { error: '只能修改自己的智能体' });
           if (method === 'DELETE') {
             const ok = deleteAgent(id);
+            await deleteHeartbeatAutomation(id); // 连带清理心跳任务
             await record({ actor: s.openId, action: 'agent.delete', target: id });
             return sendJson(res, ok ? 200 : 404, { ok });
           }
           const body = await readBody(req);
+          // 安全对齐：普通用户的智能体心跳收件人只能锁定为自己（管理员可在成员管理页为其指定）。
+          forceSelfHeartbeatRecipients(body, s.openId);
           const saved = saveAgent({ ...body, owner: s.openId }, id); // 锁定 owner，禁止越权改他人
+          await syncAgentHeartbeat(saved).catch((e) => console.error('[heartbeat] 同步失败(非致命):', e.message));
           await record({ actor: s.openId, action: 'agent.update', target: id, meta: { name: saved.name } });
           return sendJson(res, 200, { agent: saved });
         }
@@ -628,7 +836,9 @@ const server = createServer(async (req, res) => {
         if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
         body.owner = s.openId; // 普通用户只能创建属于自己的智能体
         body.createdBy = s.openId; // 记录创建者，便于成员管理归属
+        forceSelfHeartbeatRecipients(body, s.openId); // 心跳收件人锁定自己
         const ag = saveAgent(body);
+        await syncAgentHeartbeat(ag).catch((e) => console.error('[heartbeat] 同步失败(非致命):', e.message));
         await record({ actor: s.openId, action: 'agent.create', target: ag.id, meta: { name: ag.name } });
         return sendJson(res, 200, { agent: ag });
       }
@@ -643,6 +853,7 @@ const server = createServer(async (req, res) => {
       const myCfg = getConfig(s.openId);
       const unionId = (myCfg && myCfg.unionId) || null;
       const mine = all
+        .filter((a) => a.source !== 'heartbeat') // 心跳任务不出现在个人自动化菜单
         .filter((a) => {
           if (a.owner === s.openId) return true; // 自己创建的
           const recs = a.pushRecipients || [];
@@ -734,11 +945,13 @@ const server = createServer(async (req, res) => {
         if (method === 'PUT') {
           const body = await readBody(req);
           const ag = saveAgent(body, id);
+          await syncAgentHeartbeat(ag).catch((e) => console.error('[heartbeat] 同步失败(非致命):', e.message));
           await record({ actor: admin.openId, action: 'agent.update', target: id, meta: { name: ag.name } });
           return sendJson(res, 200, { agent: ag });
         }
         if (method === 'DELETE') {
           const ok = deleteAgent(id);
+          await deleteHeartbeatAutomation(id); // 连带清理心跳任务
           await record({ actor: admin.openId, action: 'agent.delete', target: id });
           return sendJson(res, ok ? 200 : 404, { ok });
         }
@@ -758,6 +971,7 @@ const server = createServer(async (req, res) => {
         const body = await readBody(req);
         if (!body || !String(body.name || '').trim()) return sendJson(res, 400, { error: 'name 必填' });
         const ag = saveAgent({ ...body, createdBy: body.createdBy || admin.openId });
+        await syncAgentHeartbeat(ag).catch((e) => console.error('[heartbeat] 同步失败(非致命):', e.message));
         await record({ actor: admin.openId, action: 'agent.create', target: ag.id, meta: { name: ag.name } });
         return sendJson(res, 200, { agent: ag });
       }
@@ -1480,9 +1694,9 @@ const server = createServer(async (req, res) => {
       // 支持 ?forOpenId=XXX：仅返回「以该用户为收件人」或「该用户创建的」任务，
       // 用于成员编辑页按成员隔离，避免把其他人的自动化任务列出来。
       const forOpenId = url.searchParams.get('forOpenId');
-      let scoped = list;
+      let scoped = list.filter((a) => a.source !== 'heartbeat'); // 心跳任务由「智能体配置」管理，不混入自动化任务菜单
       if (forOpenId) {
-        scoped = list.filter((a) => {
+        scoped = scoped.filter((a) => {
           const recs = a.pushRecipients || [];
           return a.owner === forOpenId || recs.some((r) => r.openId === forOpenId || (r.unionId && r.unionId === forOpenId));
         });

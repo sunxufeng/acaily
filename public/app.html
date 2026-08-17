@@ -1466,24 +1466,75 @@ function agentEditHTML(a,isNew){
         ${mdEditBlock('aDesc', a.description||'', 5, '一句话简介（支持 **加粗** / 列表 / 链接 等 Markdown）。点「导入 MD」可载入 .md 文件。')}
       </div>
       <div class="tab-panel" data-panel="heartbeat">
-        <div class="field-label">节奏 Heartbeat（Markdown）</div>
-        ${mdEditBlock('aHeartbeat', a.heartbeat||def('heartbeat'), 10, '这个智能体的节奏 / 自检习惯，例如「每 3 轮自检一次」「周末降低主动推送」')}
+        <div class="field-label">心跳定时调度 Heartbeat（复用自动化任务引擎）</div>
+        <label class="checkbox-inline"><input type="checkbox" id="aHbEnabled"/> 启用心跳（定时自检 / 主动推送）</label>
+        <div class="row">
+          <label>动作
+            <select id="aHbAction">
+              <option value="push">推送结果给用户</option>
+              <option value="memory">写入我的长期记忆（不推送）</option>
+            </select>
+          </label>
+          <label>频率
+            <select id="aHbFreq">
+              <option value="daily">每天</option>
+              <option value="weekly">每周</option>
+              <option value="monthly">每月</option>
+              <option value="hourly">每小时</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" id="aHbTimeRow">
+          <label>小时<select id="aHbHour"></select></label>
+          <label>分钟<select id="aHbMinute"></select></label>
+        </div>
+        <div class="row" id="aHbWeeklyRow" style="display:none;">
+          <label>星期
+            <select id="aHbWeeklyDay">
+              <option value="0">周日</option><option value="1">周一</option><option value="2">周二</option>
+              <option value="3">周三</option><option value="4">周四</option><option value="5">周五</option><option value="6">周六</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" id="aHbMonthlyRow" style="display:none;">
+          <label>每月几号<input id="aHbMonthlyDay" type="number" min="1" max="31" value="1" style="width:80px;"/></label>
+        </div>
+        <div id="aHbRecipRow">
+          <div class="field-label">推送收件人（仅「推送结果」动作需要）</div>
+          <div id="aHbRecipients" class="chips"></div>
+          <div id="aHbRecipSearch" style="display:none;">
+            <input id="aHbSearchInput" placeholder="搜索成员姓名…" style="width:200px;"/>
+            <div id="aHbCands" class="cands"></div>
+          </div>
+        </div>
+        <div class="field-label" style="margin-top:8px;">心跳提示词（Markdown，留空用默认自检提示词）</div>
+        ${mdEditBlock('aHeartbeatPrompt', a.heartbeatConfig?a.heartbeatConfig.prompt:'', 8, '心跳触发时喂给智能体的提示词')}
+        <div style="margin-top:8px;">
+          <button type="button" class="btn small" id="aHbRunNow">立即运行一次</button>
+          <span class="desc" id="aHbRunNote"></span>
+        </div>
       </div>
       <div class="tab-panel" data-panel="identity">
         <div class="field-label">身份 Identity（Markdown）</div>
         ${mdEditBlock('aIdentity', a.identity||def('identity'), 12, '这个智能体是谁 / 背景 / 角色定位')}
       </div>
       <div class="tab-panel" data-panel="memory">
-        <div class="field-label">记忆 Memory（Markdown）</div>
-        ${mdEditBlock('aMemory', a.memory||def('memory'), 10, '需要长期记住的事：用户偏好、项目背景、约定……')}
+        <div class="field-label">记忆 Memory（长期记忆；可点按钮让智能体自动摘要写入）</div>
+        <div style="margin-bottom:8px;">
+          <button type="button" class="btn small" id="aMemGen">立即生成记忆摘要</button>
+          <span class="desc" id="aMemGenNote"></span>
+        </div>
+        ${mdEditBlock('aMemory', a.memory||def('memory'), 12, '需要长期记住的事：用户偏好、项目背景、约定……（自动摘要会追加到此处）')}
       </div>
       <div class="tab-panel" data-panel="soul">
         <div class="field-label">灵魂 Soul（Markdown）</div>
         ${mdEditBlock('aSoul', a.soul||def('soul'), 12, '语气 / 价值观 / 禁忌')}
       </div>
       <div class="tab-panel" data-panel="tools">
-        <div class="field-label">工具 Tools（Markdown）</div>
-        ${mdEditBlock('aTools', a.tools||def('tools'), 10, '智能体可调用的工具 / 怎么用 / 注意事项')}
+        <div class="field-label">可用工具开关（仅勾选的工具该智能体才能调用；全不选 = 放开全部内置工具）</div>
+        <div id="aToolsList" class="tool-toggles"><span class="muted">加载中…</span></div>
+        <div class="field-label" style="margin-top:8px;">工具调用说明 / 注意事项（可选，Markdown）</div>
+        ${mdEditBlock('aTools', a.tools||def('tools'), 8, '对工具使用的约束 / 注意点；留空则只按上方开关生效')}
       </div>
       <div class="tab-panel" data-panel="user">
         <div class="field-label">用户 User（Markdown）</div>
@@ -1525,6 +1576,10 @@ function openAgentEdit(id, readOnly, opts){
   setupMdToggles($('agentEditBody'));
   setupMdImport($('agentEditBody'));
   setupAgentTabs($('agentEditBody'));
+  // 工具开关列表 + 心跳调度表单：按当前智能体既有配置预填
+  const editAgent = id ? currentAgentCache[id] : null;
+  loadAgentToolToggles(editAgent, readOnly);
+  initHeartbeatForm(editAgent, isAdmin, readOnly);
   // 只读模式（普通用户查看）：禁用所有输入 + 隐藏保存按钮
   const saveBtn=$('agentEditSave');
   if(readOnly){
@@ -1548,6 +1603,139 @@ function setupAgentTabs(scope){
       if(p)p.classList.add('active');
     };
   });
+}
+
+// ---- 智能体工具开关（Tools Tab）----
+let AGENT_TOOL_CACHE=[];
+async function loadAgentToolToggles(a, readOnly){
+  const box=$('aToolsList'); if(!box)return;
+  try{
+    const {status,data}=await api('GET','/api/tools');
+    AGENT_TOOL_CACHE=(status===200&&Array.isArray(data.tools))?data.tools:[];
+  }catch(e){ AGENT_TOOL_CACHE=[]; }
+  if(!AGENT_TOOL_CACHE.length){ box.innerHTML='<span class="muted">暂无可用工具</span>'; return; }
+  const selected=new Set(Array.isArray(a&&a.toolList)?a.toolList:[]);
+  // 未配置 toolList（selected 为空）= 放开全部内置工具 → 默认全勾选
+  box.innerHTML=AGENT_TOOL_CACHE.map(t=>{
+    const on=selected.size?selected.has(t.name):true;
+    return `<label class="tool-toggle"><input type="checkbox" data-tool="${esc(t.name)}" ${on?'checked':''} ${readOnly?'disabled':''}/> <b>${esc(t.name)}</b> <span class="muted">${esc(t.description||'')}</span></label>`;
+  }).join('');
+}
+// 读出勾选的工具名；与全选等价时返回空数组（=放开全部）
+function readAgentToolList(){
+  const box=$('aToolsList'); if(!box)return [];
+  const checks=box.querySelectorAll('input[data-tool]');
+  if(!checks.length) return [];
+  const sel=[...checks].filter(c=>c.checked).map(c=>c.getAttribute('data-tool'));
+  return sel.length===checks.length ? [] : sel;
+}
+
+// ---- 智能体心跳调度（Heartbeat Tab，复用自动化引擎）----
+let HB_PUSH=[];
+const hbPushKey=r=>(r.unionId&&('u:'+r.unionId))||(r.openId&&('o:'+r.openId))||null;
+function fillHourMinute(){
+  const h=$('aHbHour'), m=$('aHbMinute');
+  if(h&&!h.options.length){ let o=''; for(let i=0;i<24;i++)o+=`<option value="${i}">${String(i).padStart(2,'0')}</option>`; h.innerHTML=o; }
+  if(m&&!m.options.length){ let o=''; for(let i=0;i<60;i++)o+=`<option value="${i}">${String(i).padStart(2,'0')}</option>`; m.innerHTML=o; }
+}
+function initHeartbeatForm(a, isAdmin, readOnly){
+  fillHourMinute();
+  const cfg=(a&&a.heartbeatConfig)||{};
+  const en=$('aHbEnabled'); if(en)en.checked=!!cfg.enabled;
+  const act=$('aHbAction'); if(act)act.value=cfg.actionType==='memory'?'memory':'push';
+  const freq=$('aHbFreq'); if(freq){ freq.value=cfg.freq||'daily'; freq.onchange=onHbFreqChange; }
+  const hour=$('aHbHour'); if(hour)hour.value=cfg.hour!=null?cfg.hour:9;
+  const minute=$('aHbMinute'); if(minute)minute.value=cfg.minute!=null?cfg.minute:0;
+  const wd=$('aHbWeeklyDay'); if(wd)wd.value=cfg.weeklyDay!=null?cfg.weeklyDay:1;
+  const md=$('aHbMonthlyDay'); if(md)md.value=cfg.monthlyDay!=null?cfg.monthlyDay:1;
+  onHbFreqChange();
+  // 收件人
+  HB_PUSH=Array.isArray(cfg.recipients)?cfg.recipients.slice():[];
+  if(!isAdmin){
+    // 普通用户：心跳推送锁定给自己（与自建自动化一致）
+    HB_PUSH=[{ openId:CURRENT_OPENID, unionId:'', name:me_name||'我' }];
+    const search=$('aHbRecipSearch'); if(search)search.style.display='none';
+  } else {
+    const search=$('aHbRecipSearch'); if(search)search.style.display='';
+    const si=$('aHbSearchInput'); if(si)si.oninput=()=>hbSearchRecipients(si.value.trim());
+  }
+  hbRenderChips();
+  if(readOnly){
+    ['aHbEnabled','aHbAction','aHbFreq','aHbHour','aHbMinute','aHbWeeklyDay','aHbMonthlyDay'].forEach(id=>{const el=$(id); if(el)el.disabled=true;});
+  }
+  const runBtn=$('aHbRunNow'); if(runBtn)runBtn.onclick=agentHeartbeatRunNow;
+  const memBtn=$('aMemGen'); if(memBtn)memBtn.onclick=agentMemoryGenerate;
+}
+function onHbFreqChange(){
+  const freq=$('aHbFreq'); if(!freq)return;
+  const f=freq.value;
+  const timeRow=$('aHbTimeRow'); if(timeRow)timeRow.style.display=(f==='hourly')?'none':'';
+  const wRow=$('aHbWeeklyRow'); if(wRow)wRow.style.display=(f==='weekly')?'':'none';
+  const mRow=$('aHbMonthlyRow'); if(mRow)mRow.style.display=(f==='monthly')?'':'none';
+}
+function hbRenderChips(){
+  const box=$('aHbRecipients'); if(!box)return;
+  if(!HB_PUSH.length){ box.innerHTML='<span class="muted">默认推送给自己</span>'; return; }
+  box.innerHTML=HB_PUSH.map(r=>`<span class="chip" data-k="${esc(hbPushKey(r))}">${esc(r.name||r.openId)} <span class="chip-x" data-k="${esc(hbPushKey(r))}">×</span></span>`).join('');
+  box.querySelectorAll('.chip-x').forEach(x=>x.onclick=()=>{ const k=x.getAttribute('data-k'); HB_PUSH=HB_PUSH.filter(z=>hbPushKey(z)!==k); hbRenderChips(); });
+}
+async function hbSearchRecipients(q){
+  if(!q){ const c=$('aHbCands'); if(c)c.innerHTML=''; return; }
+  const isAdmin=document.body.classList.contains('is-admin');
+  if(!isAdmin) return;
+  try{
+    const {status,data}=await api('GET','/api/admin/contacts/search?q='+encodeURIComponent(q));
+    const recs=(status===200&&Array.isArray(data.results))?data.results:[];
+    const box=$('aHbCands'); if(!box)return;
+    if(!recs.length){ box.innerHTML='<span class="muted">无匹配</span>'; return; }
+    box.innerHTML=recs.map(r=>`<label class="cand"><input type="checkbox" data-open="${esc(r.openId||'')}" data-union="${esc(r.unionId||'')}" data-name="${esc(r.name||r.openId)}"/>${esc(r.name||r.openId)} <span class="muted">${esc(r.openId||'')}</span></label>`).join('');
+    box.querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
+      const k=''+cb.getAttribute('data-open');
+      if(cb.checked){ if(!HB_PUSH.some(z=>hbPushKey(z)===k)) HB_PUSH.push({openId:cb.getAttribute('data-open'),unionId:cb.getAttribute('data-union'),name:cb.getAttribute('data-name')}); }
+      else HB_PUSH=HB_PUSH.filter(z=>hbPushKey(z)!==k);
+      hbRenderChips();
+    });
+  }catch(e){}
+}
+function readHeartbeatConfig(){
+  const en=$('aHbEnabled');
+  const enabled=en?en.checked:false;
+  const freq=$('aHbFreq'),action=$('aHbAction'),hour=$('aHbHour'),minute=$('aHbMinute'),wd=$('aHbWeeklyDay'),md=$('aHbMonthlyDay'),prompt=$('aHeartbeatPrompt');
+  return {
+    enabled,
+    freq: freq?freq.value:'daily',
+    actionType: action?action.value:'push',
+    hour: hour?Number(hour.value)||0:0,
+    minute: minute?Number(minute.value)||0:0,
+    weeklyDay: wd?Number(wd.value)||0:0,
+    monthlyDay: md?Number(md.value)||1:1,
+    prompt: prompt?prompt.value:'',
+    recipients: HB_PUSH.slice(),
+  };
+}
+async function agentHeartbeatRunNow(){
+  if(!agentEditingId) return;
+  const note=$('aHbRunNote'); if(note)note.textContent='运行中…';
+  const btn=$('aHbRunNow'); if(btn)btn.disabled=true;
+  try{
+    const res=await api('POST','/api/admin/automations/hb-'+encodeURIComponent(agentEditingId)+'/run',{});
+    if(note)note.textContent=(res.status===200)?'已触发，稍后看运行日志':('失败：HTTP '+res.status);
+  }catch(e){ if(note)note.textContent='出错：'+e.message; }
+  finally{ if(btn)btn.disabled=false; }
+}
+async function agentMemoryGenerate(){
+  if(!agentEditingId) return;
+  const note=$('aMemGenNote'); if(note)note.textContent='生成中…';
+  const btn=$('aMemGen'); if(btn)btn.disabled=true;
+  const base=document.body.classList.contains('is-admin')?'/api/admin/agents/':'/api/agents/';
+  try{
+    const res=await api('POST', base+encodeURIComponent(agentEditingId)+'/memory-summary',{});
+    if(res.status===200&&res.data&&res.data.memory!=null){
+      const ta=$('aMemory'); if(ta)ta.value=res.data.memory;
+      if(note)note.textContent='已写入记忆';
+    } else if(note){ note.textContent='未返回内容'; }
+  }catch(e){ if(note)note.textContent='出错：'+e.message; }
+  finally{ if(btn)btn.disabled=false; }
 }
 // 导入 .md 文件：读取文本填入 textarea 并切回「编辑」态
 function setupMdImport(scope){
@@ -1633,12 +1821,13 @@ async function saveAgentEdit(){
     emoji:$('aEmoji').value.trim()||'🤖',
     description:$('aDesc').value.trim(),
     skill:$('aSkill').value,
-    heartbeat:$('aHeartbeat').value,
     identity:$('aIdentity').value,
     memory:$('aMemory').value,
     soul:$('aSoul').value,
     tools:$('aTools').value,
     user:$('aUser').value,
+    toolList: readAgentToolList(),
+    heartbeatConfig: readHeartbeatConfig(),
     providerPoolId: poolId || null,
     provider:poolId?null:($('aProvider').value||null),
     model:$('aModel').value.trim()||null,

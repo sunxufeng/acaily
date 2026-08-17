@@ -9,7 +9,7 @@ import { routeChat, routeChatConfig } from '../gateway/router.js';
 import { sendMarkdown, sendText, resolveUnionId } from '../feishu/client.js';
 import { record as auditRecord } from '../audit/auditLog.js';
 import { appendRun, updateRun } from './store.js';
-import { getAgent, getAgentApiKey, getAgentFeishuSecret } from '../config/agentStore.js';
+import { getAgent, getAgentApiKey, getAgentFeishuSecret, saveAgent, appendMemory } from '../config/agentStore.js';
 
 // 由 app.js 在启动时注入依赖，避免循环引用
 let deps = null;
@@ -18,6 +18,20 @@ export function initRunner(d) {
   // 启动时自愈：把上次进程崩溃留下的「执行中」卡死 run 标记为失败，
   // 否则 UI 上会一直显示「执行中 0ms」让人误以为还在跑。
   recoverStuckRuns().catch((e) => console.error('[automation] 启动自愈失败:', e));
+}
+
+// 默认「记忆摘要」提示词：供 Heartbeat 的 memory 动作与「立即生成记忆摘要」端点复用。
+export function buildMemorySummaryPrompt() {
+  return [
+    '你是该智能体的长期记忆管理器。请基于你与用户最近的交流，提炼应当长期记住的要点，',
+    '输出可直接写入你长期记忆的精简文本。',
+    '严格按以下四节组织（没有则省略该节）：',
+    '【关键事实】用户身份、项目、时间线等稳定事实；',
+    '【偏好】用户的表达/输出/工具使用偏好；',
+    '【待办】未完成事项、跟进点、负责人与截止时间；',
+    '【背景】重要上下文、约束、禁忌。',
+    '不要寒暄、不要解释、不要重复用户原话，只输出上述结构化记忆文本。',
+  ].join('\n');
 }
 
 const STUCK_RUN_THRESHOLD_MS = 60 * 1000; // 超过 60 秒仍 running 视为卡死
@@ -224,7 +238,9 @@ export async function runAutomation(auto, { manual = false } = {}) {
   try {
     // 自动化默认给更多轮工具调用（10 步），也允许在自动化配置里单独覆盖
     const autoMaxSteps = Number.isFinite(auto.maxSteps) && auto.maxSteps > 0 ? auto.maxSteps : 10;
-    const r = await agent.run(auto.description, {
+    // 按关联智能体的 toolList 裁剪工具（无关联智能体则放开全部内置工具）
+    const runtime = deps.makeRuntime ? deps.makeRuntime(linkedAgent) : agent;
+    const r = await runtime.run(auto.description, {
       chat: (messages) =>
         useAgentModel
           ? routeChatConfig(agentCfg, agentApiKey, messages, { model: linkedAgent.model || null })
@@ -242,6 +258,28 @@ export async function runAutomation(auto, { manual = false } = {}) {
 
   const durationMs = Date.now() - t0;
   let preview = (answer || errMsg).slice(0, 160);
+
+  // —— memory 动作：把模型输出写回智能体的长期记忆，不推送 ——
+  if (auto.actionType === 'memory' && linkedAgent) {
+    let memNote = preview;
+    if (answer) {
+      try {
+        const updated = saveAgent({ memory: appendMemory(linkedAgent.memory, answer) }, linkedAgent.id);
+        memNote = `记忆已更新（${(updated.memory || '').length} 字）`;
+        preview = memNote;
+      } catch (e) {
+        memNote = `记忆写入失败：${e.message}`;
+        preview = memNote;
+      }
+    }
+    const finalStatus = errMsg ? 'err' : 'ok';
+    const updated = await updateRun(auto.id, placeholderTs, { durationMs, status: finalStatus, error: errMsg, preview });
+    if (!updated) await appendRun(auto.id, { durationMs, status: finalStatus, error: errMsg, preview });
+    try {
+      await auditRecord({ actor: caller, action: manual ? 'automation.manual_run' : 'automation.run', target: auto.id, level: errMsg ? 'error' : 'info', meta: { title: auto.title, durationMs, actionType: 'memory', status: finalStatus } });
+    } catch {}
+    return { status: finalStatus, durationMs, answer, error: errMsg, memoryNote: memNote };
+  }
 
   if (answer) {
     // 推送到所有收件人（失败的单条不影响其它）；优先用智能体绑定的飞书应用身份发送。

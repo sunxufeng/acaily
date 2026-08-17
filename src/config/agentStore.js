@@ -33,6 +33,8 @@ function strip(a) {
     owner: a.owner || null,
     feishuAppBound: !!a.feishuAppId,
     hasApiKey: !!a.apiKeyEnc,
+    toolList: Array.isArray(a.toolList) ? a.toolList : null,
+    heartbeatConfig: a.heartbeatConfig && typeof a.heartbeatConfig === 'object' ? a.heartbeatConfig : null,
   };
 }
 
@@ -62,6 +64,17 @@ export function getAgentRaw(id) {
 
 const clamp = (s, n) => (s == null ? '' : String(s).slice(0, n));
 
+// 把一次「记忆摘要」追加到智能体已有 memory 的末尾，按日期分节，并截断到 8000 字。
+// 新摘要在前（最近优先），避免长期累积的旧摘要盖掉新事实。
+export function appendMemory(existing, summary) {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const section = `## ${stamp}\n${(summary || '').trim()}`;
+  const base = (existing || '').trim();
+  const merged = base ? `${section}\n\n${base}` : section;
+  return merged.slice(0, 8000);
+}
+
 export function saveAgent(input, id) {
   const db = load();
   const now = new Date().toISOString();
@@ -81,6 +94,15 @@ export function saveAgent(input, id) {
     heartbeat: clamp(input.heartbeat, 4000),
     memory: clamp(input.memory, 8000), // 记忆可能持续累积，放宽到 8k
     tools: clamp(input.tools, 4000),
+    // 工具启用开关：智能体被允许使用的工具名列表（子集自全局工具注册表）；
+    // 为空数组 / 不传 → 运行时放开全部内置工具。
+    toolList: Array.isArray(input.toolList)
+      ? input.toolList.map((n) => String(n)).filter(Boolean).slice(0, 32)
+      : (existing.toolList || null),
+    // 心跳调度配置：复用自动化任务引擎，按 source:'heartbeat' 落地一条自动化任务。
+    heartbeatConfig: input.heartbeatConfig && typeof input.heartbeatConfig === 'object'
+      ? input.heartbeatConfig
+      : (existing.heartbeatConfig || null),
     model: input.model ? clamp(input.model, 80) : (existing.model || null),
     // 智能体自有模型配置（回复时使用，不依赖终端用户个人配置）
     provider: input.provider ? clamp(input.provider, 40) : (existing.provider || null),
