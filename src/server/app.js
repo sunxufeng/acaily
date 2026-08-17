@@ -488,7 +488,7 @@ const server = createServer(async (req, res) => {
     }
     // 发起飞书 OAuth：写 state Cookie 后 302 到授权页
     if (method === 'GET' && pathname === '/oauth/start') {
-      const state = setOauthState(res);
+      const state = setOauthState(res, req);
       return res.writeHead(302, { location: getFeishuAuthorizeUrl(state) }), res.end();
     }
     // OAuth 回调：校验 state → 换票 → 取用户信息 → 建会话

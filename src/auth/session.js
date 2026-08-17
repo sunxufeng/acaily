@@ -116,12 +116,15 @@ export function clearSessionCookie(res) {
   );
 }
 
-export function setOauthState(res) {
+export function setOauthState(res, req) {
   const state = randomBytes(16).toString('hex');
   const sameSite = process.env.ACAILY_COOKIE_SAMESITE || 'None';
+  // 与 setSessionCookie 保持一致：SameSite=None 时浏览器要求同时带 Secure，否则会直接丢弃该 Cookie，
+  // 导致回调时读不到 state → “OAuth 校验失败（state 不匹配或缺少 code）”。
+  const secure = process.env.ACAILY_COOKIE_SECURE !== 'false' && (!req || isHttps(req));
   res.setHeader(
     'Set-Cookie',
-    serializeCookie(STATE_NAME, state, { maxAge: 300, httpOnly: true, sameSite, path: '/' })
+    serializeCookie(STATE_NAME, state, { maxAge: 300, httpOnly: true, sameSite, secure, path: '/' })
   );
   return state;
 }
