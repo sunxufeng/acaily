@@ -1181,7 +1181,7 @@ async function loadChatAgents(){
     if(list.length){
       list.forEach(a=>{
         if(!currentAgentCache[a.id]) currentAgentCache[a.id]=a;
-        opts.push(`<option value="${esc(a.id)}"${a.id===saved?' selected':''}>${esc((a.emoji||'')+' '+(a.name||''))}</option>`);
+        opts.push(`<option value="${esc(a.id)}"${a.id===saved?' selected':''}>${esc(a.name||'')}</option>`);
       });
     }else if(!isAdmin){
       opts.push('<option value="" disabled>你还没有创建智能体（组织共享智能体不在对话中显示）</option>');
@@ -1195,7 +1195,7 @@ async function loadSessionList(agentId){
   const list=$('chatSessionList'); const nameEl=$('csbAgentName');
   if(!list)return;
   const ag=currentAgentCache&&currentAgentCache[agentId];
-  if(nameEl) nameEl.textContent = ag ? (ag.emoji+' '+ag.name) : '默认助手';
+  if(nameEl) nameEl.textContent = ag ? (ag.name||'默认助手') : '默认助手';
   try{
     const {status,data}=await api('GET','/api/chat/sessions'+(agentId?`?agentId=${encodeURIComponent(agentId)}`:''));
     if(status!==200){list.innerHTML='<div class="muted" style="font-size:12px;padding:4px;">加载失败</div>';return;}
@@ -1264,7 +1264,7 @@ async function openSession(sid, agentId){
 async function createNewChatSession(){
   const agentId=$('agentSelect').value||null;
   const ag=currentAgentCache&&currentAgentCache[agentId];
-  const title=(ag?(ag.emoji+' '+ag.name):'默认助手')+' · 新对话';
+  const title=(ag?ag.name:'默认助手')+' · 新对话';
   const r=await api('POST','/api/chat/sessions',{agentId,title});
   if(r.status===200 && r.data && r.data.sessionId){
     sessionId=r.data.sessionId; currentSessionAgentId=agentId;
@@ -1951,7 +1951,7 @@ async function startAgentChat(agentId){
   switchView('chat');
   // 新建一个会话
   const ag=currentAgentCache[agentId];
-  const title=`${ag?(ag.emoji+' '+ag.name):'智能体'} · 新对话`;
+  const title=`${ag?ag.name:'智能体'} · 新对话`;
   const r=await api('POST','/api/chat/sessions',{agentId,title});
   if(r.status===200 && r.data && r.data.sessionId){
     sessionId=r.data.sessionId;
@@ -3430,7 +3430,7 @@ function openAutomationEdit(a, presetRecipient){
   }
   // 普通用户创建/编辑自动化任务：收件人强制锁定为自己（后端同样强制，前端只做展示）
   if(!isAdmin){ AUTO_PUSH=[{ openId:CURRENT_OPENID, unionId:'', name:me_name||'我' }]; }
-  const agentOptions=(AUTO_AGENTS||[]).map(ag=>`<option value="${esc(ag.id)}" ${a&&a.agentId===ag.id?'selected':''}>${esc((ag.emoji||'🤖')+' '+(ag.name||ag.id))}</option>`).join('');
+  const agentOptions=(AUTO_AGENTS||[]).map(ag=>`<option value="${esc(ag.id)}" ${a&&a.agentId===ag.id?'selected':''}>${esc(ag.name||ag.id)}</option>`).join('');
   const agentSelect=`<select id="a_agent"><option value="">（不关联，结果用收件人模型生成）</option>${agentOptions}</select>`;
   $('autoEditBody').innerHTML=`
     <label>标题 <span class="req">*</span></label>
