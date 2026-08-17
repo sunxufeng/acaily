@@ -49,6 +49,20 @@ import { listProviders, listOrgProviders, listUserProviders, getProvider, getPro
 import { listDirectory } from '../config/userDirectoryStore.js';
 import { searchContacts, resolveContact, listAllContacts } from '../feishu/contacts.js';
 import { listRecipients, addRecipient, removeRecipient } from '../config/recipientStore.js';
+import {
+  getMeta,
+  saveMeta,
+  getMarkdown,
+  saveMarkdown,
+  listFiles,
+  saveFile,
+  deleteFile,
+  filePath,
+  getSkillExtras,
+  listSkillDirs,
+  deleteSkill,
+  SKILL_KINDS,
+} from '../skills/store.js';
 
 // 内置工具：时间 + 实时信息（天气 / 联网搜索）
 const tools = [
@@ -778,6 +792,149 @@ const server = createServer(async (req, res) => {
       if (!s) return;
       return sendJson(res, 200, { tools: AVAILABLE_TOOLS });
     }
+
+    // ---- Skill 扩展信息管理（管理员）----
+    // 列出所有内置工具 + 管理员自建的「自定义技能」，并附带其「其他信息」。
+    if (method === 'GET' && pathname === '/api/admin/skills') {
+      const s = requireAdminApi(req, res);
+      if (!s) return;
+      const builtinNames = new Set(AVAILABLE_TOOLS.map((t) => t.name));
+      const builtinList = AVAILABLE_TOOLS.map((t) => {
+        const ex = getSkillExtras(t.name);
+        return {
+          name: t.name,
+          description: ex.meta.description || t.description || '',
+          hasMarkdown: ex.hasMarkdown,
+          meta: ex.meta,
+          fileCounts: {
+            assets: ex.files.assets.length,
+            references: ex.files.references.length,
+            scripts: ex.files.scripts.length,
+          },
+          builtin: true,
+        };
+      });
+      const customList = listSkillDirs()
+        .filter((n) => !builtinNames.has(n))
+        .map((n) => {
+          const ex = getSkillExtras(n);
+          return {
+            name: n,
+            description: ex.meta.description || '',
+            hasMarkdown: ex.hasMarkdown,
+            meta: ex.meta,
+            fileCounts: {
+              assets: ex.files.assets.length,
+              references: ex.files.references.length,
+              scripts: ex.files.scripts.length,
+            },
+            builtin: false,
+          };
+        });
+      return sendJson(res, 200, { skills: [...builtinList, ...customList] });
+    }
+    {
+      const mList = pathname.match(/^\/api\/admin\/skills\/([^/]+)$/);
+      if (mList && (method === 'GET' || method === 'PUT' || method === 'DELETE')) {
+        const s = requireAdminApi(req, res);
+        if (!s) return;
+        const name = decodeURIComponent(mList[1]);
+        if (method === 'GET') {
+          const ex = getSkillExtras(name);
+          const registryDesc = (AVAILABLE_TOOLS.find((t) => t.name === name) || {}).description || '';
+          return sendJson(res, 200, {
+            name,
+            description: ex.meta.description || registryDesc,
+            builtin: AVAILABLE_TOOLS.some((t) => t.name === name),
+            meta: ex.meta,
+            markdown: getMarkdown(name),
+            files: ex.files,
+          });
+        }
+        if (method === 'DELETE') {
+          // 仅允许删除自定义技能；内置工具不可删（否则会误删工具本身的注册信息）。
+          if (AVAILABLE_TOOLS.some((t) => t.name === name)) {
+            return sendJson(res, 400, { error: '内置技能不可删除' });
+          }
+          try {
+            deleteSkill(name);
+            await record({ actor: s.openId, action: 'skill.delete', target: name });
+            return sendJson(res, 200, { ok: true });
+          } catch (e) {
+            return sendJson(res, 400, { error: e.message });
+          }
+        }
+        // PUT：保存元数据 + SKILL.md（二者均可空；缺省字段保持不变）
+        const body = await readBody(req);
+        if (body && 'meta' in body) saveMeta(name, body.meta || {});
+        if (body && 'markdown' in body) saveMarkdown(name, body.markdown || '');
+        await record({ actor: s.openId, action: 'skill.update', target: name });
+        return sendJson(res, 200, { ok: true });
+      }
+    }
+    {
+      // 文件上传（multipart）：POST /api/admin/skills/:name/files?kind=assets
+      const mUp = pathname.match(/^\/api\/admin\/skills\/([^/]+)\/files$/);
+      if (mUp && method === 'POST') {
+        const s = requireAdminApi(req, res);
+        if (!s) return;
+        const name = decodeURIComponent(mUp[1]);
+        const kind = new URL(req.url, 'http://x').searchParams.get('kind') || '';
+        if (!SKILL_KINDS.includes(kind)) return sendJson(res, 400, { error: '非法的资源类别' });
+        const ct = req.headers['content-type'] || '';
+        const mb = ct.match(/^multipart\/form-data;\s*boundary=(?:"([^"]+)"|([^;\r\n]+))/i);
+        if (!mb) return sendJson(res, 400, { error: '需要 multipart/form-data' });
+        try {
+          const buf = await readRawBody(req, 25 * 1024 * 1024);
+          const parts = parseMultipart(buf, (mb[1] || mb[2]).trim());
+          const filePart = parts.find((p) => p.name === 'file' && p.filename);
+          if (!filePart) return sendJson(res, 400, { error: '缺少 file 字段或未选择文件' });
+          const saved = saveFile(name, kind, filePart.filename, filePart.data);
+          await record({ actor: s.openId, action: 'skill.file_upload', target: `${name}/${kind}/${saved.name}` });
+          return sendJson(res, 200, { ok: true, file: saved });
+        } catch (e) {
+          return sendJson(res, 400, { error: '上传失败：' + e.message });
+        }
+      }
+      // 文件删除：DELETE /api/admin/skills/:name/files?kind=assets&file=x.md
+      // 文件下载：GET    /api/admin/skills/:name/files?kind=assets&file=x.md
+      const mFile = pathname.match(/^\/api\/admin\/skills\/([^/]+)\/files$/);
+      if (mFile && (method === 'DELETE' || method === 'GET')) {
+        const s = requireAdminApi(req, res);
+        if (!s) return;
+        const name = decodeURIComponent(mFile[1]);
+        const q = new URL(req.url, 'http://x').searchParams;
+        const kind = q.get('kind') || '';
+        const file = q.get('file') || '';
+        if (!SKILL_KINDS.includes(kind)) return sendJson(res, 400, { error: '非法的资源类别' });
+        if (method === 'DELETE') {
+          try {
+            deleteFile(name, kind, file);
+            await record({ actor: s.openId, action: 'skill.file_delete', target: `${name}/${kind}/${file}` });
+            return sendJson(res, 200, { ok: true });
+          } catch (e) {
+            return sendJson(res, 400, { error: e.message });
+          }
+        }
+        // GET → 下载文件流
+        try {
+          const p = filePath(name, kind, file);
+          const { readFile } = await import('node:fs/promises');
+          const data = await readFile(p);
+          const dl = (q.get('download') === '1') ? `attachment; filename="${encodeURIComponent(file)}"` : 'inline';
+          res.writeHead(200, {
+            'content-type': STATIC_TYPES[extname(p)] || 'application/octet-stream',
+            'content-length': data.length,
+            'content-disposition': dl,
+            ...NO_CACHE,
+          });
+          return res.end(data);
+        } catch (e) {
+          return sendJson(res, 404, { error: '文件不存在或无法读取' });
+        }
+      }
+    }
+
     // 立即生成「记忆摘要」：智能体配置 / Memory Tab 的「立即生成记忆摘要」按钮。
     // 管理员走 /api/admin/agents/:id/memory-summary；普通用户（owner）走 /api/agents/:id/memory-summary。
     {

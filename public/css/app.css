@@ -374,6 +374,12 @@ td .oid{font-size:11px;color:var(--muted);}
 .modal .close:hover{background:var(--surface-2);color:var(--text);}
 .modal h2{font-size:17px;margin:0 0 14px;padding-right:38px;}
 .modal .actions{display:flex;gap:10px;margin-top:18px;justify-content:flex-end;}
+.modal-mask{position:fixed;inset:0;background:rgba(15,22,35,.45);display:flex;align-items:center;justify-content:center;z-index:60;backdrop-filter:blur(2px);}
+.modal-mask .modal{margin:0;}
+.modal-h{font-size:16px;font-weight:700;margin-bottom:14px;}
+.modal-b label.field-label{font-size:12px;color:var(--muted);margin:4px 0 2px;display:block;}
+.modal-b input,.modal-b textarea{width:100%;box-sizing:border-box;}
+.modal-f{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;}
 
 /* ---------- 对话 ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 48px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);}
@@ -618,7 +624,7 @@ tfoot td.pager button[disabled]{opacity:.4;cursor:not-allowed;}
 /* 操作区标签 / 按钮 */
 .tag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;background:var(--surface-2);color:var(--text-2);}
 .tag.ok{background:var(--ok-soft);color:var(--ok);}
-td.ops{display:flex;gap:6px;flex-wrap:wrap;}
+td.ops{display:flex;gap:6px;flex-wrap:nowrap;align-items:center;}
 
 /* 智能体弹窗表单 */
 .form{display:flex;flex-direction:column;gap:12px;}

@@ -57,6 +57,10 @@
         <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg></span>
         <span class="lbl">权限配置</span>
       </a>
+      <a class="nav-item admin-only" href="/admin" data-view="skills" data-tip="技能 Skills">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M20 7h-4V4a1 1 0 00-1-1H9a1 1 0 00-1 1v3H4a1 1 0 00-1 1v4a1 1 0 001 1h4v6a1 1 0 001 1h6a1 1 0 001-1v-6h4a1 1 0 001-1V8a1 1 0 00-1-1z"/></svg></span>
+        <span class="lbl">技能 Skills</span>
+      </a>
 
       <!-- 受权限菜单（自动化 / 智能体配置 / Provider）：管理员恒见；普通用户仅在被授权后显示 -->
       <div class="nav-group nav-group-perm" id="navGroupPerm" style="display:none;">已授权</div>
@@ -386,12 +390,68 @@
           <div id="agentBindHint" class="hint" style="display:none;margin-bottom:8px;">未绑定的智能体：点「绑定飞书」，填入你在飞书开放平台创建的自建应用 App ID / App Secret 即可自助绑定，无需管理员。</div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>名称</th><th>简介</th><th>绑定飞书</th><th>更新时间</th><th style="width:260px;">操作</th></tr></thead>
-              <tbody id="agentBody"><tr><td colspan="5" class="empty">加载中…</td></tr></tbody>
+              <thead><tr><th>名称</th><th style="width:92px;">绑定飞书</th><th style="width:104px;">更新时间</th><th style="width:340px;">操作</th></tr></thead>
+              <tbody id="agentBody"><tr><td colspan="4" class="empty">加载中…</td></tr></tbody>
             </table>
           </div>
         </div>
       </section>
+
+      <!-- 视图：技能 Skills 管理（admin） -->
+      <section class="view" id="view-skills">
+        <div class="card">
+          <div class="card-h">
+            <div>
+              <h2>技能 Skills</h2>
+              <div class="desc">为内置工具补充「其他信息」：SKILL.md 说明、参考文档、资源模板与脚本；也可新建自定义技能。结构参考主流 Agent Skills（SKILL.md + assets/ + references/ + scripts/）。</div>
+            </div>
+            <button class="btn" id="skillNewBtn">+ 新增技能</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>工具名</th><th>说明</th><th style="width:90px;">SKILL.md</th><th style="width:70px;">资源</th><th style="width:70px;">参考</th><th style="width:70px;">脚本</th><th style="width:120px;">操作</th></tr></thead>
+              <tbody id="skillsBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 视图：技能编辑（admin，框架内页面） -->
+      <section class="view" id="view-skills-edit">
+        <div class="card">
+          <div class="card-h agent-edit-bar">
+            <button class="btn ghost sm" id="skillEditBack" title="返回技能列表">← 返回</button>
+            <h2 id="skillEditTitle" style="flex:1;text-align:center;margin:0;">编辑技能</h2>
+            <button class="btn" id="skillEditSave">保存</button>
+          </div>
+          <div style="margin:10px 0 4px;display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="tab active" data-skill-tab="basic">基础</button>
+            <button type="button" class="tab" data-skill-tab="md">SKILL.md</button>
+            <button type="button" class="tab" data-skill-tab="assets">资源</button>
+            <button type="button" class="tab" data-skill-tab="references">参考</button>
+            <button type="button" class="tab" data-skill-tab="scripts">脚本</button>
+          </div>
+          <div id="skillEditBody"></div>
+        </div>
+      </section>
+
+      <!-- 弹窗：新增自定义技能 -->
+      <div class="modal-mask" id="skillNewModal" style="display:none;">
+        <div class="modal">
+          <div class="modal-h">新增自定义技能</div>
+          <div class="modal-b">
+            <label class="field-label">技能名称（字母/数字/下划线/点/连字符，作为目录名）</label>
+            <input id="skillNewName" placeholder="例如：my_custom_skill" maxlength="60" />
+            <label class="field-label" style="margin-top:10px;">说明（可选）</label>
+            <textarea id="skillNewDesc" rows="3" placeholder="一句话描述这个技能的用途"></textarea>
+            <div class="hint" style="margin-top:8px;">新增后会在 data/skills/&lt;名称&gt;/ 下创建目录，可继续补充 SKILL.md 与资源文件。</div>
+          </div>
+          <div class="modal-f">
+            <button class="btn ghost" id="skillNewCancel">取消</button>
+            <button class="btn" id="skillNewOk">创建</button>
+          </div>
+        </div>
+      </div>
 
       <!-- 视图：智能体编辑（admin，框架内页面，非弹窗） -->
       <section class="view" id="view-agent-edit">
@@ -654,12 +714,12 @@ async function api(method,path,body,opts){
 }
 
 // 当前页拥有的 view（任何 view 都在 DOM 里，但 admin-only 只在 admin 启用）
-const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','user-view','provider-org','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-distribute','permissions']);
+const ALL_VIEWS=new Set(['chat','provider','about','dash','users','user-edit','user-view','provider-org','audit','automation','automation-edit','stats','agents','agent-edit','provider-edit','provider-distribute','permissions','skills','skills-edit']);
 // 注意：provider-edit（编辑「我的 Provider」/ 组织共享 Provider 的表单页）**不放**进 ADMIN_ONLY ——
 // 普通用户（已授权 provider 菜单）也要用它来编辑自己的个人 Provider 以及组织下发的副本。
 // agents / agent-edit（智能体配置 / 编辑）同理：已授权 agents 菜单的普通用户也要能进入。
 // 真正的写权限由后端按 owner 校验（/api/agents 仅本人 + 组织共享、/api/admin/agents 仅管理员），前端只负责显隐。
-const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','provider-org','audit','stats','provider-distribute','permissions']);
+const ADMIN_ONLY=new Set(['dash','users','user-edit','user-view','provider-org','audit','stats','provider-distribute','permissions','skills','skills-edit']);
 // 受权限菜单 → 进入该 view 所需的菜单授权 key（非管理员必须持有，否则前端拦截；后端再做 owner 校验）
 // agents / agent-edit 需 agents 菜单；provider / provider-edit 需 provider 菜单；automation / automation-edit 需 automation 菜单。
 // 自动化视图对普通用户为只读（仅见以自己为收件人的任务），故放出 ADMIN_ONLY 后用 MENU_REQUIRED 控制准入。
@@ -679,6 +739,8 @@ const VIEW_TITLES={
   'agent-edit':['智能体编辑','在框架内维护智能体（多 Tab 编辑 Markdown 人设 / 导入 .md 文件）'],
   'provider-edit':['编辑 Provider','在框架内维护 Provider（类型 / Base URL / 模型列表 / API Key），保存后点「返回」回到清单'],
   permissions:['权限配置','为普通用户授权可访问的菜单（对话/我的配置默认拥有）'],
+  skills:['技能 Skills','为内置工具补充「其他信息」：SKILL.md 说明、参考文档、资源模板与脚本'],
+  'skills-edit':['编辑技能','维护某个工具的 SKILL.md 与资源文件（结构：SKILL.md + assets/ + references/ + scripts/）'],
 };
 // 当前登录用户被授权的菜单集合（来自 /api/me.menus；管理员为全部）
 let CURRENT_MENUS=null;
@@ -1282,14 +1344,14 @@ async function loadAgents(){
   // 管理员走 /api/admin/agents（全部）；普通用户走 /api/agents（后端已按 owner 过滤为「仅自己」）
   const {status,data}=await api('GET', isAdmin?'/api/admin/agents':'/api/agents');
   const body=$('agentBody'); if(!body)return;
-  if(status!==200){body.innerHTML='<tr><td colspan="5" class="empty">加载失败</td></tr>';return;}
+  if(status!==200){body.innerHTML='<tr><td colspan="4" class="empty">加载失败</td></tr>';return;}
   let list=data.agents||[];
   // 兜底：即便后端返回了非本人智能体，前端也只展示「自己的」，杜绝看到他人配置
   if(!isAdmin) list=list.filter(a=>a.owner===CURRENT_OPENID);
   currentAgentCache={}; list.forEach(a=>currentAgentCache[a.id]=a);
   // 非管理员也可新建（创建的是属于自己的智能体）；只读查看的菜单里新建按钮无意义，故仅授权用户可见
   const nb=$('agentNewBtn'); if(nb) nb.style.display='';
-  if(!list.length){body.innerHTML=`<tr><td colspan="5" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体。点击右上角「新建智能体」创建属于你自己的智能体。'}</td></tr>`;return;}
+  if(!list.length){body.innerHTML=`<tr><td colspan="4" class="empty">${isAdmin?'暂无智能体，点击右上角「新建智能体」':'暂无智能体。点击右上角「新建智能体」创建属于你自己的智能体。'}</td></tr>`;return;}
   body.innerHTML=list.map(a=>{
     const mine=(!isAdmin && a.owner===CURRENT_OPENID);
     const ownerTag=(a.owner)
@@ -1315,7 +1377,6 @@ async function loadAgents(){
     }
     return `<tr>
     <td><b>${esc(a.name)}</b> ${ownerTag}</td>
-    <td class="muted md-cell">${a.description?renderMd(a.description):'<span class="muted">—</span>'}</td>
     <td>${a.feishuAppBound?'<span class="tag ok">已绑定</span>':'<span class="tag">未绑定</span>'}</td>
     <td class="muted">${esc(fmtLocal(a.updatedAt,false).slice(0,10))}</td>
     <td class="ops">${ops}</td>
@@ -1443,8 +1504,8 @@ function agentEditHTML(a,isNew){
   const def=k=>(isNew?(a[k]||AGENT_DEFAULTS[k]||''):(a[k]||''));
   return `<div class="agent-edit-form">
     <div class="row" style="align-items:flex-end;gap:14px;">
-      <label style="flex:0 0 220px;">名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
-      <label style="flex:1;min-width:0;">Provider 池<select id="aProviderPool"><option value="">（不选池，使用默认）</option></select></label>
+      <label style="flex:1 1 50%;min-width:0;">名称<input id="aName" value="${esc(a.name||'')}" placeholder="智能体名称" maxlength="60"/></label>
+      <label style="flex:1 1 50%;min-width:0;">Provider 池<select id="aProviderPool"><option value="">（不选池，使用默认）</option></select></label>
     </div>
     <!-- 模型配置其他字段全部隐藏：类型/Model/Base URL/API Key 全部由所选 Provider 池自动提供，不暴露手填 -->
     <select id="aProvider" style="display:none;"></select>
@@ -3339,6 +3400,232 @@ function renderAutoList(){
 }
 
 let AUTO_READONLY=false; // 非管理员进入自动化任务时为「自服务」：可管理自己创建的任务；作为收件人的他人任务按行只读（见 autoCanManage）
+
+// ============ 技能 Skills 管理（admin）============
+let CURRENT_SKILL = null;       // 当前正在编辑的技能详情
+let CURRENT_SKILL_TAB = 'basic'; // 当前激活的标签页
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1024 / 1024).toFixed(1) + ' MB';
+}
+function enc(s) { return encodeURIComponent(s); }
+
+async function loadSkills() {
+  const body = $('skillsBody');
+  if (!body) return;
+  const res = await api('GET', '/api/admin/skills');
+  if (res.status !== 200) { body.innerHTML = `<tr><td colspan="7" class="empty">加载失败</td></tr>`; return; }
+  const list = (res.data.skills || []);
+  if (!list.length) { body.innerHTML = `<tr><td colspan="7" class="empty">暂无技能</td></tr>`; return; }
+  body.innerHTML = list.map((t) => `
+    <tr>
+      <td><b>${esc(t.name)}</b> ${t.builtin ? '' : '<span class="tag neutral">自定义</span>'}</td>
+      <td class="muted" style="max-width:420px;white-space:normal;">${esc(t.description || '—')}</td>
+      <td>${t.hasMarkdown ? '<span class="tag ok">有</span>' : '<span class="tag">无</span>'}</td>
+      <td>${t.fileCounts.assets}</td>
+      <td>${t.fileCounts.references}</td>
+      <td>${t.fileCounts.scripts}</td>
+      <td class="ops">
+        <button class="btn ghost sm" data-skill-edit="${esc(t.name)}">编辑</button>
+        ${t.builtin ? '' : `<button class="btn ghost sm danger" data-skill-del="${esc(t.name)}">删除</button>`}
+      </td>
+    </tr>`).join('');
+}
+
+// 列表点击：打开编辑 / 删除自定义技能
+$('skillsBody') && ($('skillsBody').onclick = (e) => {
+  const edit = e.target.closest('[data-skill-edit]');
+  if (edit) { openSkillEdit(edit.getAttribute('data-skill-edit')); return; }
+  const del = e.target.closest('[data-skill-del]');
+  if (del) {
+    const name = del.getAttribute('data-skill-del');
+    if (!confirm('确定删除自定义技能「' + name + '」及其全部文件？')) return;
+    (async () => {
+      const r = await api('DELETE', '/api/admin/skills/' + enc(name));
+      if (r.status === 200) { toast('已删除'); await loadSkills(); }
+      else toast('删除失败：' + ((r.data && r.data.error) || r.status));
+    })();
+  }
+});
+
+// 新增自定义技能（弹窗）
+$('skillNewBtn') && ($('skillNewBtn').onclick = () => {
+  $('skillNewName').value = '';
+  $('skillNewDesc').value = '';
+  $('skillNewModal').style.display = 'flex';
+  $('skillNewName').focus();
+});
+$('skillNewCancel') && ($('skillNewCancel').onclick = () => { $('skillNewModal').style.display = 'none'; });
+$('skillNewOk') && ($('skillNewOk').onclick = async () => {
+  const name = $('skillNewName').value.trim();
+  const desc = $('skillNewDesc').value.trim();
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/.test(name)) {
+    toast('名称仅限字母/数字/下划线/点/连字符，且不以点/连字符开头');
+    return;
+  }
+  const r = await api('PUT', '/api/admin/skills/' + enc(name), { meta: { description: desc }, markdown: '' });
+  if (r.status !== 200) { toast('创建失败：' + ((r.data && r.data.error) || r.status)); return; }
+  $('skillNewModal').style.display = 'none';
+  openSkillEdit(name);
+});
+
+// 返回 / 保存 / Tab 切换
+$('skillEditBack') && ($('skillEditBack').onclick = () => { switchView('skills'); loadSkills(); });
+$('skillEditSave') && ($('skillEditSave').onclick = saveSkillEdit);
+document.querySelectorAll('[data-skill-tab]').forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll('[data-skill-tab]').forEach((x) => x.classList.remove('active'));
+    btn.classList.add('active');
+    CURRENT_SKILL_TAB = btn.getAttribute('data-skill-tab');
+    renderSkillTab();
+  };
+});
+
+async function openSkillEdit(name) {
+  const res = await api('GET', '/api/admin/skills/' + enc(name));
+  if (res.status !== 200) { toast('加载失败：' + ((res.data && res.data.error) || res.status)); return; }
+  CURRENT_SKILL = res.data;
+  $('skillEditTitle').textContent = '编辑技能 · ' + name;
+  document.querySelectorAll('[data-skill-tab]').forEach((x) => x.classList.toggle('active', x.getAttribute('data-skill-tab') === 'basic'));
+  CURRENT_SKILL_TAB = 'basic';
+  renderSkillTab();
+  switchView('skills-edit');
+}
+
+function renderSkillTab() {
+  const box = $('skillEditBody');
+  if (!box || !CURRENT_SKILL) return;
+  if (CURRENT_SKILL_TAB === 'basic') return renderSkillBasic(box);
+  if (CURRENT_SKILL_TAB === 'md') return renderSkillMd(box);
+  return renderSkillFiles(box, CURRENT_SKILL_TAB); // assets / references / scripts
+}
+
+function renderSkillBasic(box) {
+  const s = CURRENT_SKILL;
+  const meta = s.meta || {};
+  box.innerHTML = `
+    <div class="row" style="gap:14px;flex-wrap:wrap;">
+      <label style="flex:1 1 240px;min-width:0;"><span class="field-label">工具名（只读）</span><input value="${esc(s.name)}" disabled style="background:#f3f4f6;"/></label>
+    </div>
+    <div class="row" style="gap:14px;flex-wrap:wrap;">
+      <label style="flex:1 1 100%;min-width:0;"><span class="field-label">说明${s.builtin ? '（可覆盖内置描述，仅用于此处展示）' : '（自定义技能的描述）'}</span><textarea id="skillDesc" rows="3" placeholder="描述这个技能的用途">${esc(s.description || '')}</textarea></label>
+    </div>
+    <div class="row" style="gap:14px;flex-wrap:wrap;">
+      <label style="flex:1 1 100%;min-width:0;"><span class="field-label">备注 / 用途说明（可选）</span><textarea id="skillNote" rows="3" placeholder="给管理员看的维护备注，不影响工具行为">${esc(meta.note || '')}</textarea></label>
+    </div>
+    <div class="row" style="gap:14px;flex-wrap:wrap;">
+      <label style="flex:1 1 100%;min-width:0;"><span class="field-label">标签（逗号分隔，可选）</span><input id="skillTags" value="${esc(Array.isArray(meta.tags) ? meta.tags.join(', ') : (meta.tags || ''))}" placeholder="例如：实时信息, 外部调用"/></label>
+    </div>
+    <div class="hint" style="margin-top:8px;">基础信息仅用于运维标注；工具的「能力描述」始终以来自代码的注册表为准。</div>`;
+}
+
+function renderSkillMd(box) {
+  const s = CURRENT_SKILL;
+  box.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button type="button" class="btn ghost sm active" id="skillMdEditBtn">编辑</button>
+      <button type="button" class="btn ghost sm" id="skillMdPrevBtn">预览</button>
+      <span class="muted" style="align-self:center;">SKILL.md：说明该工具何时用、怎么用、参数约定与示例</span>
+    </div>
+    <textarea id="skillMd" rows="18" style="width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;">${esc(s.markdown || '')}</textarea>
+    <div id="skillMdPrev" style="display:none;border:1px solid #e5e7eb;border-radius:8px;padding:14px;min-height:200px;background:#fff;"></div>`;
+  const ta = $('skillMd'), prev = $('skillMdPrev');
+  $('skillMdEditBtn').onclick = () => { ta.style.display = ''; prev.style.display = 'none'; $('skillMdEditBtn').classList.add('active'); $('skillMdPrevBtn').classList.remove('active'); };
+  $('skillMdPrevBtn').onclick = () => { ta.style.display = 'none'; prev.style.display = ''; prev.innerHTML = renderMd(ta.value || '_(空)_'); $('skillMdPrevBtn').classList.add('active'); $('skillMdEditBtn').classList.remove('active'); };
+}
+
+function renderSkillFiles(box, kind) {
+  const s = CURRENT_SKILL;
+  const readOnly = kind === 'scripts'; // 脚本仅展示 / 下载，不可上传 / 删除
+  const files = (s.files && s.files[kind]) || [];
+  const rows = files.length
+    ? files.map((f) => `
+      <tr>
+        <td>${esc(f.name)}</td>
+        <td class="muted">${fmtSize(f.size)}</td>
+        <td class="muted">${new Date(f.mtime).toLocaleString('zh-CN')}</td>
+        <td class="ops">
+          <a class="btn ghost sm" href="/api/admin/skills/${enc(s.name)}/files?kind=${kind}&file=${enc(f.name)}&download=1">下载</a>
+          ${readOnly ? '' : `<button class="btn ghost sm danger" data-skill-del="${enc(f.name)}">删除</button>`}
+        </td>
+      </tr>`).join('')
+    : `<tr><td colspan="4" class="empty">${readOnly ? '暂无脚本' : '暂无文件，点击下方上传'}</td></tr>`;
+  box.innerHTML = `
+    <div class="hint" style="margin-bottom:8px;">
+      <b>${kind === 'assets' ? '资源 assets/' : kind === 'references' ? '参考 references/' : '脚本 scripts/'}</b>
+      ${readOnly ? '（脚本为只读，仅供查看 / 下载，不在服务端自动执行）' : '（上传 .md/.txt/.json/.csv/.png/.pdf/.py 等，单文件 ≤10MB）'}
+    </div>
+    ${readOnly ? '' : `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <input type="file" id="skillFileInput" style="flex:1;"/>
+      <button class="btn sm" id="skillFileUpload">上传</button>
+    </div>`}
+    <div class="table-wrap"><table>
+      <thead><tr><th>文件名</th><th style="width:110px;">大小</th><th style="width:180px;">修改时间</th><th style="width:160px;">操作</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+
+  if (!readOnly) {
+    $('skillFileUpload').onclick = async () => {
+      const inp = $('skillFileInput');
+      if (!inp.files || !inp.files.length) { toast('请先选择文件'); return; }
+      try {
+        await uploadSkillFile(kind, inp.files[0]);
+        toast('已上传');
+        await refreshSkillDetail();
+        renderSkillTab();
+      } catch (e) { toast('上传失败：' + e.message); }
+    };
+  }
+  box.querySelectorAll('[data-skill-del]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('确定删除该文件？')) return;
+      try {
+        await deleteSkillFile(kind, b.getAttribute('data-skill-del'));
+        toast('已删除');
+        await refreshSkillDetail();
+        renderSkillTab();
+      } catch (e) { toast('删除失败：' + e.message); }
+    };
+  });
+}
+
+async function uploadSkillFile(kind, file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await fetch(`/api/admin/skills/${enc(CURRENT_SKILL.name)}/files?kind=${kind}`, { method: 'POST', body: fd });
+  const data = await r.json().catch(() => ({}));
+  if (r.status !== 200) throw new Error(data.error || '上传失败');
+  return data;
+}
+async function deleteSkillFile(kind, file) {
+  const r = await fetch(`/api/admin/skills/${enc(CURRENT_SKILL.name)}/files?kind=${kind}&file=${enc(file)}`, { method: 'DELETE' });
+  const data = await r.json().catch(() => ({}));
+  if (r.status !== 200) throw new Error(data.error || '删除失败');
+  return data;
+}
+async function refreshSkillDetail() {
+  const res = await api('GET', '/api/admin/skills/' + enc(CURRENT_SKILL.name));
+  if (res.status === 200) CURRENT_SKILL = res.data;
+}
+
+async function saveSkillEdit() {
+  if (!CURRENT_SKILL) return;
+  const note = ($('skillNote') ? $('skillNote').value.trim() : '');
+  const tagsRaw = ($('skillTags') ? $('skillTags').value.trim() : '');
+  const tags = tagsRaw ? tagsRaw.split(',').map((x) => x.trim()).filter(Boolean) : [];
+  const markdown = $('skillMd') ? $('skillMd').value : CURRENT_SKILL.markdown;
+  const description = ($('skillDesc') ? $('skillDesc').value.trim() : (CURRENT_SKILL.description || ''));
+  const res = await api('PUT', '/api/admin/skills/' + enc(CURRENT_SKILL.name), {
+    meta: { note, tags, description },
+    markdown,
+  });
+  if (res.status === 200) { toast('已保存'); await refreshSkillDetail(); }
+  else toast('保存失败：' + ((res.data && res.data.error) || res.status));
+}
+
 async function loadAutomation(){
   const isAdmin=document.body.classList.contains('is-admin');
   if(isAdmin){
@@ -3793,6 +4080,7 @@ $('statsRange').onchange=()=>loadStats();
     await loadMyProviders();
     await loadOrgProviders();
     await loadPermissions();
+    await loadSkills();
   }else{
     // 普通用户：仅当被授权时才加载对应页面数据（Provider 默认不授权，避免暴露模型/密钥配置）
     if((CURRENT_MENUS||[]).includes('provider')) await loadMyProviders();
